@@ -1,8 +1,8 @@
 # O-Pharmacy - Architecture and Requirements Document (ARD)
 
-Version 0.2 DRAFT - 10 Nov 2026. Owner: Dr. Ahmed. Status: in discussion, nothing is approved for build. **[DECIDED]** = owner decision; **[OPEN]** = needs a decision; **[ASSUMPTION]** = my inference, to confirm.
+Version 0.3 DRAFT - 10 Nov 2026. Owner: Dr. Ahmed. Status: in discussion, nothing is approved for build. **[DECIDED]** = owner decision; **[OPEN]** = needs a decision; **[ASSUMPTION]** = my inference, to confirm.
 
-Change log: v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory.
+Change log: v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory - v0.3 (10 Nov) adds No-Delete UX (D13) and the chain decisions D14-D22, roles D23, the code name D24, cloud tenancy D25 and e-receipt D26.
 
 ## 1. Purpose
 Define what the integrated pharmacy system must do and the architecture rules it is built on, before any code. The Roadmap and Masterplan refer to this document.
@@ -22,6 +22,20 @@ Define what the integrated pharmacy system must do and the architecture rules it
 | D10 | Technology direction: **Node.js + TypeScript** end to end; quality over speed ("not in a hurry, build it right") | 10 Nov 2026 |
 | D11 | Two editions like the market: **Single pharmacy** and **Chain (branches)** | 10 Nov 2026 |
 | D12 | UI uses a **Ribbon** (like Microsoft Word), not drop-down menus; icons with their names; can be collapsed/expanded | 10 Nov 2026 |
+| D13 | **No-Delete:** «حذف» stays in the UI for staff and hides the record from them; it is kept for management with who / when / reason; management has «المحذوفات» with restore and a per-employee deletion report | 10 Nov 2026 |
+| D14 | Public and pharmacist prices are state-fixed and come on the purchase invoice; prices are stored **per batch** (old and new price can coexist); no branch price setting | 10 Nov 2026 |
+| D15 | Each branch has its own Admin and Branch Manager; the chain owner has access to everything | 10 Nov 2026 |
+| D16 | Customers are shared across branches with **one balance usable in any branch** | 10 Nov 2026 |
+| D17 | Central warehouse is **optional** | 10 Nov 2026 |
+| D18 | Branch staff see only the **available quantities** of other branches | 10 Nov 2026 |
+| D19 | Inter-branch transfer workflow (request → accept → dispatch → in transit → receive); accepted at the holding branch by its Manager, storekeeper or an employee with the permission | 10 Nov 2026 |
+| D20 | Non-drug items have **free pricing**, set by the pharmacy (in a chain, by the branch Admin / Manager) | 10 Nov 2026 |
+| D21 | Stock is sold **nearest expiry first (FEFO)**, also when old and new prices coexist | 10 Nov 2026 |
+| D22 | Transfers: default stock move at cost with no branch-to-branch debt; a chain setting makes the receiving branch owe the sender (cost or cost + margin, settled periodically); branch reports always show value transferred in / out | 10 Nov 2026 |
+| D23 | Roles (templates): Owner, Branch Admin, Branch Manager, Pharmacist, Cashier, Storekeeper, Employee, Accountant, Delivery agent, Customer (app); platform: Super Admin, Support. **One person can hold several roles** (e.g. Admin = Manager in a small pharmacy; pharmacist who is also the cashier); permissions adjustable per person | 10 Nov 2026 |
+| D24 | **"O-Pharmacy" is the code name** until the commercial name and brand identity are chosen near launch | 10 Nov 2026 |
+| D25 | **Cloud tenancy:** one shared cloud database with defence in depth - (1) database Row-Level Security per tenant, (2) a separate encryption key per tenant for backups and sensitive data, (3) automated tenant-isolation tests on every change, (4) a **dedicated server** tier for chains that require full isolation. Each pharmacy's primary data also lives on its own Hub. | 10 Nov 2026 |
+| D26 | **ETA e-receipt:** supported in the product through an adapter that works both **direct** with ETA and through an **approved provider**; the printed receipt carries the ETA QR; aim to become an ETA-approved supplier (requirements confirmed in Phase 0) | 10 Nov 2026 |
 
 ## 3. Vision
 A pharmacy runs its whole business in one Arabic-first system: sell, stock, buy, close the day, keep accounts, serve customers (including out-of-stock requests and orders from its own app), manage staff, and stay compliant - offline-safe, with AI help where it saves time.
@@ -39,10 +53,10 @@ An order from the app/website reaches the cloud, is routed to the branch Hub, an
 - **Single:** one branch, any number of internal stores and devices.
 - **Chain:** 2+ branches, optional central warehouse and HQ: central master data, cross-branch stock visibility, inter-branch requests/transfers, central purchasing, consolidated reports.
 - One codebase; the edition is a licence. Data is branch-scoped from day 1, so upgrading Single → Chain needs no migration.
-- Full study: `docs/research/editions-single-vs-chain.md`.
+- Chain rules decided: D14-D22. Full study: `docs/research/editions-single-vs-chain.md`.
 
-## 6. Users and roles
-Owner/Admin, HQ/regional manager (Chain), Branch Manager, Pharmacist, Cashier, Storekeeper, Employee, Accountant, Delivery agent. Platform side: our Super Admin and Support. Finance, cost/profit and salary data are permission-gated (eStock shows cost and profit on the cashier screen - we do not by default). **[OPEN]** final role list and permission matrix.
+## 6. Users and roles **[DECIDED: D23]**
+Role templates: Owner (all branches), Branch Admin, Branch Manager, Pharmacist, Cashier, Storekeeper, Employee, Accountant, Delivery agent, Customer (app/website only). Platform side: our Super Admin and Support. A person can hold several roles; permissions are granular and adjustable per person (YK model). Finance, cost/profit and salary data are permission-gated (eStock shows cost and profit on the cashier screen - we do not by default). **[OPEN]** the detailed permission matrix.
 
 ## 7. Functional scope (modules)
 | # | Module | Content | Product | Source |
@@ -52,7 +66,7 @@ Owner/Admin, HQ/regional manager (Chain), Branch Manager, Pharmacist, Cashier, S
 | 3 | Inventory | Batches/expiry, FEFO, stock ledger, internal-store transfers, stocktake (ad-hoc, periodic), adjustments, cost adjustment, opening balances, expiry alerts | System | eStock + new |
 | 4 | Purchasing | Reorder levels, purchase order, purchase invoice, bonus, tax, returns (with/without invoice), supplier prices and comparison, supplier statements | System | eStock + YK procurement |
 | 5 | Sales / POS | Cashier session, sale types (cash, card, credit, held, home delivery), returns, item swap, discounts, customer balance, receipts, drawer closing | System | eStock + new |
-| 6 | Pricing and promotions | Price lists, price history, changes by supplier/manufacturer, offers | System | new |
+| 6 | Pricing and promotions | State-fixed public/pharmacist prices per batch from the purchase invoice, old/new price handling, discounts, offers, price history | System | eStock + new |
 | 7 | Contracts and insurance | Contract customers, coverage rules, copay split, approvals, claim batches, reconciliation | System | eStock (contracts) + new |
 | 8 | Daily cash and accounts | Drawers, safes, banks, card accounts, cheques, cash in/out, chart of accounts, journal, income statement, financial position, shareholders/capital/profit distribution | System | eStock + YK closings |
 | 9 | Compliance | ETA e-receipt, drug track and trace, controlled-drug register, recall by batch | System | new |
@@ -116,13 +130,13 @@ Baseline of the eStock feature set: `docs/research/estock-inventory.md`.
 - Compliance by design: e-receipt and track-and-trace hooks part of the sale and stock models from day one.
 
 ## 13. Architecture principles (from YK, kept)
-Modular monolith per deployable (Hub, Cloud) with module-owned data; UUID identity; transactional outbox events; shared state machines; branch isolation; configuration engine with no hardcoded business values; additive migrations; No-Delete; audit everything. **[OPEN]** tenancy model in the cloud - one database with `tenant_id` + branch scope **[ASSUMPTION]** vs database per tenant.
+Modular monolith per deployable (Hub, Cloud) with module-owned data; UUID identity; transactional outbox events; shared state machines; branch isolation; configuration engine with no hardcoded business values; additive migrations; No-Delete; audit everything. Cloud tenancy: shared database with Row-Level Security, per-tenant keys, isolation tests and a dedicated tier (D25); the tenant context is set in one place and never trusted from the client.
 
 ## 14. Integrations
-Egypt: ETA e-receipt (direct API or approved provider **[OPEN]**), EDA track and trace (pharmacy duties to be confirmed from decrees 475/2025 and 161/2025), WhatsApp, payment gateways/wallets, insurance/corporate portals, supplier ordering, GS1 barcodes, receipt/label printers, cash drawer. Later markets (KSA/UAE) out of scope.
+Egypt: ETA e-receipt (adapter: direct or approved provider, D26), EDA track and trace (pharmacy duties to be confirmed from decrees 475/2025 and 161/2025), WhatsApp, payment gateways/wallets, insurance/corporate portals, supplier ordering, GS1 barcodes, receipt/label printers, cash drawer. Later markets (KSA/UAE) out of scope.
 
 ## 15. Open decisions
-Tenancy model; Hub database and packaging; sync engine; e-receipt route; permission matrix and role list; performance targets; edition packaging and pricing; chain rules (central vs branch prices, shared customers, transfer approval, inter-branch accounting); product and brand name.
+Hub database and packaging; sync engine; detailed permission matrix; performance targets; edition packaging and pricing; product and brand name.
 
 ## 16. Out of scope (for now)
 KSA/UAE compliance, B2B marketplace, manufacturing, hospital pharmacy.

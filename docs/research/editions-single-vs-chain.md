@@ -1,6 +1,6 @@
-# Editions Study - Single Pharmacy vs Chain (Branches) - v1
+# Editions Study - Single Pharmacy vs Chain (Branches) - v1.1
 
-10 Nov 2026. Status: discussion input for the ARD. Owner request: a full study of the two-edition model (like B-Connect ePlus vs eChain), especially how branches talk to each other (find an item in another branch, tell the customer, or request it from that branch). Facts are cited; everything else is design analysis.
+10 Nov 2026. v1.1 records the owner's chain decisions (section 9). Status: discussion input for the ARD. Owner request: a full study of the two-edition model (like B-Connect ePlus vs eChain), especially how branches talk to each other (find an item in another branch, tell the customer, or request it from that branch). Facts are cited; everything else is design analysis.
 
 ## 1. What the market does
 | Vendor | Editions / chain features (as published) |
@@ -24,7 +24,8 @@ Conclusion: the two-edition split is the market norm; chain buyers expect transf
 | Sales/POS, inventory, purchasing, returns | Yes | Branch-level settings under central rules |
 | Internal stores inside the branch + transfers between them | Yes | - |
 | Operations (customer requests, shortages, PO stages, tasks, attendance) | Yes | Requests and shortages can be routed to other branches |
-| Master data (items, prices, suppliers, customers) | Local | **Central** catalogue, central price list (+ allowed branch overrides), shared customers and suppliers |
+| Master data (items, suppliers, customers) | Local | **Central** catalogue, shared customers (one balance in every branch) and suppliers |
+| Prices | Public and pharmacist prices are fixed by the state and arrive on the purchase invoice; stored **per batch** (old price / new price can coexist) | Same rule in every branch; each branch's Admin and Manager run their branch (discounts etc.) |
 | Stock visibility | Own branch | **"متوفر فين؟"** across all branches, by batch/expiry, with freshness time |
 | Inter-branch requests and transfers | - | Full workflow (section 4) |
 | Purchasing | Branch | **Central purchasing** from aggregated shortages, central warehouse receipt and distribution, or branch purchase with central approval |
@@ -32,7 +33,7 @@ Conclusion: the two-edition split is the market norm; chain buyers expect transf
 | Finance | Branch accounts | Per-branch and **consolidated** P&L, central treasury, inter-branch transfer accounting |
 | HR | Branch staff | Staff working in several branches, staff moves, attendance per branch |
 | Reports | Branch | Consolidated + branch comparison |
-| Roles | Admin, Manager, staff | + HQ / regional manager, branch-scoped permissions |
+| Roles | Admin, Manager, staff | + Chain owner (access to everything); every branch keeps its own Admin + Branch Manager |
 | Promotions, loyalty, contracts/insurance | Branch | Central definitions, used in every branch; claims per branch |
 | Customer app (white-label) | One pharmacy | Customer picks a branch or the nearest; order routed to the branch that has the stock |
 
@@ -56,15 +57,15 @@ Customer waiting (linked to a customer request), shortage, rebalancing (HQ-initi
 - **Each branch Hub owns its own stock ledger.** The cloud aggregates for visibility and routes messages between branches; it never edits a branch's stock directly.
 - **Transfers are messages, not distributed transactions:** B's dispatch is a movement in B's ledger; "in transit" is tracked in the cloud; A's receipt is a movement in A's ledger. Each message has a UUID and is idempotent, so a branch that comes back online just sends its queue.
 - **Visibility needs the internet** (the branch's own work does not). The UI always shows data age.
-- **Central master data is cloud-authoritative**, pushed down to Hubs; branches may only change the fields the HQ allows (e.g. local price override within limits).
-- **Customer credit across branches:** balances aggregate in the cloud; an offline branch uses the last known balance and its local limit; differences reconciled on sync and flagged.
+- **Central master data is cloud-authoritative**, pushed down to Hubs; branches may only change the fields the chain owner allows. Prices are not a branch decision: they come from the purchase invoice per batch (state-fixed public/pharmacist prices).
+- **Customer credit across branches (DECIDED: one balance usable in any branch):** balances aggregate in the cloud; an offline branch uses the last known balance and its local limit; differences reconciled on sync and flagged.
 - **Document numbers carry the branch code** so two offline branches never collide (check against ETA e-receipt numbering rules).
 - **Central warehouse** = a branch of type warehouse with the same ledger rules.
 
 ## 6. Hard problems to solve in design (not blockers)
 1. The same last pack reserved/sold in two places while one is offline → allow, flag, resolve by rule.
-2. Price changes reaching an offline branch late → versioned price lists with effective time; the sale keeps the price it used.
-3. Inter-branch accounting (does a transfer create a branch-to-branch balance?) → owner/accountant decision.
+2. Official price changes: the new price arrives with the new batch on the purchase invoice; old-price stock keeps its price; the cashier screen shows which batch/price is sold (owner rule: nearest expiry first - FEFO).
+3. Inter-branch accounting → decided (C10): stock move at cost by default, branch-to-branch balance as a setting.
 4. Permissions across branches (who can see another branch's stock, costs, sales) → role matrix.
 5. Scale of the central view for big chains → aggregated read models in the cloud.
 
@@ -76,12 +77,22 @@ Customer waiting (linked to a customer request), shortage, rebalancing (HQ-initi
 ## 8. Recommendation for the roadmap
 Build the **data model and sync for Chain from day 1** (branch scope, ledger, UUID messages), ship **Single first** (pilot at the owner's pharmacy), then switch on Chain features as a dedicated phase. This avoids a costly redesign later and matches the owner's "build it right, no rush" decision.
 
-## 9. Questions for the owner
-1. Can a branch change its own sale price, or only HQ?
-2. Shared customers across branches (one customer file, one credit balance)?
-3. Does a chain usually have a central warehouse in our target market?
-4. Should staff of branch A see the cost and profit of branch B?
-5. Transfer approval: automatic acceptance by the stock holder, or manager approval?
+## 9. Owner decisions (10 Nov 2026)
+| # | Topic | Decision |
+|---|---|---|
+| C1 | Prices | Public and pharmacist prices are fixed by the state and come on the purchase invoice; no branch price setting. Stored per batch. |
+| C2 | Branch administration | Each branch has its own Admin and Branch Manager who manage their branch. |
+| C3 | Customers | A customer appears in every branch; **one balance usable in any branch**. |
+| C4 | Central warehouse | **Optional** (a "warehouse" branch with no POS). |
+| C5 | Visibility | Branch staff see the **available quantities** in other branches only; the Branch Manager sees his branch's numbers; the **chain owner has access to everything**. |
+| C6 | Transfers | The workflow in section 4 (request → accept → dispatch → in transit → receive, differences recorded). |
+| C7 | Who accepts a transfer request at the holding branch | Branch Manager, storekeeper, or a regular employee (by permission). The chain owner can move stock directly. |
+
+| C8 | Non-drug items (cosmetics, supplements...) | **Free pricing**, set by the pharmacy (in a chain, by each branch's Admin / Manager). |
+| C9 | Selling order when a batch has old and new prices | **Nearest expiry first (FEFO)**. |
+| C10 | Accounting of transfers | Default **stock move at cost, no branch-to-branch debt** (one owner). Setting for chains with partners: the receiving branch **owes** the sending branch (at cost or cost + margin), settled periodically. In both modes every branch report shows the value transferred in / out. |
+
+Nothing open on chain rules for now.
 
 ## Sources
 - B-Connect: https://bconnect-egypt.com/
