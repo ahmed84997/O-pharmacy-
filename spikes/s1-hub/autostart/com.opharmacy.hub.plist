@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- macOS (launchd) - UNTESTED draft. Install: copy to /Library/LaunchDaemons/, then: sudo launchctl bootstrap system /Library/LaunchDaemons/com.opharmacy.hub.plist -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.opharmacy.hub</string>
+  <key>ProgramArguments</key><array><string>/usr/local/o-pharmacy/hub</string><string>--port=47821</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>EnvironmentVariables</key><dict><key>HUB_DATA</key><string>/Library/Application Support/O-Pharmacy</string></dict>
+</dict></plist>

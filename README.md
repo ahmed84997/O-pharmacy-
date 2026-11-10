@@ -15,4 +15,5 @@ Status: **Phase 0 in progress - v1.0 documents approved (PR #2 merged, owner "go
 - `docs/specs/permission-matrix.md` - roles x permissions (v0.1 proposal)
 - `docs/specs/demo-spec-phase1.md` - Phase 1 demo specification (v0.1 proposal)
 - `docs/research/spike-s1-s2-results.md` - Sprint 0.2 spike results (S1 partial, S2)
+- `docs/research/spike-s3-s4-results.md` - Sprint 0.3 results (S3 printing, S4 speed, S1 auto-start)
 - `spikes/` - throwaway Phase 0 prototypes, never shipped

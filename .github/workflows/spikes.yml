@@ -1,4 +1,4 @@
-name: Phase 0 spikes (S1 + S2) on Windows, macOS, Linux
+name: Phase 0 spikes (S1-S4) on Windows, macOS, Linux
 on:
   pull_request:
     paths: ['spikes/**', '.github/workflows/spikes.yml']
@@ -36,3 +36,48 @@ jobs:
       - name: S1 single executable build and run (unsigned)
         working-directory: spikes/s1-hub
         run: node build-sea.mjs
+      - name: S4 cashier speed (25k items, then 100k items)
+        working-directory: spikes/s4-speed
+        run: |
+          node --no-warnings bench.mjs
+          CHECKPOINT=1 node --no-warnings bench.mjs
+          ITEMS=100000 CHECKPOINT=1 node --no-warnings bench.mjs
+      - name: S3 print files (Arabic receipt raster, ESC/POS, TSPL, ZPL) built and decoded
+        working-directory: spikes/s3-print
+        run: |
+          npm ci
+          node --no-warnings build-kit.mjs
+      - name: S3 Windows raw-spool path (virtual printer writing to a file)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: powershell
+        working-directory: spikes/s3-print/kit
+        run: |
+          New-Item -ItemType Directory -Force C:\ci-out | Out-Null
+          Add-PrinterPort -Name 'C:\ci-out\print.prn'
+          Get-PrinterDriver | Select-Object Name | Format-Table -HideTableHeaders
+          $drv = (Get-PrinterDriver | Select-Object -First 1).Name
+          Write-Host "S3-RAW-DRIVER $drv"
+          Add-Printer -Name 'CI-Raw' -DriverName $drv -PortName 'C:\ci-out\print.prn'
+          .\print-test.ps1 -List
+          .\print-test.ps1 -Printer 'CI-Raw' -Test receipt80
+          Start-Sleep 5
+          $sent = (Get-Item .\receipt80.bin).Length
+          $got = if (Test-Path C:\ci-out\print.prn) { (Get-Item C:\ci-out\print.prn).Length } else { -1 }
+          $same = $false
+          if ($got -ge 0) { $a=[IO.File]::ReadAllBytes('C:\ci-out\print.prn'); $b=[IO.File]::ReadAllBytes((Resolve-Path .\receipt80.bin)); $same = ($a.Length -eq $b.Length) -and ([Linq.Enumerable]::SequenceEqual($a,$b)) }
+          Write-Host "S3-RAW-RESULT sent=$sent received=$got identical=$same"
+      - name: S1 Windows auto-start (scheduled task at startup, then HTTP check)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: powershell
+        working-directory: spikes/s1-hub
+        run: |
+          $exe = (Resolve-Path .\dist\hub-health.exe).Path
+          schtasks /create /tn OPHub /tr "`"$exe`" --port=47821" /sc onstart /ru SYSTEM /rl HIGHEST /f
+          schtasks /run /tn OPHub
+          $ok = $false
+          foreach ($i in 1..20) { Start-Sleep 1; try { $r = Invoke-RestMethod http://127.0.0.1:47821/; if ($r.ok) { $ok = $true; break } } catch {} }
+          Write-Host "S1-AUTOSTART-RESULT started_by_scheduler=$ok"
+          Get-Process hub-health -ErrorAction SilentlyContinue | Stop-Process -Force
+          schtasks /delete /tn OPHub /f

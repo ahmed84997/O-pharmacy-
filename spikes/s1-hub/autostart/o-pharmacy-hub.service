@@ -1,0 +1,15 @@
+# Linux (systemd) - UNTESTED draft. Install: copy to /etc/systemd/system/, then: systemctl enable --now o-pharmacy-hub
+[Unit]
+Description=O-Pharmacy Branch Hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/opt/o-pharmacy/hub --port=47821
+Restart=always
+RestartSec=3
+User=ophub
+Environment=HUB_DATA=/var/lib/o-pharmacy
+
+[Install]
+WantedBy=multi-user.target
