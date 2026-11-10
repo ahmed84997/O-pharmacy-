@@ -1,8 +1,8 @@
 # O-Pharmacy - Architecture and Requirements Document (ARD)
 
-Version 0.3 DRAFT - 10 Nov 2026. Owner: Dr. Ahmed. Status: in discussion, nothing is approved for build. **[DECIDED]** = owner decision; **[OPEN]** = needs a decision; **[ASSUMPTION]** = my inference, to confirm.
+Version 1.0 CANDIDATE - 10 Nov 2026. Owner: Dr. Ahmed. Status: **for owner approval**; once approved it is the baseline for Phase 0 and changes only through a versioned PR. **[DECIDED]** = owner decision (section 2); **[PHASE 0]** = settled by a Phase 0 spike or research; **[LATER]** = decided in a later phase.
 
-Change log: v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory - v0.3 (10 Nov) adds No-Delete UX (D13) and the chain decisions D14-D22, roles D23, the code name D24, cloud tenancy D25 and e-receipt D26.
+Change log: v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory - v0.3 (10 Nov) adds No-Delete UX (D13) and the chain decisions D14-D22, roles D23, the code name D24, cloud tenancy D25 and e-receipt D26 - v1.0 candidate (10 Nov): review for consistency, open items split into Phase 0 vs later, glossary added; D27 desktop platforms; D28 code signing; D29 customer app publishing.
 
 ## 1. Purpose
 Define what the integrated pharmacy system must do and the architecture rules it is built on, before any code. The Roadmap and Masterplan refer to this document.
@@ -23,7 +23,7 @@ Define what the integrated pharmacy system must do and the architecture rules it
 | D11 | Two editions like the market: **Single pharmacy** and **Chain (branches)** | 10 Nov 2026 |
 | D12 | UI uses a **Ribbon** (like Microsoft Word), not drop-down menus; icons with their names; can be collapsed/expanded | 10 Nov 2026 |
 | D13 | **No-Delete:** «حذف» stays in the UI for staff and hides the record from them; it is kept for management with who / when / reason; management has «المحذوفات» with restore and a per-employee deletion report | 10 Nov 2026 |
-| D14 | Public and pharmacist prices are state-fixed and come on the purchase invoice; prices are stored **per batch** (old and new price can coexist); no branch price setting | 10 Nov 2026 |
+| D14 | Medicines: public and pharmacist prices are state-fixed and come on the purchase invoice; prices are stored **per batch** (old and new price can coexist); no branch price setting | 10 Nov 2026 |
 | D15 | Each branch has its own Admin and Branch Manager; the chain owner has access to everything | 10 Nov 2026 |
 | D16 | Customers are shared across branches with **one balance usable in any branch** | 10 Nov 2026 |
 | D17 | Central warehouse is **optional** | 10 Nov 2026 |
@@ -36,6 +36,9 @@ Define what the integrated pharmacy system must do and the architecture rules it
 | D24 | **"O-Pharmacy" is the code name** until the commercial name and brand identity are chosen near launch | 10 Nov 2026 |
 | D25 | **Cloud tenancy:** one shared cloud database with defence in depth - (1) database Row-Level Security per tenant, (2) a separate encryption key per tenant for backups and sensitive data, (3) automated tenant-isolation tests on every change, (4) a **dedicated server** tier for chains that require full isolation. Each pharmacy's primary data also lives on its own Hub. | 10 Nov 2026 |
 | D26 | **ETA e-receipt:** supported in the product through an adapter that works both **direct** with ETA and through an **approved provider**; the printed receipt carries the ETA QR; aim to become an ETA-approved supplier (requirements confirmed in Phase 0) | 10 Nov 2026 |
+| D27 | **All desktop platforms:** the Hub and the staff/cashier app run on **Windows, macOS and Linux** (target the whole market); Windows ships first in the pilot, macOS and Linux before the commercial launch | 10 Nov 2026 |
+| D28 | Desktop software is **never published on an app store**: installed from a file downloaded from our website. **Code signing** (Windows certificate, Apple Developer ID + notarisation) is **deferred to the commercial launch**; the pilot runs unsigned | 10 Nov 2026 |
+| D29 | **Customer app:** we build one white-label base; for each pharmacy that wants an app we prepare a build with its name and identity, and it is **published on the pharmacy's own App Store / Google Play accounts**, not ours. Comes with the commercial launch | 10 Nov 2026 |
 
 ## 3. Vision
 A pharmacy runs its whole business in one Arabic-first system: sell, stock, buy, close the day, keep accounts, serve customers (including out-of-stock requests and orders from its own app), manage staff, and stay compliant - offline-safe, with AI help where it saves time.
@@ -49,14 +52,15 @@ A pharmacy runs its whole business in one Arabic-first system: sell, stock, buy,
 | **Customer Website** (same as the app, in the browser) | The pharmacy's customers | Cloud | Yes |
 An order from the app/website reaches the cloud, is routed to the branch Hub, and becomes a customer request in Operations.
 
-## 5. Editions **[DECIDED: two editions; details OPEN]**
+## 5. Editions **[DECIDED: D11, D14-D22]**
 - **Single:** one branch, any number of internal stores and devices.
 - **Chain:** 2+ branches, optional central warehouse and HQ: central master data, cross-branch stock visibility, inter-branch requests/transfers, central purchasing, consolidated reports.
 - One codebase; the edition is a licence. Data is branch-scoped from day 1, so upgrading Single → Chain needs no migration.
-- Chain rules decided: D14-D22. Full study: `docs/research/editions-single-vs-chain.md`.
+- Chain rules: shared customers with one balance (D16), optional central warehouse (D17), quantities-only visibility across branches (D18), transfer workflow and approvers (D19), transfer accounting modes (D22); each branch keeps its Admin + Manager, the owner sees everything (D15).
+- Full study: `docs/research/editions-single-vs-chain.md`.
 
 ## 6. Users and roles **[DECIDED: D23]**
-Role templates: Owner (all branches), Branch Admin, Branch Manager, Pharmacist, Cashier, Storekeeper, Employee, Accountant, Delivery agent, Customer (app/website only). Platform side: our Super Admin and Support. A person can hold several roles; permissions are granular and adjustable per person (YK model). Finance, cost/profit and salary data are permission-gated (eStock shows cost and profit on the cashier screen - we do not by default). **[OPEN]** the detailed permission matrix.
+Role templates: Owner (all branches), Branch Admin, Branch Manager, Pharmacist, Cashier, Storekeeper, Employee, Accountant, Delivery agent, Customer (app/website only). Platform side: our Super Admin and Support. A person can hold several roles; permissions are granular and adjustable per person (YK model). Finance, cost/profit and salary data are permission-gated (eStock shows cost and profit on the cashier screen - we do not by default). **[PHASE 0]** the detailed permission matrix (written from the role templates, YK's 93-permission catalogue and the eStock menus).
 
 ## 7. Functional scope (modules)
 | # | Module | Content | Product | Source |
@@ -76,41 +80,43 @@ Role templates: Owner (all branches), Branch Admin, Branch Manager, Pharmacist, 
 | 13 | AI | Ops assistant, invoice audit, prescription reading, expiry/shortage insight | Operations | YK + new |
 | 14 | Reporting | One report centre with filters, saved views, export (replaces about 77 separate eStock reports) | all | new |
 | 15 | Chain | Cross-branch visibility, inter-branch requests/transfers, central purchasing, rebalancing, consolidated finance | System + Ops | new |
-| 16 | Customer channel | White-label app and website, catalogue, cart, prescription photo upload, order tracking | App + Website | new |
+| 16 | Customer channel | White-label app (per-pharmacy builds on their own store accounts, D29) and website, catalogue, cart, prescription photo upload, order tracking | App + Website | new |
 | 17 | Platform | Tenant onboarding, licences/editions, subscriptions, data import (eStock and others), remote support, updates | cloud | new |
 Baseline of the eStock feature set: `docs/research/estock-inventory.md`.
 
-## 8. Deployment topology **[DECIDED in principle]**
+## 8. Deployment topology **[DECIDED: D6, D7, D27]**
 ```
             Cloud (multi-tenant)
    HQ view - reports - backups - updates - licences
    customer app/website API - message routing between branches
                   ^  sync when online (queues, idempotent)
                   |
-   Branch Hub ("Master" PC, Windows service)
+   Branch Hub ("Master" PC - Windows / macOS / Linux service)
    local database + application + print service
                   ^  Ethernet LAN (works without internet)
                   |
    Cashier / staff devices (desktop window to the Hub; local fallback queue)
 ```
-- **Hub install:** one Windows installer from our website → activation (pharmacy data + licence) → runs as a Windows service (application + local database + print service) → desktop icon that opens the app in its own window.
+- **Hub install (D27):** one installer per platform from our website - Windows (.exe/.msi), macOS (.pkg/.dmg, signed and notarised), Linux (.deb/.rpm or AppImage) → activation (pharmacy data + licence) → runs as a background service (Windows service / macOS launchd / Linux systemd) with the application, local database and print service → desktop icon that opens the app in its own window. Installers are code-signed on Windows and macOS from the commercial launch (D28); no app store for desktop.
 - **Other devices:** a small installer that finds the Hub on the network and creates the icon (or open the Hub address once and install it as a PWA).
 - **Hub failure:** the cloud holds a continuously synced copy; a new Hub is installed on any PC and pulls its data; meanwhile devices keep selling into their local queue.
 - **Updates:** automatic from the cloud (no manual "Update System").
-- **Printing:** the Hub's print service drives receipt printers, barcode-label printers and the cash drawer (a browser alone cannot print silently or open the drawer). Barcode scanners work as keyboards.
+- **Printing:** the Hub's print service drives receipt printers, barcode-label printers and the cash drawer on all three platforms (ESC/POS and label languages over USB/network; a browser alone cannot print silently or open the drawer). Barcode scanners work as keyboards.
 
 ## 9. Data and sync principles
 - **Stock and money as ledgers:** every sale, receipt, transfer, adjustment is an immutable movement with a UUID; balances are sums. No-Delete; corrections are new movements.
 - **Sync = sending new movements** (outbox per Hub), idempotent, ordered per branch. Master data is cloud-authoritative and versioned; branches change only allowed fields.
 - **Branch independence:** an outage in one branch affects no other branch. Cross-branch features need the internet and always show data age.
-- **Document numbers** carry the branch code (no collisions between offline branches) **[check ETA numbering rules]**.
+- **Batches and prices:** every receipt creates batches with expiry, cost, and (for medicines) the state public/pharmacist price from the invoice (D14); the sale takes stock nearest expiry first (D21) and sells each batch at its own price; non-drug prices are set by the pharmacy (D20).
+- **Deletion:** a "delete" is a void/archive movement with who / when / reason (D13); nothing is physically removed.
+- **Document numbers** carry the branch code (no collisions between offline branches) **[PHASE 0: check ETA numbering rules]**.
 
 ## 10. Technology **[DECIDED direction - validated by Phase 0 spikes]**
 - **Backend (Cloud + Hub):** Node.js + TypeScript, one shared domain code base used by both.
-- **System + Operations UI:** React + TypeScript, installable (PWA / desktop window), offline-capable.
-- **Customer App:** React Native (Expo), white-label builds per pharmacy for Android and iPhone.
+- **System + Operations UI:** React + TypeScript, offline-capable, delivered as a cross-platform desktop window (Windows, macOS, Linux) and as a PWA from any browser.
+- **Customer App:** React Native (Expo), one white-label base; per-pharmacy builds published on the pharmacy's own store accounts (D29).
 - **Customer Website:** Next.js.
-- **[OPEN - spike]:** Hub local database (e.g. PostgreSQL vs SQLite), cloud database, Windows packaging of the Hub as a service, sync engine (custom ledger sync vs an existing library), framework choice on the backend.
+- **[PHASE 0 spike]:** Hub local database (e.g. PostgreSQL vs SQLite), cloud database, packaging of the Hub as a service on Windows / macOS / Linux and the desktop-window shell (e.g. Electron vs Tauri), sync engine (custom ledger sync vs an existing library), framework choice on the backend.
 
 ## 11. UI and UX **[DECIDED: Ribbon]**
 - **Ribbon like Microsoft Word** instead of drop-down menus: tabs (e.g. المبيعات - المشتريات - الأصناف - المخازن - العملاء - الموردين - الحسابات - العمليات - شئون العاملين - التقارير - الإعدادات), each tab with labelled icon groups.
@@ -123,9 +129,9 @@ Baseline of the eStock feature set: `docs/research/estock-inventory.md`.
 
 ## 12. Key non-functional requirements
 - Full offline selling and operations inside the branch; zero selling downtime when the internet is down.
-- Performance: instant barcode-to-line and catalogue search on ~25k items on ordinary pharmacy PCs. **[OPEN]** numeric targets.
+- Performance: instant barcode-to-line and catalogue search on ~25k items on ordinary pharmacy PCs. **[PHASE 0]** numeric targets set by spike 4 (cashier speed), measured against eStock.
 - Integrity: ledgers, immutable audit trail, No-Delete.
-- Security: role/permission matrix, device approval, session control, encrypted off-site backups, PII minimisation, tenant isolation.
+- Security: role/permission matrix, device approval, session control, encrypted off-site backups, PII minimisation, tenant isolation with defence in depth (D25), security review before each release, external penetration test before commercial launch.
 - Backups: continuous cloud sync + scheduled snapshots; restore tested; per-tenant export.
 - Compliance by design: e-receipt and track-and-trace hooks part of the sale and stock models from day one.
 
@@ -135,8 +141,23 @@ Modular monolith per deployable (Hub, Cloud) with module-owned data; UUID identi
 ## 14. Integrations
 Egypt: ETA e-receipt (adapter: direct or approved provider, D26), EDA track and trace (pharmacy duties to be confirmed from decrees 475/2025 and 161/2025), WhatsApp, payment gateways/wallets, insurance/corporate portals, supplier ordering, GS1 barcodes, receipt/label printers, cash drawer. Later markets (KSA/UAE) out of scope.
 
-## 15. Open decisions
-Hub database and packaging; sync engine; detailed permission matrix; performance targets; edition packaging and pricing; product and brand name.
+## 15. Remaining decisions
+**Settled in Phase 0 (spikes and research):** Hub local database and packaging on the three platforms; cloud database; sync engine; backend framework; cashier performance targets; ETA e-receipt requirements, numbering and approved-supplier route; EDA track-and-trace duties for pharmacies; detailed permission matrix.
+**Later:** edition packaging and pricing (after competitor demos); commercial name and brand identity (near launch, D24).
+No owner decision blocks the start of Phase 0.
 
 ## 16. Out of scope (for now)
 KSA/UAE compliance, B2B marketplace, manufacturing, hospital pharmacy.
+
+## 17. Glossary
+- **Hub:** the branch's main computer (like eStock's "Master"; Windows, Mac or Linux) running our service and local database; the branch works on it without internet.
+- **Cloud:** our servers: backups, updates, owner/HQ view, customer app/website, routing between branches.
+- **Ledger:** a list of movements that are never edited or deleted; a balance is the sum of the movements.
+- **Batch:** a quantity of one item with the same expiry and price, received on one invoice.
+- **FEFO:** first expiry, first out - sell the nearest expiry first.
+- **Tenant:** one customer of ours (a pharmacy or a chain) in the cloud.
+- **Row-Level Security (RLS):** a database rule that only returns a tenant's own rows, even if the application code has a bug.
+- **PWA:** a website that installs like an app and can work offline.
+- **Ribbon:** the Word-style toolbar of tabs and labelled icon groups.
+- **Spike:** a small throwaway prototype that answers a technical question before we build for real.
+- **White-label:** the same app published under each pharmacy's own name and logo.
