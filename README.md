@@ -14,3 +14,5 @@ Status: **Phase 0 in progress - v1.0 documents approved (PR #2 merged, owner "go
 - `docs/research/compliance-eta-eda.md` - ETA e-receipt and EDA track and trace research (v1.0)
 - `docs/specs/permission-matrix.md` - roles x permissions (v0.1 proposal)
 - `docs/specs/demo-spec-phase1.md` - Phase 1 demo specification (v0.1 proposal)
+- `docs/research/spike-s1-s2-results.md` - Sprint 0.2 spike results (S1 partial, S2)
+- `spikes/` - throwaway Phase 0 prototypes, never shipped
