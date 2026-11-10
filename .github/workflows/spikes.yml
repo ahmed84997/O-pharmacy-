@@ -85,4 +85,7 @@ jobs:
         working-directory: spikes/s6-tenancy
         run: |
           npm ci
-          node --no-warnings --test isolation.test.mjs 2>&1 | grep -E "^(# (tests|pass|fail)|not ok|ok)|PostgreSQL|error:"
+          rc=0; node --no-warnings --test isolation.test.mjs > s6.log 2>&1 || rc=$?
+          grep -E "^(# (tests|pass|fail)|not ok|ok)|PostgreSQL" s6.log || true
+          if [ "$rc" != "0" ]; then echo "S6 exit code $rc"; head -c 3000 s6.log; fi
+          exit $rc
