@@ -19,13 +19,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: S2 sync tests (native SQLite addon + fault storm)
+      - name: S2 sync tests (node:sqlite, fault storm)
         working-directory: spikes/s2-sync
         run: |
           npm ci
-          npx tsc --noEmit -p .
-          npx tsx --test test/sync.test.ts 2>&1 | grep -E "^# (tests|pass|fail)|^not ok"
-      - name: S1 kill -9 durability, better-sqlite3
+          npm run typecheck
+          npm test 2>&1 | grep -E "^# (tests|pass|fail)|^not ok"
+      - name: S1 kill -9 durability, better-sqlite3 (optional native addon)
         working-directory: spikes/s1-hub
         run: |
           npm ci

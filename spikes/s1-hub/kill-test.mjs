@@ -9,6 +9,10 @@ import { openDb } from './driver.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rounds = Number(process.env.ROUNDS ?? 30), driver = process.env.DRIVER ?? 'better', sync = process.env.SYNC ?? 'FULL';
+try { openDb(':memory:', driver, sync).close(); } catch (e) {
+  console.log(JSON.stringify({ platform: platform(), arch: arch(), node: process.version, driver, available: false, error: String(e.message).split('\n')[0] }));
+  process.exit(0);
+}
 const dir = mkdtempSync(join(tmpdir(), 's1-'));
 const dbPath = join(dir, 'hub.db'), ackPath = join(dir, 'acks.txt');
 let killed = 0, failures = [], lastCount = 0;

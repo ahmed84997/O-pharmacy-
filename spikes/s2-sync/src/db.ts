@@ -1,5 +1,24 @@
-import Database from 'better-sqlite3';
-export type DB = Database.Database;
+// Thin database wrapper over node:sqlite (built into Node, no native addon: avoids the node-gyp failure seen on Windows CI).
+import { DatabaseSync } from 'node:sqlite';
+
+export interface Stmt { run(...a: any[]): unknown; get(...a: any[]): any; all(...a: any[]): any[] }
+export class DB {
+  private d: DatabaseSync;
+  private depth = 0;
+  constructor(path: string) { this.d = new DatabaseSync(path); }
+  exec(sql: string) { this.d.exec(sql); }
+  prepare(sql: string): Stmt { return this.d.prepare(sql) as unknown as Stmt; }
+  // All-or-nothing block; throwing rolls back (used to simulate a crash mid-write).
+  transaction<T>(fn: () => T): () => T {
+    return () => {
+      if (this.depth++ > 0) { try { return fn(); } finally { this.depth--; } }
+      this.d.exec('BEGIN IMMEDIATE');
+      try { const r = fn(); this.d.exec('COMMIT'); return r; }
+      catch (e) { this.d.exec('ROLLBACK'); throw e; }
+      finally { this.depth--; }
+    };
+  }
+}
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS movements (
@@ -15,9 +34,8 @@ CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 `;
 
 export function open(path = ':memory:'): DB {
-  const d = new Database(path);
-  d.pragma('journal_mode = WAL');
-  d.pragma('synchronous = FULL');
+  const d = new DB(path);
+  d.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;');
   d.exec(SCHEMA);
   return d;
 }
