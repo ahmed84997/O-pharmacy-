@@ -40,7 +40,8 @@ jobs:
         working-directory: spikes/s4-speed
         run: |
           node --no-warnings bench.mjs
-          ITEMS=100000 node --no-warnings bench.mjs
+          CHECKPOINT=1 node --no-warnings bench.mjs
+          ITEMS=100000 CHECKPOINT=1 node --no-warnings bench.mjs
       - name: S3 print files (Arabic receipt raster, ESC/POS, TSPL, ZPL) built and decoded
         working-directory: spikes/s3-print
         run: |
@@ -54,7 +55,10 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force C:\ci-out | Out-Null
           Add-PrinterPort -Name 'C:\ci-out\print.prn'
-          Add-Printer -Name 'CI-Raw' -DriverName 'Generic / Text Only' -PortName 'C:\ci-out\print.prn'
+          Get-PrinterDriver | Select-Object Name | Format-Table -HideTableHeaders
+          $drv = (Get-PrinterDriver | Select-Object -First 1).Name
+          Write-Host "S3-RAW-DRIVER $drv"
+          Add-Printer -Name 'CI-Raw' -DriverName $drv -PortName 'C:\ci-out\print.prn'
           .\print-test.ps1 -List
           .\print-test.ps1 -Printer 'CI-Raw' -Test receipt80
           Start-Sleep 5

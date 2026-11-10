@@ -36,6 +36,7 @@ for (let i = 1; i <= N; i++) {
   const nb = 1 + Math.floor(rnd() * 4); for (let b = 0; b < nb; b++) ibt.run(bid++, i, 20270101 + Math.floor(rnd() * 40000), 1 + Math.floor(rnd() * 30), 500 + Math.floor(rnd() * 90000));
 }
 db.exec("INSERT INTO items_fts(rowid,name_ar,name_en) SELECT id,name_ar,name_en FROM items; COMMIT;");
+if (process.env.CHECKPOINT === '1') db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); // after a bulk load, fold the write-ahead log into the main file at a moment we choose
 const loadMs = Date.now() - t0;
 
 let lastRows = 0;
@@ -59,12 +60,12 @@ res.push(timeit('search English prefix 3 letters (trigram)', i => qFts.all('"' +
 res.push(timeit('search Arabic LIKE prefix (no FTS, for comparison)', i => qLike.all(ar[i % ar.length].slice(0, 3) + '%').length, 200));
 res.push(timeit('search RARE term: item number inside the name (trigram, few matches)', i => qFts.all('"' + (1000 + ((i * 37) % 24000)) + '"').length, 500));
 res.push(timeit('search NO match (trigram)', i => qFts.all('"ززززز' + i + '"').length, 500));
-res.push(timeit('WORST CASE, no index: LIKE %middle% with no match (full scan of 25k)', i => db.prepare("SELECT id FROM items WHERE name_ar LIKE ? LIMIT 20").all('%ظظظ' + i + '%').length, 100));
+res.push(timeit('WORST CASE, no index: LIKE %middle% with no match (full scan of every item)', i => db.prepare("SELECT id FROM items WHERE name_ar LIKE ? LIMIT 20").all('%ظظظ' + i + '%').length, 100));
 res.push(timeit('whole sale of 5 lines: lookup + FEFO + ledger + stock update, ONE safe commit', i => {
   db.exec('BEGIN');
   for (let l = 0; l < 5; l++) { const it = qBarcode.get(codes[((i * 5 + l) * 7919) % codes.length]); const b = qFefo.get(it.id, 20261110); if (b) { sale.run(randomUUID(), it.id, b.id, -1, Date.now()); dec.run(b.id); } }
   db.exec('COMMIT');
 }, 300));
-const out = { platform: platform(), arch: arch(), cpu: cpus()[0]?.model, cores: cpus().length, ramGB: +(totalmem() / 2 ** 30).toFixed(1), node: process.version, items: N, barcodes: codes.length, batches: bid - 1, loadSec: +(loadMs / 1000).toFixed(1), results: res };
+const out = { afterBulkLoadCheckpoint: process.env.CHECKPOINT === '1', platform: platform(), arch: arch(), cpu: cpus()[0]?.model, cores: cpus().length, ramGB: +(totalmem() / 2 ** 30).toFixed(1), node: process.version, items: N, barcodes: codes.length, batches: bid - 1, loadSec: +(loadMs / 1000).toFixed(1), results: res };
 console.log(JSON.stringify(out, null, 1));
 db.close(); rmSync(dir, { recursive: true, force: true });
