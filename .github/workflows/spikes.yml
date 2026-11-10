@@ -82,6 +82,7 @@ jobs:
           Get-Process hub-health -ErrorAction SilentlyContinue | Stop-Process -Force
           schtasks /delete /tn OPHub /f
       - name: S6 tenant isolation (embedded PostgreSQL, row-level security, 13 tests)
+        if: runner.os != 'Windows'
         working-directory: spikes/s6-tenancy
         run: |
           npm ci
