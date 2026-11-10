@@ -4,7 +4,7 @@ Updated 10 Nov 2026 (end of Sprint 0.3). Items stay here until done; each says w
 
 ## Friday 13 Nov 2026 - at the pharmacy (agreed 10 Nov)
 1. **Run the printer test kit** on the pharmacy Windows PC (`spikes/s3-print/kit/`, steps in its README, about 10 minutes). Send back `RESULTS.md`, photos of the prints, and a photo of the model label on: receipt printer, label printer, barcode reader, and the PC (Windows version, RAM). Why: S3 cannot be called proven until the real printers are tested; also fixes the supported-hardware list.
-2. Take a **photo of the printed receipt** the pharmacy gives customers today (same visit).
+2. ~~Photo of the printed receipt~~ - received 11 Nov (analysis: `docs/research/current-receipt-analysis.md`). A photo of a normal counter sale (not delivery) would still help.
 3. Answer the compliance questions (compliance doc section 4): does the pharmacy issue ETA e-receipts today and through which program, was it an EDA track-and-trace pilot pharmacy and does staff scan a code at sale, laser or 2D barcode reader.
 
 ## Pending decisions (any time)
