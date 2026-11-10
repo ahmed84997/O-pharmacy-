@@ -64,8 +64,8 @@ Customer waiting (linked to a customer request), shortage, rebalancing (HQ-initi
 
 ## 6. Hard problems to solve in design (not blockers)
 1. The same last pack reserved/sold in two places while one is offline → allow, flag, resolve by rule.
-2. Official price changes: the new price arrives with the new batch on the purchase invoice; old-price stock keeps its price; the cashier screen shows which batch/price is sold (owner rule to confirm: sell old stock at old price first).
-3. Inter-branch accounting (does a transfer create a branch-to-branch balance?) → owner/accountant decision.
+2. Official price changes: the new price arrives with the new batch on the purchase invoice; old-price stock keeps its price; the cashier screen shows which batch/price is sold (owner rule: nearest expiry first - FEFO).
+3. Inter-branch accounting → decided (C10): stock move at cost by default, branch-to-branch balance as a setting.
 4. Permissions across branches (who can see another branch's stock, costs, sales) → role matrix.
 5. Scale of the central view for big chains → aggregated read models in the cloud.
 
@@ -88,7 +88,11 @@ Build the **data model and sync for Chain from day 1** (branch scope, ledger, UU
 | C6 | Transfers | The workflow in section 4 (request → accept → dispatch → in transit → receive, differences recorded). |
 | C7 | Who accepts a transfer request at the holding branch | Branch Manager, storekeeper, or a regular employee (by permission). The chain owner can move stock directly. |
 
-Still open: non-drug items (cosmetics, supplements) - free pricing per branch or same rule? Selling order when old and new prices coexist (FEFO by expiry vs old price first). Inter-branch accounting of transfers (at cost; does it create a branch-to-branch balance?).
+| C8 | Non-drug items (cosmetics, supplements...) | **Free pricing**, set by the pharmacy (in a chain, by each branch's Admin / Manager). |
+| C9 | Selling order when a batch has old and new prices | **Nearest expiry first (FEFO)**. |
+| C10 | Accounting of transfers | Default **stock move at cost, no branch-to-branch debt** (one owner). Setting for chains with partners: the receiving branch **owes** the sending branch (at cost or cost + margin), settled periodically. In both modes every branch report shows the value transferred in / out. |
+
+Nothing open on chain rules for now.
 
 ## Sources
 - B-Connect: https://bconnect-egypt.com/
