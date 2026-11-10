@@ -2,7 +2,7 @@
 
 Version 1.0 CANDIDATE - 10 Nov 2026. Owner: Dr. Ahmed. Status: **for owner approval**; once approved it is the baseline for Phase 0 and changes only through a versioned PR. **[DECIDED]** = owner decision (section 2); **[PHASE 0]** = settled by a Phase 0 spike or research; **[LATER]** = decided in a later phase.
 
-Change log: v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory - v0.3 (10 Nov) adds No-Delete UX (D13) and the chain decisions D14-D22, roles D23, the code name D24, cloud tenancy D25 and e-receipt D26 - v1.0 candidate (10 Nov): review for consistency, open items split into Phase 0 vs later, glossary added; D27 desktop platforms.
+Change log: v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory - v0.3 (10 Nov) adds No-Delete UX (D13) and the chain decisions D14-D22, roles D23, the code name D24, cloud tenancy D25 and e-receipt D26 - v1.0 candidate (10 Nov): review for consistency, open items split into Phase 0 vs later, glossary added; D27 desktop platforms; D28 code signing; D29 customer app publishing.
 
 ## 1. Purpose
 Define what the integrated pharmacy system must do and the architecture rules it is built on, before any code. The Roadmap and Masterplan refer to this document.
@@ -37,6 +37,8 @@ Define what the integrated pharmacy system must do and the architecture rules it
 | D25 | **Cloud tenancy:** one shared cloud database with defence in depth - (1) database Row-Level Security per tenant, (2) a separate encryption key per tenant for backups and sensitive data, (3) automated tenant-isolation tests on every change, (4) a **dedicated server** tier for chains that require full isolation. Each pharmacy's primary data also lives on its own Hub. | 10 Nov 2026 |
 | D26 | **ETA e-receipt:** supported in the product through an adapter that works both **direct** with ETA and through an **approved provider**; the printed receipt carries the ETA QR; aim to become an ETA-approved supplier (requirements confirmed in Phase 0) | 10 Nov 2026 |
 | D27 | **All desktop platforms:** the Hub and the staff/cashier app run on **Windows, macOS and Linux** (target the whole market); Windows ships first in the pilot, macOS and Linux before the commercial launch | 10 Nov 2026 |
+| D28 | Desktop software is **never published on an app store**: installed from a file downloaded from our website. **Code signing** (Windows certificate, Apple Developer ID + notarisation) is **deferred to the commercial launch**; the pilot runs unsigned | 10 Nov 2026 |
+| D29 | **Customer app:** we build one white-label base; for each pharmacy that wants an app we prepare a build with its name and identity, and it is **published on the pharmacy's own App Store / Google Play accounts**, not ours. Comes with the commercial launch | 10 Nov 2026 |
 
 ## 3. Vision
 A pharmacy runs its whole business in one Arabic-first system: sell, stock, buy, close the day, keep accounts, serve customers (including out-of-stock requests and orders from its own app), manage staff, and stay compliant - offline-safe, with AI help where it saves time.
@@ -78,7 +80,7 @@ Role templates: Owner (all branches), Branch Admin, Branch Manager, Pharmacist, 
 | 13 | AI | Ops assistant, invoice audit, prescription reading, expiry/shortage insight | Operations | YK + new |
 | 14 | Reporting | One report centre with filters, saved views, export (replaces about 77 separate eStock reports) | all | new |
 | 15 | Chain | Cross-branch visibility, inter-branch requests/transfers, central purchasing, rebalancing, consolidated finance | System + Ops | new |
-| 16 | Customer channel | White-label app and website, catalogue, cart, prescription photo upload, order tracking | App + Website | new |
+| 16 | Customer channel | White-label app (per-pharmacy builds on their own store accounts, D29) and website, catalogue, cart, prescription photo upload, order tracking | App + Website | new |
 | 17 | Platform | Tenant onboarding, licences/editions, subscriptions, data import (eStock and others), remote support, updates | cloud | new |
 Baseline of the eStock feature set: `docs/research/estock-inventory.md`.
 
@@ -95,7 +97,7 @@ Baseline of the eStock feature set: `docs/research/estock-inventory.md`.
                   |
    Cashier / staff devices (desktop window to the Hub; local fallback queue)
 ```
-- **Hub install (D27):** one installer per platform from our website - Windows (.exe/.msi), macOS (.pkg/.dmg, signed and notarised), Linux (.deb/.rpm or AppImage) → activation (pharmacy data + licence) → runs as a background service (Windows service / macOS launchd / Linux systemd) with the application, local database and print service → desktop icon that opens the app in its own window. Installers are code-signed on Windows and macOS.
+- **Hub install (D27):** one installer per platform from our website - Windows (.exe/.msi), macOS (.pkg/.dmg, signed and notarised), Linux (.deb/.rpm or AppImage) → activation (pharmacy data + licence) → runs as a background service (Windows service / macOS launchd / Linux systemd) with the application, local database and print service → desktop icon that opens the app in its own window. Installers are code-signed on Windows and macOS from the commercial launch (D28); no app store for desktop.
 - **Other devices:** a small installer that finds the Hub on the network and creates the icon (or open the Hub address once and install it as a PWA).
 - **Hub failure:** the cloud holds a continuously synced copy; a new Hub is installed on any PC and pulls its data; meanwhile devices keep selling into their local queue.
 - **Updates:** automatic from the cloud (no manual "Update System").
@@ -112,7 +114,7 @@ Baseline of the eStock feature set: `docs/research/estock-inventory.md`.
 ## 10. Technology **[DECIDED direction - validated by Phase 0 spikes]**
 - **Backend (Cloud + Hub):** Node.js + TypeScript, one shared domain code base used by both.
 - **System + Operations UI:** React + TypeScript, offline-capable, delivered as a cross-platform desktop window (Windows, macOS, Linux) and as a PWA from any browser.
-- **Customer App:** React Native (Expo), white-label builds per pharmacy for Android and iPhone.
+- **Customer App:** React Native (Expo), one white-label base; per-pharmacy builds published on the pharmacy's own store accounts (D29).
 - **Customer Website:** Next.js.
 - **[PHASE 0 spike]:** Hub local database (e.g. PostgreSQL vs SQLite), cloud database, packaging of the Hub as a service on Windows / macOS / Linux and the desktop-window shell (e.g. Electron vs Tauri), sync engine (custom ledger sync vs an existing library), framework choice on the backend.
 

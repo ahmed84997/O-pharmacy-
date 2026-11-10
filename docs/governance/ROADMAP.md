@@ -47,13 +47,13 @@ On Windows (D27). Side by side with eStock, then cut over. Exit: a full month of
 Shared customers with one balance (D16), optional central warehouse (D17), cross-branch quantities (D18), transfer workflow (D19) and accounting modes (D22), central purchasing, consolidated reports, owner view of everything (D15).
 
 ## Phase 9 - Customer App (white-label) and Website
-Per-pharmacy app builds (D9) and website: catalogue, ordering, prescription photo, order tracking, notifications; store publishing pipeline.
+One white-label base (D9, D29) and the website: catalogue, ordering, prescription photo, order tracking, notifications. Build pipeline that produces a pharmacy's app from its name and identity, ready to publish on the **pharmacy's own** App Store / Google Play accounts. Offered from the commercial launch.
 
 ## Phase 10 - Compliance depth
 Track and trace at dispensing, controlled-drug register, recall by batch (scope from Phase 0 research; moves earlier if regulation requires).
 
 ## Phase 11 - Commercial launch
-Brand and name (D24), macOS and Linux releases (D27), onboarding, subscriptions/licences, import service, support tooling, handbooks, external penetration test, pricing.
+Brand and name (D24), macOS and Linux releases (D27), code signing on Windows and macOS (D28), customer-app onboarding per pharmacy (D29), onboarding, subscriptions/licences, import service, support tooling, handbooks, external penetration test, pricing.
 
 ## Cross-cutting (every phase)
 Tests green in CI, security review, backups verified, in-app guide/handbook updated, no new permission/module without approval, documents updated in the same PR.

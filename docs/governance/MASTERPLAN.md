@@ -40,7 +40,7 @@ Editions (D11): **Single pharmacy** and **Chain**. Code name "O-Pharmacy" until 
 5. Quality over speed: no launch date before Phase 0 estimates (D10).
 
 ## 6. Business model **[LATER]**
-Per-branch subscription by edition plus add-ons (Customer App + Website, insurance, AI, extra devices, dedicated server tier), setup/import fee, training. Competitor prices are not public; collect them in Phase 0 demos. White-label app publishing per pharmacy has its own cost (store accounts, builds) to price in.
+Per-branch subscription by edition plus add-ons (Customer App + Website, insurance, AI, extra devices, dedicated server tier), setup/import fee, training. Competitor prices are not public; collect them in Phase 0 demos. Customer app (D29): we prepare each pharmacy's build from our white-label base; the pharmacy publishes it on its own App Store / Google Play accounts and pays their fees; we charge for the build and its updates.
 
 ## 7. Go-to-market [ASSUMPTION - to discuss before Phase 11]
 Pilot at the owner's pharmacy → case study → 3-5 friendly pharmacies → referrals and pharmacist communities → sales and support team. The eStock import service and the customer app are the main sales hooks.
@@ -54,12 +54,12 @@ Owner decides; Claude drafts and builds. Phase gate on every step. Documents liv
 | Scope is very large | 4 products + 2 editions, regulated | Phases, demo first, pilot before selling |
 | Offline/sync correctness | Stock and money must never drift | Ledger design, spike S2, reconciliation tools |
 | Hub reliability on 3 platforms | The branch depends on one computer; 3 OSes triple the test matrix | Cloud copy, quick re-install, device fallback queue, one shared code base, CI on all three (S1) |
-| Code-signing and store costs | Windows/macOS signing certificates, Apple developer account | Budget in Phase 0, part of the price |
+| Code-signing costs | Windows certificate, Apple Developer ID | Deferred to the commercial launch (D28); part of the price |
 | Printing hardware variety | Many printer models | Print service with a tested printer list (S3) |
 | Tenant data leak | Fatal for trust | RLS, per-tenant keys, isolation tests, dedicated tier, pen test (D25, S6) |
 | Compliance unknowns | Could change the sale/stock design | Phase 0 research on ETA and EDA rules |
 | Incumbent lock-in | Switching cost | Import tools, side-by-side pilot |
-| White-label app overhead | One store listing per pharmacy | Automated build pipeline, priced add-on |
+| White-label app overhead | One build and store listing per pharmacy | Automated build pipeline; listings on the pharmacy's own accounts (D29); priced add-on |
 | Owner time | Doctor with several jobs | Small steps, short reports, decisions batched |
 
 ## 10. Success metrics [ASSUMPTION - numbers set after Phase 0]
