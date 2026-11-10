@@ -22,10 +22,12 @@ async function withTenant(tid, fn, p = pool) {
 }
 const count = async (c, t) => +(await c.query(`SELECT count(*) n FROM ophar.${t}`)).rows[0].n;
 
+const pglog = [];
 before(async () => {
   dir = mkdtempSync(join(tmpdir(), 's6-')); chmodSync(dir, 0o777); port = await freePort();
-  server = new EmbeddedPostgres({ databaseDir: join(dir, 'data'), user: 'postgres', password: 'pw', port, persistent: false, onLog: () => {}, onError: () => {} });
-  await server.initialise(); await server.start(); await server.createDatabase('ophar');
+  server = new EmbeddedPostgres({ databaseDir: join(dir, 'data'), user: 'postgres', password: 'pw', port, persistent: false, onLog: (m) => pglog.push(String(m)), onError: (m) => pglog.push('ERR ' + String(m)) });
+  try { await server.initialise(); await server.start(); await server.createDatabase('ophar'); }
+  catch (e) { console.log('S6-STARTUP-FAILED', e && e.message); console.log(pglog.slice(-25).join('\n')); throw e; }
   admin = new pg.Client({ host: '127.0.0.1', port, user: 'postgres', password: 'pw', database: 'ophar' }); await admin.connect();
   await admin.query(readFileSync(join(here, 'schema.sql'), 'utf8'));
   ver = (await admin.query('SHOW server_version')).rows[0].server_version;

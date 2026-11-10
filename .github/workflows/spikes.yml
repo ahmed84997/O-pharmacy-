@@ -87,5 +87,5 @@ jobs:
           npm ci
           rc=0; node --no-warnings --test isolation.test.mjs > s6.log 2>&1 || rc=$?
           grep -E "^(# (tests|pass|fail)|not ok|ok)|PostgreSQL" s6.log || true
-          if [ "$rc" != "0" ]; then echo "S6 exit code $rc"; head -c 3000 s6.log; fi
+          if [ "$rc" != "0" ]; then echo "S6 exit code $rc"; head -c 4000 s6.log; grep -A30 S6-STARTUP s6.log | head -50; fi
           exit $rc
