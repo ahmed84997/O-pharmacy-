@@ -12,4 +12,4 @@ const boots = db.prepare('SELECT COUNT(*) c FROM boot').get().c;
 const info = { ok: true, platform: process.platform, arch: process.arch, node: process.version, sqlite: db.prepare('select sqlite_version() v').get().v, boots };
 if (process.argv.includes('--once')) { console.log(JSON.stringify(info)); process.exit(0); }
 const srv = http.createServer((q, r) => { r.setHeader('content-type', 'application/json'); r.end(JSON.stringify(info)); });
-srv.listen(Number(process.env.PORT || 0), '127.0.0.1', () => console.log('listening', srv.address().port));
+const pa = process.argv.find(a => a.startsWith('--port=')); srv.listen(Number(pa ? pa.slice(7) : process.env.PORT || 0), '127.0.0.1', () => console.log('listening', srv.address().port));
