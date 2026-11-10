@@ -1,4 +1,7 @@
+.env
 node_modules/
+vendor/
+.DS_Store
 dist/
 *.db
 *.db-wal
