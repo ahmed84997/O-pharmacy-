@@ -5,9 +5,9 @@ Integrated pharmacy package for Egypt (commercial): **System** (sales/ERP), **Op
 Status: **Phase 0 - discussion and specification.** No application code yet.
 
 ## Documents
-- `docs/governance/ARD.md` - architecture and requirements (v0.2 draft)
+- `docs/governance/ARD.md` - architecture and requirements (v0.3 draft)
 - `docs/governance/ROADMAP.md` - phases (v0.2 draft)
-- `docs/governance/MASTERPLAN.md` - product and business plan (v0.2 draft)
+- `docs/governance/MASTERPLAN.md` - product and business plan (v0.3 draft)
 - `docs/research/competitor-research-v1.md` - market research (v1.2)
 - `docs/research/estock-inventory.md` - eStock screens and features
 - `docs/research/editions-single-vs-chain.md` - editions study
