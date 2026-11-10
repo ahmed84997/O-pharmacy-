@@ -11,9 +11,9 @@ Documents and throwaway prototypes only; nothing from Phase 0 ships.
 **Done:** competitor research (v1.2), eStock screen inventory (v1), editions study (v1.1), owner decisions D1-D26.
 **To do:**
 1. **Spikes** (each a small prototype with a written result):
-   - S1 Hub on Windows - installer, Windows service, local database, activation, auto-update, power cut and restart.
+   - S1 Hub on Windows, macOS and Linux - installers, background service, local database, activation, auto-update, code signing, power cut and restart; desktop-window shell choice (D27).
    - S2 Offline + sync - Hub + 2 devices + cloud; unplug the internet, a device, the Hub; replay queues; ledger totals must match. Includes two offline branches and one transfer.
-   - S3 Printing - receipt printer, barcode-label printer, cash drawer through the Hub print service (the pharmacy's own printers first).
+   - S3 Printing - receipt printer, barcode-label printer, cash drawer through the Hub print service on the three platforms (the pharmacy's own printers first).
    - S4 Cashier speed - barcode-to-line and search on ~25k items on an ordinary PC; sets the numeric targets against eStock.
    - S5 Ribbon UI - clickable Arabic RTL prototype (labels, collapse/expand, Quick Access, key tips, phone layout).
    - S6 Tenant isolation - Row-Level Security proof with isolation tests (D25).
@@ -41,7 +41,7 @@ Customer requests, shortages, PO stages, notifications, delivery, tasks, attenda
 Daily cash, banks, cheques, chart of accounts and statements; payroll; contracts → insurance claims; the report centre.
 
 ## Phase 7 - Pilot: Single edition at the owner's pharmacy
-Side by side with eStock, then cut over. Exit: a full month of closed days with no unexplained stock/cash differences, no selling downtime, cashier speed at least eStock's.
+On Windows (D27). Side by side with eStock, then cut over. Exit: a full month of closed days with no unexplained stock/cash differences, no selling downtime, cashier speed at least eStock's.
 
 ## Phase 8 - Chain edition
 Shared customers with one balance (D16), optional central warehouse (D17), cross-branch quantities (D18), transfer workflow (D19) and accounting modes (D22), central purchasing, consolidated reports, owner view of everything (D15).
@@ -53,10 +53,10 @@ Per-pharmacy app builds (D9) and website: catalogue, ordering, prescription phot
 Track and trace at dispensing, controlled-drug register, recall by batch (scope from Phase 0 research; moves earlier if regulation requires).
 
 ## Phase 11 - Commercial launch
-Brand and name (D24), onboarding, subscriptions/licences, import service, support tooling, handbooks, external penetration test, pricing.
+Brand and name (D24), macOS and Linux releases (D27), onboarding, subscriptions/licences, import service, support tooling, handbooks, external penetration test, pricing.
 
 ## Cross-cutting (every phase)
 Tests green in CI, security review, backups verified, in-app guide/handbook updated, no new permission/module without approval, documents updated in the same PR.
 
 ## Ordering principles
-Retire the biggest risks first (offline/sync, Windows Hub, printing, tenant isolation, compliance) in Phase 0. Build the Chain-ready data model from Phase 2 although the Chain edition ships in Phase 8. Anything that touches money or stock is a ledger with audit.
+Retire the biggest risks first (offline/sync, the Hub on three platforms, printing, tenant isolation, compliance) in Phase 0. Build the Chain-ready data model from Phase 2 although the Chain edition ships in Phase 8. Anything that touches money or stock is a ledger with audit.

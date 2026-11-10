@@ -20,7 +20,7 @@ Editions (D11): **Single pharmacy** and **Chain**. Code name "O-Pharmacy" until 
 - **Our edge [ASSUMPTION - to prove in the pilot]:**
   1. Familiar eStock-like workflows → short training.
   2. Modern Ribbon UI (D12) and one report centre.
-  3. Offline-safe branch Hub + cloud: auto-updates, off-site backups, remote view (D6, D7).
+  3. Offline-safe branch Hub + cloud: auto-updates, off-site backups, remote view (D6, D7); runs on Windows, Mac and Linux (D27) where most local programs are Windows-only.
   4. Operations depth from YK + AI.
   5. The pharmacy's own customer app.
   6. Anti-theft by design: nothing is really deleted, every deletion is visible to management (D13).
@@ -53,7 +53,8 @@ Owner decides; Claude drafts and builds. Phase gate on every step. Documents liv
 |---|---|---|
 | Scope is very large | 4 products + 2 editions, regulated | Phases, demo first, pilot before selling |
 | Offline/sync correctness | Stock and money must never drift | Ledger design, spike S2, reconciliation tools |
-| Windows Hub reliability | The branch depends on one PC | Cloud copy, quick re-install, device fallback queue (S1) |
+| Hub reliability on 3 platforms | The branch depends on one computer; 3 OSes triple the test matrix | Cloud copy, quick re-install, device fallback queue, one shared code base, CI on all three (S1) |
+| Code-signing and store costs | Windows/macOS signing certificates, Apple developer account | Budget in Phase 0, part of the price |
 | Printing hardware variety | Many printer models | Print service with a tested printer list (S3) |
 | Tenant data leak | Fatal for trust | RLS, per-tenant keys, isolation tests, dedicated tier, pen test (D25, S6) |
 | Compliance unknowns | Could change the sale/stock design | Phase 0 research on ETA and EDA rules |
