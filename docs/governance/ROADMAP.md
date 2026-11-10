@@ -8,7 +8,7 @@ Change log: v0.1 first draft - v0.2 Hub topology, Node/TypeScript, 4 products, t
 
 ## Phase 0 - Discovery, specification, spikes
 Documents and throwaway prototypes only; nothing from Phase 0 ships.
-**Done:** competitor research (v1.2), eStock screen inventory (v1), editions study (v1.1), owner decisions D1-D26.
+**Done:** competitor research (v1.2), eStock screen inventory (v1), editions study (v1.1), owner decisions D1-D29. **Sprint 0.1 (10 Nov 2026, in PR for review):** ETA/EDA compliance research (`docs/research/compliance-eta-eda.md`), permission matrix v0.1 (`docs/specs/permission-matrix.md`), Phase 1 demo specification v0.1 (`docs/specs/demo-spec-phase1.md`). Sprint 0.1 finding: item ETA code, GTIN, optional serial and 2D-imager hardware are pulled into Phase 3-4 data model and the S3/S4 hardware tests; EDA pharmacy duties are not yet published.
 **To do:**
 1. **Spikes** (each a small prototype with a written result):
    - S1 Hub on Windows, macOS and Linux - installers, background service, local database, activation, auto-update, code signing, power cut and restart; desktop-window shell choice (D27).
