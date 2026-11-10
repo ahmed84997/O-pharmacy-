@@ -2,7 +2,7 @@
 
 Version 0.3 DRAFT - 10 Nov 2026. Owner: Dr. Ahmed. Status: in discussion, nothing is approved for build. **[DECIDED]** = owner decision; **[OPEN]** = needs a decision; **[ASSUMPTION]** = my inference, to confirm.
 
-Change log: v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory - v0.3 (10 Nov) adds No-Delete UX (D13) and the chain decisions D14-D22.
+Change log: v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory - v0.3 (10 Nov) adds No-Delete UX (D13) and the chain decisions D14-D22, roles D23 and the code name D24.
 
 ## 1. Purpose
 Define what the integrated pharmacy system must do and the architecture rules it is built on, before any code. The Roadmap and Masterplan refer to this document.
@@ -32,6 +32,8 @@ Define what the integrated pharmacy system must do and the architecture rules it
 | D20 | Non-drug items have **free pricing**, set by the pharmacy (in a chain, by the branch Admin / Manager) | 10 Nov 2026 |
 | D21 | Stock is sold **nearest expiry first (FEFO)**, also when old and new prices coexist | 10 Nov 2026 |
 | D22 | Transfers: default stock move at cost with no branch-to-branch debt; a chain setting makes the receiving branch owe the sender (cost or cost + margin, settled periodically); branch reports always show value transferred in / out | 10 Nov 2026 |
+| D23 | Roles (templates): Owner, Branch Admin, Branch Manager, Pharmacist, Cashier, Storekeeper, Employee, Accountant, Delivery agent, Customer (app); platform: Super Admin, Support. **One person can hold several roles** (e.g. Admin = Manager in a small pharmacy; pharmacist who is also the cashier); permissions adjustable per person | 10 Nov 2026 |
+| D24 | **"O-Pharmacy" is the code name** until the commercial name and brand identity are chosen near launch | 10 Nov 2026 |
 
 ## 3. Vision
 A pharmacy runs its whole business in one Arabic-first system: sell, stock, buy, close the day, keep accounts, serve customers (including out-of-stock requests and orders from its own app), manage staff, and stay compliant - offline-safe, with AI help where it saves time.
@@ -51,8 +53,8 @@ An order from the app/website reaches the cloud, is routed to the branch Hub, an
 - One codebase; the edition is a licence. Data is branch-scoped from day 1, so upgrading Single → Chain needs no migration.
 - Chain rules decided: D14-D22. Full study: `docs/research/editions-single-vs-chain.md`.
 
-## 6. Users and roles
-Owner/Admin, HQ/regional manager (Chain), Branch Manager, Pharmacist, Cashier, Storekeeper, Employee, Accountant, Delivery agent. Platform side: our Super Admin and Support. Finance, cost/profit and salary data are permission-gated (eStock shows cost and profit on the cashier screen - we do not by default). **[OPEN]** final role list and permission matrix.
+## 6. Users and roles **[DECIDED: D23]**
+Role templates: Owner (all branches), Branch Admin, Branch Manager, Pharmacist, Cashier, Storekeeper, Employee, Accountant, Delivery agent, Customer (app/website only). Platform side: our Super Admin and Support. A person can hold several roles; permissions are granular and adjustable per person (YK model). Finance, cost/profit and salary data are permission-gated (eStock shows cost and profit on the cashier screen - we do not by default). **[OPEN]** the detailed permission matrix.
 
 ## 7. Functional scope (modules)
 | # | Module | Content | Product | Source |
@@ -132,7 +134,7 @@ Modular monolith per deployable (Hub, Cloud) with module-owned data; UUID identi
 Egypt: ETA e-receipt (direct API or approved provider **[OPEN]**), EDA track and trace (pharmacy duties to be confirmed from decrees 475/2025 and 161/2025), WhatsApp, payment gateways/wallets, insurance/corporate portals, supplier ordering, GS1 barcodes, receipt/label printers, cash drawer. Later markets (KSA/UAE) out of scope.
 
 ## 15. Open decisions
-Tenancy model; Hub database and packaging; sync engine; e-receipt route; permission matrix and role list; performance targets; edition packaging and pricing; product and brand name.
+Tenancy model; Hub database and packaging; sync engine; e-receipt route; detailed permission matrix; performance targets; edition packaging and pricing; product and brand name.
 
 ## 16. Out of scope (for now)
 KSA/UAE compliance, B2B marketplace, manufacturing, hospital pharmacy.
