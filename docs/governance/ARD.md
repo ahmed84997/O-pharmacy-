@@ -2,7 +2,7 @@
 
 Version 0.3 DRAFT - 10 Nov 2026. Owner: Dr. Ahmed. Status: in discussion, nothing is approved for build. **[DECIDED]** = owner decision; **[OPEN]** = needs a decision; **[ASSUMPTION]** = my inference, to confirm.
 
-Change log: v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory - v0.3 (10 Nov) adds No-Delete UX (D13) and the chain decisions D14-D22, roles D23 and the code name D24.
+Change log: v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory - v0.3 (10 Nov) adds No-Delete UX (D13) and the chain decisions D14-D22, roles D23, the code name D24, cloud tenancy D25 and e-receipt D26.
 
 ## 1. Purpose
 Define what the integrated pharmacy system must do and the architecture rules it is built on, before any code. The Roadmap and Masterplan refer to this document.
@@ -34,6 +34,8 @@ Define what the integrated pharmacy system must do and the architecture rules it
 | D22 | Transfers: default stock move at cost with no branch-to-branch debt; a chain setting makes the receiving branch owe the sender (cost or cost + margin, settled periodically); branch reports always show value transferred in / out | 10 Nov 2026 |
 | D23 | Roles (templates): Owner, Branch Admin, Branch Manager, Pharmacist, Cashier, Storekeeper, Employee, Accountant, Delivery agent, Customer (app); platform: Super Admin, Support. **One person can hold several roles** (e.g. Admin = Manager in a small pharmacy; pharmacist who is also the cashier); permissions adjustable per person | 10 Nov 2026 |
 | D24 | **"O-Pharmacy" is the code name** until the commercial name and brand identity are chosen near launch | 10 Nov 2026 |
+| D25 | **Cloud tenancy:** one shared cloud database with defence in depth - (1) database Row-Level Security per tenant, (2) a separate encryption key per tenant for backups and sensitive data, (3) automated tenant-isolation tests on every change, (4) a **dedicated server** tier for chains that require full isolation. Each pharmacy's primary data also lives on its own Hub. | 10 Nov 2026 |
+| D26 | **ETA e-receipt:** supported in the product through an adapter that works both **direct** with ETA and through an **approved provider**; the printed receipt carries the ETA QR; aim to become an ETA-approved supplier (requirements confirmed in Phase 0) | 10 Nov 2026 |
 
 ## 3. Vision
 A pharmacy runs its whole business in one Arabic-first system: sell, stock, buy, close the day, keep accounts, serve customers (including out-of-stock requests and orders from its own app), manage staff, and stay compliant - offline-safe, with AI help where it saves time.
@@ -128,13 +130,13 @@ Baseline of the eStock feature set: `docs/research/estock-inventory.md`.
 - Compliance by design: e-receipt and track-and-trace hooks part of the sale and stock models from day one.
 
 ## 13. Architecture principles (from YK, kept)
-Modular monolith per deployable (Hub, Cloud) with module-owned data; UUID identity; transactional outbox events; shared state machines; branch isolation; configuration engine with no hardcoded business values; additive migrations; No-Delete; audit everything. **[OPEN]** tenancy model in the cloud - one database with `tenant_id` + branch scope **[ASSUMPTION]** vs database per tenant.
+Modular monolith per deployable (Hub, Cloud) with module-owned data; UUID identity; transactional outbox events; shared state machines; branch isolation; configuration engine with no hardcoded business values; additive migrations; No-Delete; audit everything. Cloud tenancy: shared database with Row-Level Security, per-tenant keys, isolation tests and a dedicated tier (D25); the tenant context is set in one place and never trusted from the client.
 
 ## 14. Integrations
-Egypt: ETA e-receipt (direct API or approved provider **[OPEN]**), EDA track and trace (pharmacy duties to be confirmed from decrees 475/2025 and 161/2025), WhatsApp, payment gateways/wallets, insurance/corporate portals, supplier ordering, GS1 barcodes, receipt/label printers, cash drawer. Later markets (KSA/UAE) out of scope.
+Egypt: ETA e-receipt (adapter: direct or approved provider, D26), EDA track and trace (pharmacy duties to be confirmed from decrees 475/2025 and 161/2025), WhatsApp, payment gateways/wallets, insurance/corporate portals, supplier ordering, GS1 barcodes, receipt/label printers, cash drawer. Later markets (KSA/UAE) out of scope.
 
 ## 15. Open decisions
-Tenancy model; Hub database and packaging; sync engine; e-receipt route; detailed permission matrix; performance targets; edition packaging and pricing; product and brand name.
+Hub database and packaging; sync engine; detailed permission matrix; performance targets; edition packaging and pricing; product and brand name.
 
 ## 16. Out of scope (for now)
 KSA/UAE compliance, B2B marketplace, manufacturing, hospital pharmacy.
