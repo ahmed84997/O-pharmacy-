@@ -9,4 +9,6 @@ Cloud core on PostgreSQL + Fastify (ADR-0001). Multi-tenant in one database, iso
 - `admin.ts` - onboarding: create tenant and branch, register or revoke a device (token shown once, only its hash stored).
 - `server.ts` - `GET /health`, `POST /v1/ingest`: device bearer token resolves tenant, branch and device; Hub outbox events are stored idempotently by event id (the Hub can retry safely and acknowledges what comes back in `acked`).
 
-Tests run on a real PostgreSQL (embedded). Next: 2.5 sync between Hub, Cloud and devices (pull side, cursors, conflict rules), then 2.6 installer, auto-update, licences.
+- `GET /v1/pull?cursor=&limit=` - events of the tenant's other branches after a cursor. Ingest takes a per-tenant advisory lock, so commit order equals cursor order and a Hub can never skip an event.
+
+Tests run on a real PostgreSQL (embedded). Next: 2.6 installer, auto-update, licences.

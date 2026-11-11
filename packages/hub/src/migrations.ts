@@ -62,6 +62,20 @@ CREATE TABLE audit (
 );
 CREATE TRIGGER audit_no_update BEFORE UPDATE ON audit BEGIN SELECT RAISE(ABORT, 'audit is append-only'); END;
 CREATE TRIGGER audit_no_delete BEFORE DELETE ON audit BEGIN SELECT RAISE(ABORT, 'audit is append-only'); END;` },
+  { id: '0004_remote_events', sql: `
+CREATE TABLE remote_events (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT NOT NULL UNIQUE,
+  branch_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  hub_created_at TEXT NOT NULL,
+  cloud_seq INTEGER NOT NULL,
+  received_at TEXT NOT NULL
+);
+CREATE TRIGGER remote_no_update BEFORE UPDATE ON remote_events BEGIN SELECT RAISE(ABORT, 'remote events are append-only'); END;
+CREATE TRIGGER remote_no_delete BEFORE DELETE ON remote_events BEGIN SELECT RAISE(ABORT, 'remote events are append-only'); END;
+CREATE TABLE sync_state (k TEXT PRIMARY KEY, v TEXT NOT NULL);` },
 ];
 
 const sum = (s: string) => createHash('sha256').update(s).digest('hex');

@@ -37,3 +37,14 @@ export async function revokeDevice(admin: Client, tenantId: string, deviceId: st
     await admin.query('COMMIT');
   } catch (e) { await admin.query('ROLLBACK'); throw e; }
 }
+
+export async function createBranch(admin: Client, tenantId: string, name: string): Promise<{ branchId: string }> {
+  const branchId = randomUUID();
+  await admin.query('BEGIN');
+  try {
+    await admin.query('SET LOCAL ROLE app_owner'); await admin.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
+    await admin.query('INSERT INTO op.branches(tenant_id,id,name) VALUES ($1,$2,$3)', [tenantId, branchId, name]);
+    await admin.query('COMMIT');
+  } catch (e) { await admin.query('ROLLBACK'); throw e; }
+  return { branchId };
+}
