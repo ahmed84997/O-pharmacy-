@@ -5,7 +5,7 @@ export type SaleType = 'cash' | 'card' | 'credit' | 'delivery';
 
 export interface Item {
   id: string; name: string; drug: boolean; packUnit: string; subUnit: string; perPack: number;
-  barcode: string; publicPrice: number; suspended: boolean; otherBranchQty: number;
+  barcode: string; publicPrice: number; suspended: boolean; otherBranchQty: number; alt: string[];
 }
 export interface Batch {
   id: string; itemId: string; expiry: string; qty: number; costPack: number; pricePack: number; receivedOn: string; priceChanged?: boolean;
@@ -24,13 +24,14 @@ export interface Purchase { id: string; no: string; supplierId: string; lines: P
 export interface Movement { id: string; at: string; kind: 'sale' | 'void-return' | 'purchase'; batchId: string; qtyBase: number; ref: string }
 export interface Shortage { id: string; itemId: string; source: 'no-stock' | 'manual'; at: string; by: Role; status: 'open' | 'ordered' }
 export interface Want { key: string; itemId: string; unit: 'pack' | 'sub'; qty: number; discountPct: number; batchId?: string }
+export interface Receipt { id: string; no: string; customerId: string; amount: number; method: 'cash' | 'card'; at: string; by: Role; balanceAfter: number }
 export interface Held { id: string; type: SaleType; customerId: string; wants: Want[]; at: string }
 
 export interface Db {
   today: string;
   items: Item[]; batches: Batch[]; customers: Customer[]; suppliers: Supplier[];
-  invoices: Invoice[]; purchases: Purchase[]; movements: Movement[]; shortages: Shortage[]; held: Held[];
-  counters: { sale: number; purchase: number; id: number };
+  invoices: Invoice[]; purchases: Purchase[]; movements: Movement[]; shortages: Shortage[]; held: Held[]; receipts: Receipt[];
+  counters: { sale: number; purchase: number; receipt: number; id: number };
 }
 
 export const BRANCH = 'B1';
@@ -201,3 +202,83 @@ export function savePurchase(db: Db, a: { supplierId: string; lines: PurchaseDra
       counters: { ...db.counters, purchase: n, id: idc } },
   };
 }
+
+/* ---------- Sprint 1.2: customers, cash receipts, item card, shortages to purchase ---------- */
+
+export const canEditCustomerLimit = (r: Role) => r === 'owner' || r === 'manager';
+export const canEditItem = (r: Role) => r !== 'cashier';
+
+export interface CustomerInput { id?: string; name: string; kind: Customer['kind']; limit: number; suspended?: boolean }
+
+export function saveCustomer(db: Db, a: { input: CustomerInput; role: Role }): Ok<{ customer: Customer }> | Err {
+  const { input, role } = a;
+  const name = input.name.trim();
+  if (!name) return { ok: false, error: 'name-required' };
+  if (!(input.limit >= 0)) return { ok: false, error: 'bad-limit' };
+  if (input.id) {
+    const old = customerById(db, input.id); if (!old) return { ok: false, error: 'not-found' };
+    if (old.kind === 'cash' && old.id === 'c0') return { ok: false, error: 'forbidden' };
+    if ((input.limit !== old.limit || input.kind !== old.kind || !!input.suspended !== old.suspended) && !canEditCustomerLimit(role)) return { ok: false, error: 'forbidden' };
+    const c: Customer = { ...old, name, kind: input.kind, limit: input.kind === 'cash' ? 0 : input.limit, suspended: !!input.suspended };
+    return { ok: true, customer: c, db: { ...db, customers: db.customers.map(x => x.id === c.id ? c : x) } };
+  }
+  if (db.customers.some(c => c.name === name)) return { ok: false, error: 'duplicate' };
+  // A cashier can add a customer for the counter, but credit and limits are management decisions.
+  const kind = canEditCustomerLimit(role) ? input.kind : 'cash';
+  const [d2, id] = nextId(db, 'c');
+  const c: Customer = { id, name, kind, balance: 0, limit: kind === 'cash' || !canEditCustomerLimit(role) ? 0 : input.limit, suspended: false };
+  return { ok: true, customer: c, db: { ...d2, customers: [...d2.customers, c] } };
+}
+
+/** Cash receipt (توريد نقدية): reduces the customer's balance. Nothing is deleted; a mistake is a new entry. */
+export function cashReceipt(db: Db, a: { customerId: string; amount: number; method: 'cash' | 'card'; role: Role; now: string }): Ok<{ receipt: Receipt }> | Err {
+  const c = customerById(db, a.customerId);
+  if (!c || c.kind === 'cash') return { ok: false, error: 'no-customer' };
+  if (!(a.amount > 0)) return { ok: false, error: 'bad-amount' };
+  if (round2(a.amount) > c.balance) return { ok: false, error: 'over-balance' };
+  const n = db.counters.receipt + 1;
+  const after = round2(c.balance - a.amount);
+  const r: Receipt = { id: `rc${n}`, no: `${BRANCH}-R${String(n).padStart(5, '0')}`, customerId: c.id, amount: round2(a.amount), method: a.method, at: a.now, by: a.role, balanceAfter: after };
+  return { ok: true, receipt: r, db: { ...db, receipts: [r, ...db.receipts], customers: db.customers.map(x => x.id === c.id ? { ...x, balance: after } : x), counters: { ...db.counters, receipt: n } } };
+}
+
+export interface ItemInput { id?: string; name: string; drug: boolean; barcode: string; perPack: number; subUnit: string; publicPrice: number; suspended?: boolean; alt?: string[] }
+
+export function saveItem(db: Db, a: { input: ItemInput; role: Role }): Ok<{ item: Item }> | Err {
+  const { input, role } = a;
+  if (!canEditItem(role)) return { ok: false, error: 'forbidden' };
+  const name = input.name.trim(); const barcode = input.barcode.trim();
+  if (!name) return { ok: false, error: 'name-required' };
+  if (!/^\d{8,14}$/.test(barcode)) return { ok: false, error: 'bad-barcode' };
+  if (!(input.perPack >= 1) || !Number.isInteger(input.perPack)) return { ok: false, error: 'bad-pack' };
+  if (!(input.publicPrice > 0)) return { ok: false, error: 'bad-price' };
+  if (db.items.some(i => i.barcode === barcode && i.id !== input.id)) return { ok: false, error: 'dup-barcode' };
+  if (db.items.some(i => i.name === name && i.id !== input.id)) return { ok: false, error: 'duplicate' };
+  const alt = (input.alt ?? []).filter(x => x !== input.id && db.items.some(i => i.id === x));
+  if (input.id) {
+    const old = itemById(db, input.id); if (!old) return { ok: false, error: 'not-found' };
+    // A medicine's public price is fixed by the state and changes only through a purchase invoice (D14); non-drug prices are free (D20).
+    if (old.drug && round2(input.publicPrice) !== old.publicPrice) return { ok: false, error: 'drug-price-locked' };
+    if (old.drug !== input.drug) return { ok: false, error: 'drug-flag-locked' };
+    const it: Item = { ...old, name, barcode, perPack: input.perPack, subUnit: input.perPack > 1 ? (input.subUnit.trim() || 'قطعة') : '', publicPrice: old.drug ? old.publicPrice : round2(input.publicPrice), suspended: !!input.suspended, alt };
+    return { ok: true, item: it, db: { ...db, items: db.items.map(x => x.id === it.id ? it : x) } };
+  }
+  const [d2, id] = nextId(db, 'i');
+  const it: Item = { id, name, drug: input.drug, packUnit: input.drug ? 'علبة' : 'قطعة', subUnit: input.perPack > 1 ? (input.subUnit.trim() || 'قطعة') : '', perPack: input.perPack, barcode, publicPrice: round2(input.publicPrice), suspended: false, otherBranchQty: 0, alt };
+  return { ok: true, item: it, db: { ...d2, items: [...d2.items, it] } };
+}
+
+/** Prefilled purchase line for an item (used when a shortage becomes a purchase draft). Cost and price come from the latest batch. */
+export function draftLineFor(db: Db, itemId: string, qtyPack = 10): PurchaseDraftLine | null {
+  const it = itemById(db, itemId); if (!it) return null;
+  const last = db.batches.filter(b => b.itemId === itemId).sort((a, b) => b.receivedOn.localeCompare(a.receivedOn))[0];
+  const d = new Date(db.today + 'T00:00:00Z');
+  const expiry = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 25, 0)).toISOString().slice(0, 10);
+  return { itemId, expiry, qtyPack, bonusPack: 0, costPack: last?.costPack ?? round2(it.publicPrice * 0.8), pricePack: it.publicPrice };
+}
+export const openShortageIds = (db: Db) => db.shortages.filter(s => s.status === 'open').map(s => s.itemId);
+
+export const customerStatement = (db: Db, customerId: string) => ({
+  invoices: db.invoices.filter(i => i.customerId === customerId && i.type === 'credit' && i.status === 'saved'),
+  receipts: db.receipts.filter(r => r.customerId === customerId),
+});

@@ -152,3 +152,17 @@ td small.muted { font-size: 11px; }
   .lines td.n { text-align: start; } .lines input.num { width: 100%; }
   .lines tr td[colspan] { grid-column: 1 / -1; }
 }
+
+/* generic card layout for tables on the phone */
+@media (max-width: 760px) {
+  .cards { min-width: 0; } .cards thead { display: none; } .cards, .cards tbody { display: block; }
+  .cards tr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; padding: 12px; border-bottom: 1px solid var(--line); }
+  .cards td { border: 0; padding: 0; white-space: normal; text-align: start; }
+  .cards td::before { content: attr(data-label); display: block; font-size: 11px; color: var(--muted); }
+  .cards td.nm { grid-column: 1 / -1; font-weight: 600; } .cards td.bt { grid-column: 1 / -1; } .cards td.bt::before { display: none; }
+  .cards td.n { text-align: start; } .cards td[colspan] { grid-column: 1 / -1; }
+  .cards td.bt .actions .btn { flex: 1; }
+}
+.itemcard .row { margin-bottom: 8px; }
+
+@media (max-width: 760px) { .cards td.idx { display: none; } .cards td.x { position: absolute; inset-block-start: 6px; inset-inline-end: 6px; } .cards tr { position: relative; } .cards input.num { width: 100%; } .cards td.nm { padding-inline-end: 40px; } }

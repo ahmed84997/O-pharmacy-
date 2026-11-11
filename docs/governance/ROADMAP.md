@@ -26,7 +26,7 @@ Documents and throwaway prototypes only; nothing from Phase 0 ships.
 ## Phase 1 - Demo "eStock-like"
 Clickable demo (desktop first, with a good phone version, D31) on seed data inside the Ribbon shell: sale invoice, purchase invoice, item list, customer list, shortage notebook, cash receipt, report-centre sample, deleted-items view (D13). Goal: the owner and pharmacist testers see the vision and give the "his way" change list.
 
-**Phase 1 progress:** Sprint 1.1 (in PR for review): React Ribbon shell, seed data (about 250 items, 40 customers, 15 suppliers, 150 invoices), sale invoice with FEFO, hold and void, purchase invoice with bonus and per-batch prices, 24 logic tests, CI `demo.yml` (code in `demo/`). Sprint 1.2: customers, cash receipt, shortage-to-purchase, item card, phone layout for purchase. Sprint 1.3: report-centre sample, branch switcher, deleted-items restore, owner test round.
+**Phase 1 progress:** Sprint 1.1 (merged): React Ribbon shell, seed data (about 250 items, 40 customers, 15 suppliers, 150 invoices), sale invoice with FEFO, hold and void, purchase invoice with bonus and per-batch prices, 24 logic tests, CI `demo.yml` (code in `demo/`). **Sprint 1.2 (in PR for review):** customers (add, edit limit and suspend by management only, statement), cash receipt against balance, item card (drug price locked per D14, free non-drug price, alternatives, batches), shortage notebook converts open shortages to a prefilled purchase draft, card layout on the phone for the tables; 35 logic tests; live copy updates on merge (`deploy-demo.yml`). Sprint 1.3: report-centre sample, branch switcher, deleted-items restore, owner test round.
 
 ## Phase 2 - Foundation and sync engine
 Identity, role templates with multiple roles per person (D23), permissions, devices, branches/stores, configuration, audit, licensing/editions, Hub ↔ Cloud sync, installer and auto-update, cloud tenancy with RLS and per-tenant keys (D25). Data model is Chain-ready from here (branch scope, ledgers, UUID messages).
@@ -78,6 +78,24 @@ Pace assumed: Claude builds, the owner reviews in short rounds (phase gate), no 
 **Totals:** Phases 1 to 7 (the pilot done): about **17 to 23 months**; all phases: about **26 to 34 months**.
 
 **Option for the owner (decision D-P7):** run the pilot earlier, side by side with eStock, right after Phase 4 (sell, stock, buy, print) while Operations and Accounts are built after it. This puts real use about **10 to 14 months** out and lets the pharmacy find problems sooner, at the cost of two-system work for the staff during that time. Phase 7's exit rule stays the same.
+
+## Proposed sprints per phase [PROPOSAL, confirmed at the start of each phase]
+A sprint is a package of work with its own PR and gate, not a fixed duration.
+
+| Phase | Sprints |
+|---|---|
+| 0 (done) | 0.1 research and specifications - 0.2 S1/S2 - 0.3 S3/S4 - 0.4 S5/S6 - 0.5 documents v1.1 |
+| 1 Demo | 1.1 shell, sale, purchase (done) - 1.2 customers, receipt, item card, shortage to purchase - 1.3 report centre sample, branch switcher, deleted-items restore, owner test round and change list |
+| 2 Foundation | 2.1 structure, CI, config engine, audit - 2.2 identity, roles, permissions, devices - 2.3 Hub (ledger, outbox) - 2.4 Cloud (Postgres RLS) - 2.5 sync Hub, devices, Cloud - 2.6 installer, auto-update, licences |
+| 3 Inventory | 3.1 items, units, barcodes, ETA codes - 3.2 batches, expiry, per-batch prices - 3.3 stock ledger, stores - 3.4 stocktake, adjustments - 3.5 purchasing, returns - 3.6 import from eStock |
+| 4 POS | 4.1 cashier sessions, sale core - 4.2 invoice types, FEFO, held bills - 4.3 returns, swaps - 4.4 customer balances - 4.5 printing and drawer on real printers - 4.6 drawer closing - 4.7 ETA e-receipt |
+| 5 Operations | 5.1 customer requests, shortages - 5.2 PO stages, notifications - 5.3 delivery, tasks - 5.4 attendance, closings - 5.5 alerts, AI |
+| 6 Accounts | 6.1 cash, banks, cheques - 6.2 chart of accounts, statements - 6.3 payroll, HR - 6.4 contracts, insurance claims - 6.5 report centre |
+| 7 Pilot | 7.1 preparation (import, training, side by side) - 7.2 a full month of closed days - 7.3 fixes, exit review (moves after 4.7 if D-P7 is approved) |
+| 8 Chain | 8.1 shared customers - 8.2 central warehouse - 8.3 cross-branch quantities, transfers - 8.4 accounting modes - 8.5 central purchasing, consolidated reports |
+| 9 App and Website | 9.1 white-label app base - 9.2 ordering, prescription photo, tracking - 9.3 website - 9.4 per-pharmacy build pipeline |
+| 10 Compliance | 10.1 track and trace at dispensing - 10.2 controlled-drug register - 10.3 recall by batch |
+| 11 Launch | 11.1 logo and identity - 11.2 macOS and Linux releases, signing - 11.3 subscriptions, support, training - 11.4 penetration test, handbooks |
 
 ## Cross-cutting (every phase)
 Tests green in CI, security review, backups verified, in-app guide/handbook updated, no new permission/module without approval, documents updated in the same PR.

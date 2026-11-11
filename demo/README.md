@@ -8,5 +8,8 @@ Desktop first, good on the phone (D31). Name shown as "O Pharmacy" (D30). Browse
 ## Sprint 1.1 scope (done)
 Ribbon shell (tabs, collapse, Quick Access, Alt key tips on the Arabic keyboard, role switcher, phone bottom bar and drawer), seed data, **screen 1 sale invoice**, **screen 2 purchase invoice**, plus simple items list, shortage notebook, invoice log with void, and the management-only deleted view.
 
-## Not yet (Sprint 1.2 and 1.3)
-Customer list, cash receipt, report centre sample, branch switcher, restore from deleted view, item card form, purchase table card layout on phone.
+## Sprint 1.2 scope (done)
+Customers (add, edit, limit and suspend by management, statement), cash receipt, item card (drug price locked, alternatives, batches), shortages to a prefilled purchase draft, card layout on phone for tables.
+
+## Not yet (Sprint 1.3)
+Report-centre sample, branch switcher (Chain preview), restore from the deleted view, owner test round.

@@ -167,3 +167,88 @@ describe('search', () => {
     expect(searchItems(db, '')).toHaveLength(0);
   });
 });
+
+import { saveCustomer, cashReceipt, saveItem, draftLineFor, openShortageIds, customerStatement } from './domain';
+
+describe('customers and cash receipts (Sprint 1.2)', () => {
+  it('a manager adds a credit customer with a limit; names must be unique and non-empty', () => {
+    const db = base();
+    const r = saveCustomer(db, { input: { name: 'عميل جديد', kind: 'credit', limit: 4000 }, role: 'manager' }); if (!r.ok) throw new Error(r.error);
+    expect(r.customer).toMatchObject({ kind: 'credit', limit: 4000, balance: 0 }); expect(r.db.customers).toHaveLength(41);
+    expect(saveCustomer(r.db, { input: { name: 'عميل جديد', kind: 'credit', limit: 1 }, role: 'manager' })).toMatchObject({ ok: false, error: 'duplicate' });
+    expect(saveCustomer(db, { input: { name: '  ', kind: 'cash', limit: 0 }, role: 'owner' })).toMatchObject({ ok: false, error: 'name-required' });
+    expect(saveCustomer(db, { input: { name: 'س', kind: 'credit', limit: -5 }, role: 'owner' })).toMatchObject({ ok: false, error: 'bad-limit' });
+  });
+  it('a cashier can add a counter customer but never credit or a limit', () => {
+    const r = saveCustomer(base(), { input: { name: 'عميل كاشير', kind: 'credit', limit: 9000 }, role: 'cashier' }); if (!r.ok) throw new Error(r.error);
+    expect(r.customer).toMatchObject({ kind: 'cash', limit: 0 });
+  });
+  it('only management changes a limit or suspends; the walk-in customer is fixed', () => {
+    const db = base(); const c = db.customers.find(x => x.kind === 'credit' && !x.suspended)!;
+    expect(saveCustomer(db, { input: { id: c.id, name: c.name, kind: 'credit', limit: c.limit + 1000 }, role: 'pharmacist' })).toMatchObject({ ok: false, error: 'forbidden' });
+    const ok = saveCustomer(db, { input: { id: c.id, name: c.name, kind: 'credit', limit: c.limit + 1000, suspended: true }, role: 'owner' }); if (!ok.ok) throw new Error(ok.error);
+    expect(ok.customer).toMatchObject({ limit: c.limit + 1000, suspended: true });
+    expect(saveCustomer(db, { input: { id: 'c0', name: 'x', kind: 'cash', limit: 0 }, role: 'owner' })).toMatchObject({ ok: false, error: 'forbidden' });
+  });
+  it('a receipt lowers the balance, is numbered, and cannot exceed the balance', () => {
+    const db = base(); const c = db.customers.find(x => x.kind === 'credit' && x.balance > 100)!;
+    const r = cashReceipt(db, { customerId: c.id, amount: 100, method: 'cash', role: 'cashier', now: NOW }); if (!r.ok) throw new Error(r.error);
+    expect(r.receipt.no).toBe('B1-R00001'); expect(r.db.customers.find(x => x.id === c.id)!.balance).toBeCloseTo(c.balance - 100, 2);
+    expect(r.receipt.balanceAfter).toBeCloseTo(c.balance - 100, 2); expect(r.db.receipts).toHaveLength(1);
+    expect(cashReceipt(db, { customerId: c.id, amount: c.balance + 1, method: 'cash', role: 'owner', now: NOW })).toMatchObject({ ok: false, error: 'over-balance' });
+    expect(cashReceipt(db, { customerId: c.id, amount: 0, method: 'cash', role: 'owner', now: NOW })).toMatchObject({ ok: false, error: 'bad-amount' });
+    expect(cashReceipt(db, { customerId: 'c0', amount: 5, method: 'cash', role: 'owner', now: NOW })).toMatchObject({ ok: false, error: 'no-customer' });
+  });
+  it('credit sale then receipt then statement add up', () => {
+    const db0 = base(); const para = byName(db0, 'باراسيتامول 500'); const c = db0.customers.find(x => x.kind === 'credit' && !x.suspended && x.limit - x.balance > 500)!;
+    const s = saveSale(db0, { wants: [w(para.id, 1)], type: 'credit', customerId: c.id, role: 'pharmacist', now: NOW }); if (!s.ok) throw new Error(s.error);
+    const r = cashReceipt(s.db, { customerId: c.id, amount: s.invoice.net, method: 'card', role: 'cashier', now: NOW }); if (!r.ok) throw new Error(r.error);
+    expect(r.db.customers.find(x => x.id === c.id)!.balance).toBeCloseTo(c.balance, 2);
+    const st = customerStatement(r.db, c.id); expect(st.invoices[0].id).toBe(s.invoice.id); expect(st.receipts).toHaveLength(1);
+  });
+});
+
+describe('item card (Sprint 1.2)', () => {
+  const input = { name: 'منتج تجريبي', drug: false, barcode: '6221999999991', perPack: 1, subUnit: '', publicPrice: 55 };
+  it('adds a non-drug item with a free price; barcode and name stay unique', () => {
+    const db = base(); const r = saveItem(db, { input, role: 'pharmacist' }); if (!r.ok) throw new Error(r.error);
+    expect(r.item).toMatchObject({ drug: false, publicPrice: 55, packUnit: 'قطعة' });
+    expect(saveItem(r.db, { input: { ...input, name: 'اخر' }, role: 'owner' })).toMatchObject({ ok: false, error: 'dup-barcode' });
+    expect(saveItem(r.db, { input: { ...input, barcode: '6221999999992' }, role: 'owner' })).toMatchObject({ ok: false, error: 'duplicate' });
+  });
+  it('validates barcode, pack size, price and role', () => {
+    const db = base();
+    expect(saveItem(db, { input: { ...input, barcode: '12' }, role: 'owner' })).toMatchObject({ ok: false, error: 'bad-barcode' });
+    expect(saveItem(db, { input: { ...input, perPack: 0 }, role: 'owner' })).toMatchObject({ ok: false, error: 'bad-pack' });
+    expect(saveItem(db, { input: { ...input, publicPrice: 0 }, role: 'owner' })).toMatchObject({ ok: false, error: 'bad-price' });
+    expect(saveItem(db, { input, role: 'cashier' })).toMatchObject({ ok: false, error: 'forbidden' });
+  });
+  it('a drug public price is locked (changes only by purchase, D14); a non-drug price is free', () => {
+    const db = base(); const drug = byName(db, 'باراسيتامول 500'); const nd = db.items.find(i => !i.drug)!;
+    const asIn = (i: typeof drug) => ({ id: i.id, name: i.name, drug: i.drug, barcode: i.barcode, perPack: i.perPack, subUnit: i.subUnit, publicPrice: i.publicPrice, alt: i.alt });
+    expect(saveItem(db, { input: { ...asIn(drug), publicPrice: drug.publicPrice + 1 }, role: 'owner' })).toMatchObject({ ok: false, error: 'drug-price-locked' });
+    expect(saveItem(db, { input: { ...asIn(drug), drug: false }, role: 'owner' })).toMatchObject({ ok: false, error: 'drug-flag-locked' });
+    const ok = saveItem(db, { input: { ...asIn(nd), publicPrice: nd.publicPrice + 7 }, role: 'manager' }); if (!ok.ok) throw new Error(ok.error);
+    expect(ok.item.publicPrice).toBe(nd.publicPrice + 7);
+  });
+  it('seed gives drugs alternatives of the same ingredient; saving drops unknown or self ids', () => {
+    const db = base(); const para = byName(db, 'باراسيتامول 500');
+    expect(para.alt.length).toBeGreaterThan(0); expect(para.alt.every(id => db.items.find(i => i.id === id)!.name.startsWith('باراسيتامول'))).toBe(true);
+    const r = saveItem(db, { input: { id: para.id, name: para.name, drug: true, barcode: para.barcode, perPack: para.perPack, subUnit: para.subUnit, publicPrice: para.publicPrice, alt: [para.id, 'nope', para.alt[0]] }, role: 'owner' }); if (!r.ok) throw new Error(r.error);
+    expect(r.item.alt).toEqual([para.alt[0]]);
+  });
+});
+
+describe('shortage to purchase draft (Sprint 1.2)', () => {
+  it('builds a prefilled line from the latest batch, and the saved purchase closes the shortage', () => {
+    let db = base(); const z = byName(db, 'سيتيريزين 10');
+    db = addShortage(db, z.id, 'no-stock', 'cashier', NOW);
+    expect(openShortageIds(db)).toEqual([z.id]);
+    const line = draftLineFor(db, z.id, 12)!;
+    expect(line).toMatchObject({ itemId: z.id, qtyPack: 12, pricePack: z.publicPrice }); expect(line.costPack).toBeGreaterThan(0); expect(line.expiry > TODAY).toBe(true);
+    const r = savePurchase(db, { supplierId: 's1', lines: [line], paid: 0, role: 'pharmacist', now: NOW }); if (!r.ok) throw new Error(r.error);
+    expect(r.db.shortages[0].status).toBe('ordered'); expect(openShortageIds(r.db)).toEqual([]);
+    expect(stockOf(r.db, z.id)).toBe(12 * z.perPack);
+  });
+  it('unknown item gives no draft', () => { expect(draftLineFor(base(), 'nope')).toBeNull(); });
+});

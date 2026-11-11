@@ -21,7 +21,7 @@ export const TABS: Tab[] = [
     { label: 'التوصيل', items: [B('deliv', 'توصيل منزلي', 'truck', 'KeyD', { screen: 'soon' })] },
     { label: 'نهاية اليوم', items: [B('close', 'إغلاق الدرج', 'check', 'KeyL', { roles: MGMT, screen: 'soon' })] } ] },
   { id: 'inv', label: 'المخزون', key: 'KeyI', roles: NOCASH, groups: [
-    { label: 'الأصناف', items: [B('items', 'قائمة الأصناف', 'box', 'KeyL', { screen: 'items' }), B('newitem', 'إضافة صنف', 'plus', 'KeyA', { screen: 'soon' }), B('batches', 'الباتشات والصلاحية', 'cal', 'KeyB', { screen: 'soon' })] },
+    { label: 'الأصناف', items: [B('items', 'قائمة الأصناف', 'box', 'KeyL', { screen: 'items' }), B('newitem', 'إضافة صنف', 'plus', 'KeyA', { screen: 'items', cmd: 'newitem' }), B('batches', 'الباتشات والصلاحية', 'cal', 'KeyB', { screen: 'soon' })] },
     { label: 'الجرد', items: [B('stocktake', 'جرد', 'clip', 'KeyJ', { screen: 'soon' }), B('adjust', 'تسوية مخزون', 'gear', 'KeyT', { roles: MGMT, screen: 'soon' })] },
     { label: 'المخازن', items: [B('transfer', 'تحويل بين المخازن', 'truck', 'KeyN', { screen: 'soon' }), B('otherbr', 'المتاح في فروع أخرى', 'store', 'KeyO', { screen: 'soon' })] } ] },
   { id: 'buy', label: 'المشتريات', key: 'KeyP', roles: NOCASH, groups: [
@@ -29,8 +29,8 @@ export const TABS: Tab[] = [
     { label: 'الموردون', items: [B('sup', 'الموردون', 'users', 'KeyS', { screen: 'soon' }), B('cmp', 'مقارنة الأسعار', 'tag', 'KeyC', { screen: 'soon' })] },
     { label: 'النواقص', items: [B('short2', 'كشكول النواقص', 'clip', 'KeyN', { screen: 'short' })] } ] },
   { id: 'cust', label: 'العملاء', key: 'KeyU', roles: ALL, groups: [
-    { label: 'العملاء', items: [B('custs', 'قائمة العملاء', 'users', 'KeyL', { screen: 'soon' }), B('newc', 'عميل جديد', 'plus', 'KeyN', { screen: 'soon' })] },
-    { label: 'الحساب', items: [B('cash', 'توريد نقدية', 'wallet', 'KeyW', { screen: 'soon' }), B('stmt', 'كشف حساب', 'file', 'KeyK', { screen: 'soon' })] } ] },
+    { label: 'العملاء', items: [B('custs', 'قائمة العملاء', 'users', 'KeyL', { screen: 'customers' }), B('newc', 'عميل جديد', 'plus', 'KeyN', { screen: 'customers', cmd: 'newcust' })] },
+    { label: 'الحساب', items: [B('cash', 'توريد نقدية', 'wallet', 'KeyW', { screen: 'receipt' }), B('stmt', 'كشف حساب', 'file', 'KeyK', { screen: 'soon' })] } ] },
   { id: 'acc', label: 'الحسابات', key: 'KeyA', roles: ['owner'], groups: [
     { label: 'اليومية', items: [B('safe', 'الخزينة', 'wallet', 'KeyS', { screen: 'soon' }), B('bank', 'البنوك', 'store', 'KeyB', { screen: 'soon' })] },
     { label: 'العامة', items: [B('fin', 'القوائم المالية', 'chart', 'KeyF', { screen: 'soon' })] } ] },
