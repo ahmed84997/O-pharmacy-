@@ -1,8 +1,8 @@
-# O-Pharmacy - Architecture and Requirements Document (ARD)
+# O Pharmacy - Architecture and Requirements Document (ARD)
 
-Version 1.0 CANDIDATE - 10 Nov 2026. Owner: Dr. Ahmed. Status: **for owner approval**; once approved it is the baseline for Phase 0 and changes only through a versioned PR. **[DECIDED]** = owner decision (section 2); **[PHASE 0]** = settled by a Phase 0 spike or research; **[LATER]** = decided in a later phase.
+Version 1.1 - 11 Nov 2026. Owner: Dr. Ahmed. Status: **approved baseline (v1.0, PR #2) plus Phase 0 results and owner decisions D30-D31**; changes only through a versioned PR. **[DECIDED]** = owner decision (section 2); **[PHASE 0]** = settled by a Phase 0 spike or research; **[LATER]** = decided in a later phase.
 
-Change log: v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory - v0.3 (10 Nov) adds No-Delete UX (D13) and the chain decisions D14-D22, roles D23, the code name D24, cloud tenancy D25 and e-receipt D26 - v1.0 candidate (10 Nov): review for consistency, open items split into Phase 0 vs later, glossary added; D27 desktop platforms; D28 code signing; D29 customer app publishing.
+Change log: v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory - v0.3 (10 Nov) adds No-Delete UX (D13) and the chain decisions D14-D22, roles D23, the code name D24, cloud tenancy D25 and e-receipt D26 - v1.0 candidate (10 Nov): review for consistency, open items split into Phase 0 vs later, glossary added; D27 desktop platforms; D28 code signing; D29 customer app publishing. v1.1 (11 Nov): Phase 0 spike results folded in (sections 8-10, 15); D24 superseded by D30 (the product name is "O Pharmacy"); D31 desktop-first with an effective phone version.
 
 ## 1. Purpose
 Define what the integrated pharmacy system must do and the architecture rules it is built on, before any code. The Roadmap and Masterplan refer to this document.
@@ -33,12 +33,14 @@ Define what the integrated pharmacy system must do and the architecture rules it
 | D21 | Stock is sold **nearest expiry first (FEFO)**, also when old and new prices coexist | 10 Nov 2026 |
 | D22 | Transfers: default stock move at cost with no branch-to-branch debt; a chain setting makes the receiving branch owe the sender (cost or cost + margin, settled periodically); branch reports always show value transferred in / out | 10 Nov 2026 |
 | D23 | Roles (templates): Owner, Branch Admin, Branch Manager, Pharmacist, Cashier, Storekeeper, Employee, Accountant, Delivery agent, Customer (app); platform: Super Admin, Support. **One person can hold several roles** (e.g. Admin = Manager in a small pharmacy; pharmacist who is also the cashier); permissions adjustable per person | 10 Nov 2026 |
-| D24 | **"O-Pharmacy" is the code name** until the commercial name and brand identity are chosen near launch | 10 Nov 2026 |
+| D24 | ~~"O-Pharmacy" is the code name until the commercial name is chosen~~ - **superseded by D30** | 10 Nov 2026 |
 | D25 | **Cloud tenancy:** one shared cloud database with defence in depth - (1) database Row-Level Security per tenant, (2) a separate encryption key per tenant for backups and sensitive data, (3) automated tenant-isolation tests on every change, (4) a **dedicated server** tier for chains that require full isolation. Each pharmacy's primary data also lives on its own Hub. | 10 Nov 2026 |
 | D26 | **ETA e-receipt:** supported in the product through an adapter that works both **direct** with ETA and through an **approved provider**; the printed receipt carries the ETA QR; aim to become an ETA-approved supplier (requirements confirmed in Phase 0) | 10 Nov 2026 |
 | D27 | **All desktop platforms:** the Hub and the staff/cashier app run on **Windows, macOS and Linux** (target the whole market); Windows ships first in the pilot, macOS and Linux before the commercial launch | 10 Nov 2026 |
 | D28 | Desktop software is **never published on an app store**: installed from a file downloaded from our website. **Code signing** (Windows certificate, Apple Developer ID + notarisation) is **deferred to the commercial launch**; the pilot runs unsigned | 10 Nov 2026 |
 | D29 | **Customer app:** we build one white-label base; for each pharmacy that wants an app we prepare a build with its name and identity, and it is **published on the pharmacy's own App Store / Google Play accounts**, not ours. Comes with the commercial launch | 10 Nov 2026 |
+| D30 | **The product name is "O Pharmacy", always written in English (Latin letters), even inside Arabic screens, documents, receipts and the customer app.** No Arabic spelling of the name. Logo and visual identity are still to be designed (near launch). Repository and file names keep the hyphenated form `O-pharmacy` | 11 Nov 2026 |
+| D31 | **Desktop first, phone must be good and effective.** The staff system is designed for desktop (mouse and keyboard, cashier speed is the yardstick); the phone version is a real product built from the same code and API, designed for the phone (bottom bar, drawer, camera barcode, touch targets), not a shrunk desktop. Full cashier operation stays on the desktop and the Hub; any screen judged unsuitable for the phone is listed and needs the owner's approval before it is left out. Every demo screen is tested on both | 11 Nov 2026 |
 
 ## 3. Vision
 A pharmacy runs its whole business in one Arabic-first system: sell, stock, buy, close the day, keep accounts, serve customers (including out-of-stock requests and orders from its own app), manage staff, and stay compliant - offline-safe, with AI help where it saves time.
@@ -116,14 +118,23 @@ Baseline of the eStock feature set: `docs/research/estock-inventory.md`.
 - **System + Operations UI:** React + TypeScript, offline-capable, delivered as a cross-platform desktop window (Windows, macOS, Linux) and as a PWA from any browser.
 - **Customer App:** React Native (Expo), one white-label base; per-pharmacy builds published on the pharmacy's own store accounts (D29).
 - **Customer Website:** Next.js.
-- **[PHASE 0 spike]:** Hub local database (e.g. PostgreSQL vs SQLite), cloud database, packaging of the Hub as a service on Windows / macOS / Linux and the desktop-window shell (e.g. Electron vs Tauri), sync engine (custom ledger sync vs an existing library), framework choice on the backend.
+- **Settled by Phase 0 spikes (details in `docs/research/spike-*.md`):**
+  - **Hub database: SQLite** (WAL, synchronous FULL, one writer per branch) through Node's built-in `node:sqlite` (experimental in Node 22: re-check on Node 24 LTS before Phase 2; better-sqlite3 failed to build on Windows CI). Safe-write proven on Windows, macOS, Linux CI (S1).
+  - **Sync: custom ledger + outbox**, idempotency keys, transfers as an event chain through the cloud; 157 tests green on three OSes (S2).
+  - **Cashier speed:** database layer far below 1 ms for barcode and search on 25k items (FTS5 trigram for Arabic mid-word search); targets set in `spike-s3-s4-results.md` (S4). Windows commit stalls (0.4-2 s) seen on the CI runner must be re-measured on a real PC in the pilot.
+  - **Packaging:** Node single executable works (83/107/119 MB on Windows/macOS/Linux); Windows scheduled-task auto-start proven; launchd/systemd untested (S1).
+  - **Printing:** the Arabic receipt is rendered as a raster image and sent as ESC/POS (drawer pulse, cut) and TSPL/ZPL labels; tested in CI by rendering only, **real printers pending (Friday kit)** (S3).
+  - **Cloud database: PostgreSQL with Row-Level Security**, per-tenant keys, tested 13/13 on Linux and macOS; known limit and the stronger per-tenant-login tier documented (S6).
+  - **UI:** Ribbon prototype accepted for review (S5).
+- **Still open:** desktop-window shell (Electron vs Tauri), auto-update, real power-cut test, backend framework (decide at the start of Phase 2), sync library vs custom beyond two branches.
 
 ## 11. UI and UX **[DECIDED: Ribbon]**
 - **Ribbon like Microsoft Word** instead of drop-down menus: tabs (e.g. المبيعات - المشتريات - الأصناف - المخازن - العملاء - الموردين - الحسابات - العمليات - شئون العاملين - التقارير - الإعدادات), each tab with labelled icon groups.
 - Icon **names always shown** next to/under the icons; the ribbon can be **collapsed and expanded**; a **Quick Access Toolbar** for the user's most used actions; a **status bar** (user, branch, connection/sync state, shift).
 - Keyboard first for the cashier: shortcuts for every main action, key tips like Word (Alt + letter), barcode focus always ready, speed at least equal to eStock.
 - Ribbon tabs and groups follow permissions (a user sees only what they can do).
-- Phones/tablets (owner, manager, staff): the ribbon becomes a side menu / bottom bar.
+- **Desktop first (D31)**: the full Ribbon, keyboard and mouse. **Phone version (D31)** for owner, manager and staff: same code and permissions, a bottom bar for the most used screens plus a side drawer for the rest, camera barcode scanning, touch targets of at least 44 px, and the same offline and No-Delete rules. Prototype: S5 (v2).
+- **Name (D30):** "O Pharmacy" in Latin letters everywhere, including Arabic screens.
 - Arabic-first RTL, Arabic digits handling, light/dark themes, design system shared by System, Operations, Website (App uses the same tokens).
 - One **report centre** instead of a menu entry per report.
 
@@ -143,7 +154,7 @@ Egypt: ETA e-receipt (adapter: direct or approved provider, D26), EDA track and 
 
 ## 15. Remaining decisions
 **Settled in Phase 0 (spikes and research):** Hub local database and packaging on the three platforms; cloud database; sync engine; backend framework; cashier performance targets; ETA e-receipt requirements, numbering and approved-supplier route; EDA track-and-trace duties for pharmacies; detailed permission matrix.
-**Later:** edition packaging and pricing (after competitor demos); commercial name and brand identity (near launch, D24).
+**Later:** edition packaging and pricing (after competitor demos); logo and visual identity (near launch; the name is fixed by D30).
 No owner decision blocks the start of Phase 0.
 
 ## 16. Out of scope (for now)
@@ -151,6 +162,7 @@ KSA/UAE compliance, B2B marketplace, manufacturing, hospital pharmacy.
 
 ## 17. Glossary
 - **Hub:** the branch's main computer (like eStock's "Master"; Windows, Mac or Linux) running our service and local database; the branch works on it without internet.
+- **O Pharmacy:** the product name (D30), always in Latin letters.
 - **Cloud:** our servers: backups, updates, owner/HQ view, customer app/website, routing between branches.
 - **Ledger:** a list of movements that are never edited or deleted; a balance is the sum of the movements.
 - **Batch:** a quantity of one item with the same expiry and price, received on one invoice.
