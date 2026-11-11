@@ -1,0 +1,10 @@
+# @o-pharmacy/ops - Operations (Phase 5, built on the proven YK domain, D5)
+
+Sprint 5.1: customer requests and shortages. Plugs into the Hub after inventory and POS (`[...MIGRATIONS, ...POS_MIGRATIONS, ...OPS_MIGRATIONS]`; migration `ops_0001_requests`).
+
+- **Two kinds, one lifecycle:** a *customer request* (CR-, a customer is waiting and must be told; `customer_request.create`) and a *shortage* (NQ-, out of stock, nobody waiting; `shortage.record`). Every item starts at `pending_purchase`. Items are catalogue items or free text; quantity at least 1; the same idempotency key is the same request.
+- **The item machine** (`states.ts`, on the shared `StateMachine` in core): 13 states (the original 9 plus `stocked`, `out_for_delivery`, `unavailable`, `closed_unavailable`), no `ordered -> pending_purchase` edge. The header status (open, partially fulfilled, completed, closed, mixed closed) is derived from the items and never stored.
+- **`move`** is the one place an item changes state: shared-machine check, a reason for every undo, reopen or cancel, then item + event + audit + outbox in one transaction. The later sprints put their flows on it (orders and receiving 5.2, delivery 5.3) and decide who may do which edge.
+- **Now:** `cancelItem` / `cancelRequest` (reason, `customer_request.cancel`), the supplier-cannot-provide flow (`markUnavailable`, `markAvailable`, `closeUnavailable` after the customer is told, `reopenUnavailable` managers only), `claim` / `release` / `assign` (one person at a time, managers assign), `comment`, `addItem`, `updateRequest` (the owner changes only by a manager), `get`, `list` (kind, derived status, owner, customer, search), `myWork`, `timeline` (state changes with who and why, comments).
+- **No-Delete:** requests, items, events and comments are never deleted; what was asked for (item, quantity) never changes: cancel and add another. Events and comments are append-only.
+- No new permission: it uses `customer_request.*` and `shortage.*`; a manager is a role check (O, A, M), as in YK.

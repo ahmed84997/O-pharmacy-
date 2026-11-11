@@ -8,3 +8,4 @@ export * from './devices';
 export * from './licence';
 export * from './update';
 export * from './text';
+export * from './statemachine';
