@@ -38,4 +38,34 @@ CREATE TABLE sale_lines (
 CREATE INDEX sale_lines_by_item ON sale_lines(item_id);
 CREATE TRIGGER sale_lines_no_update BEFORE UPDATE ON sale_lines BEGIN SELECT RAISE(ABORT, 'sale lines never change'); END;
 CREATE TRIGGER sale_lines_no_delete BEFORE DELETE ON sale_lines BEGIN SELECT RAISE(ABORT, 'sale lines are never deleted'); END;` },
+  { id: 'pos_0002_payments_discounts_holds_delivery', sql: `
+ALTER TABLE sales ADD COLUMN gross_minor INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sales ADD COLUMN discount_minor INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sales ADD COLUMN delivery_fee_minor INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sales ADD COLUMN channel TEXT NOT NULL DEFAULT 'counter';
+ALTER TABLE sale_lines ADD COLUMN discount_minor INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE sale_payments (
+  id TEXT PRIMARY KEY, sale_id TEXT NOT NULL REFERENCES sales(id), session_id TEXT REFERENCES cashier_sessions(id),
+  method TEXT NOT NULL CHECK (method IN ('cash','card','cod')), amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
+  tendered_minor INTEGER NOT NULL DEFAULT 0, change_minor INTEGER NOT NULL DEFAULT 0, ref TEXT, by TEXT NOT NULL, at TEXT NOT NULL
+);
+CREATE INDEX sale_payments_by_session ON sale_payments(session_id, method);
+CREATE INDEX sale_payments_by_sale ON sale_payments(sale_id);
+CREATE TRIGGER sale_payments_no_update BEFORE UPDATE ON sale_payments BEGIN SELECT RAISE(ABORT, 'payments never change'); END;
+CREATE TRIGGER sale_payments_no_delete BEFORE DELETE ON sale_payments BEGIN SELECT RAISE(ABORT, 'payments are never deleted'); END;
+CREATE TABLE held_bills (
+  id TEXT PRIMARY KEY, hold_no TEXT NOT NULL UNIQUE, req_key TEXT NOT NULL UNIQUE, session_id TEXT NOT NULL REFERENCES cashier_sessions(id), user_id TEXT NOT NULL,
+  lines TEXT NOT NULL, note TEXT, status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','used','cancelled')), created_at TEXT NOT NULL, closed_at TEXT, closed_reason TEXT, sale_no TEXT
+);
+CREATE INDEX held_bills_open ON held_bills(session_id, status);
+CREATE TRIGGER held_bills_no_delete BEFORE DELETE ON held_bills BEGIN SELECT RAISE(ABORT, 'held bills are never deleted: cancel'); END;
+CREATE TRIGGER held_bills_closed BEFORE UPDATE ON held_bills WHEN OLD.status <> 'open' BEGIN SELECT RAISE(ABORT, 'a closed held bill cannot change'); END;
+CREATE TRIGGER held_bills_lines_fixed BEFORE UPDATE ON held_bills WHEN NEW.lines <> OLD.lines OR NEW.session_id <> OLD.session_id OR NEW.user_id <> OLD.user_id BEGIN SELECT RAISE(ABORT, 'a held bill keeps its lines'); END;
+CREATE TABLE sale_deliveries (
+  sale_id TEXT PRIMARY KEY REFERENCES sales(id), name TEXT NOT NULL, phone TEXT NOT NULL, address TEXT NOT NULL, note TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','out_for_delivery','delivered','failed')), agent TEXT, status_at TEXT NOT NULL, status_by TEXT NOT NULL, failed_reason TEXT
+);
+CREATE TRIGGER sale_deliveries_no_delete BEFORE DELETE ON sale_deliveries BEGIN SELECT RAISE(ABORT, 'deliveries are never deleted'); END;
+CREATE TRIGGER sale_deliveries_final BEFORE UPDATE ON sale_deliveries WHEN OLD.status IN ('delivered','failed') BEGIN SELECT RAISE(ABORT, 'a finished delivery cannot change'); END;
+CREATE TRIGGER sale_deliveries_facts BEFORE UPDATE ON sale_deliveries WHEN NEW.sale_id <> OLD.sale_id OR NEW.name <> OLD.name OR NEW.phone <> OLD.phone OR NEW.address <> OLD.address BEGIN SELECT RAISE(ABORT, 'delivery details never change'); END;` },
 ];
