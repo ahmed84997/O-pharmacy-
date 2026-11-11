@@ -38,8 +38,14 @@ jobs:
             exit 0
           fi
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEMO_SSH_KEY" > ~/.ssh/demo_key
+          # Pasting from a phone often turns the key's line breaks into spaces: rebuild the standard layout from the base64 body.
+          BODY="$(printf '%s' "$DEMO_SSH_KEY" | tr -d '\r' | sed -e 's/-----BEGIN OPENSSH PRIVATE KEY-----//' -e 's/-----END OPENSSH PRIVATE KEY-----//' | tr -d ' \n\t')"
+          { echo "-----BEGIN OPENSSH PRIVATE KEY-----"; printf '%s' "$BODY" | fold -w 70; echo; echo "-----END OPENSSH PRIVATE KEY-----"; } > ~/.ssh/demo_key
           chmod 600 ~/.ssh/demo_key
+          if ! ssh-keygen -y -f ~/.ssh/demo_key > /dev/null 2>&1; then
+            echo "::error::DEMO_SSH_KEY is not a valid private key. Copy the whole output of 'cat ~/.ssh/demo_deploy' (BEGIN to END line) into the secret again."
+            exit 1
+          fi
           # Copy-paste from a phone often adds hidden characters or spaces: keep only the characters a user@host can contain.
           DEMO_TARGET="$(printf '%s' "$DEMO_TARGET" | tr -cd 'A-Za-z0-9@._-')"
           case "$DEMO_TARGET" in ?*@?*) ;; *) echo "::error::DEMO_TARGET must look like user@address (for example u123456789@203.0.113.7)."; exit 1;; esac
