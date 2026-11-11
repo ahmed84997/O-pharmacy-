@@ -87,4 +87,28 @@ CREATE TABLE sale_return_lines (
 CREATE INDEX sale_return_lines_by_line ON sale_return_lines(sale_line_id);
 CREATE TRIGGER sale_return_lines_no_update BEFORE UPDATE ON sale_return_lines BEGIN SELECT RAISE(ABORT, 'returns are append-only'); END;
 CREATE TRIGGER sale_return_lines_no_delete BEFORE DELETE ON sale_return_lines BEGIN SELECT RAISE(ABORT, 'returns are append-only'); END;` },
+  { id: 'pos_0004_customers_credit', sql: `
+CREATE TABLE customers (
+  id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL CHECK (length(trim(name)) > 0), phone TEXT, kind TEXT NOT NULL DEFAULT 'person' CHECK (kind IN ('person','company')),
+  credit_limit_minor INTEGER NOT NULL DEFAULT 0 CHECK (credit_limit_minor >= 0), notes TEXT, search_text TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)), created_by TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX customers_phone ON customers(phone) WHERE phone IS NOT NULL;
+CREATE TRIGGER customers_no_delete BEFORE DELETE ON customers BEGIN SELECT RAISE(ABORT, 'customers are never deleted: suspend'); END;
+CREATE TABLE customer_status_log (seq INTEGER PRIMARY KEY AUTOINCREMENT, customer_id TEXT NOT NULL REFERENCES customers(id), active INTEGER NOT NULL, reason TEXT NOT NULL, by TEXT NOT NULL, at TEXT NOT NULL);
+CREATE TRIGGER customer_status_log_no_update BEFORE UPDATE ON customer_status_log BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TRIGGER customer_status_log_no_delete BEFORE DELETE ON customer_status_log BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TABLE customer_ledger (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, customer_id TEXT NOT NULL REFERENCES customers(id),
+  kind TEXT NOT NULL CHECK (kind IN ('opening','sale','payment','return','void')),
+  amount_minor INTEGER NOT NULL CHECK (amount_minor <> 0), method TEXT CHECK (method IS NULL OR method IN ('cash','card')), ref TEXT, session_id TEXT REFERENCES cashier_sessions(id), note TEXT,
+  req_key TEXT UNIQUE, by TEXT NOT NULL, at TEXT NOT NULL
+);
+CREATE INDEX customer_ledger_by_customer ON customer_ledger(customer_id, seq);
+CREATE INDEX customer_ledger_by_session ON customer_ledger(session_id, kind);
+CREATE TRIGGER customer_ledger_no_update BEFORE UPDATE ON customer_ledger BEGIN SELECT RAISE(ABORT, 'the customer ledger is append-only: add a correcting entry'); END;
+CREATE TRIGGER customer_ledger_no_delete BEFORE DELETE ON customer_ledger BEGIN SELECT RAISE(ABORT, 'the customer ledger is append-only'); END;
+ALTER TABLE sales ADD COLUMN customer_id TEXT REFERENCES customers(id);
+ALTER TABLE sales ADD COLUMN credit_minor INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX sales_by_customer ON sales(customer_id);` },
 ];
