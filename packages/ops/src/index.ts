@@ -4,3 +4,4 @@ export * from './states';
 export * from './orders';
 export * from './delivery';
 export * from './tasks';
+export * from './attendance';
