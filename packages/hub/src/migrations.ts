@@ -76,6 +76,7 @@ CREATE TABLE remote_events (
 CREATE TRIGGER remote_no_update BEFORE UPDATE ON remote_events BEGIN SELECT RAISE(ABORT, 'remote events are append-only'); END;
 CREATE TRIGGER remote_no_delete BEFORE DELETE ON remote_events BEGIN SELECT RAISE(ABORT, 'remote events are append-only'); END;
 CREATE TABLE sync_state (k TEXT PRIMARY KEY, v TEXT NOT NULL);` },
+  { id: '0005_movements_by_item', sql: `CREATE INDEX movements_by_item ON movements(branch_id, item_id, batch_id, store_id);` },
 ];
 
 const sum = (s: string) => createHash('sha256').update(s).digest('hex');

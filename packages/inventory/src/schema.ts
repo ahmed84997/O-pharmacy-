@@ -98,4 +98,32 @@ CREATE TRIGGER batches_facts_locked BEFORE UPDATE OF item_id, lot, expiry, price
 CREATE TRIGGER batches_no_delete BEFORE DELETE ON batches BEGIN SELECT RAISE(ABORT, 'batches are never deleted'); END;
 CREATE TRIGGER batch_status_log_no_update BEFORE UPDATE ON batch_status_log BEGIN SELECT RAISE(ABORT, 'batch status log is append-only'); END;
 CREATE TRIGGER batch_status_log_no_delete BEFORE DELETE ON batch_status_log BEGIN SELECT RAISE(ABORT, 'batch status log is append-only'); END;` },
+  { id: 'inv_0003_stores', sql: `
+CREATE TABLE stores (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL CHECK (kind IN ('main','sales_floor','warehouse','returns','expired','quarantine')),
+  sellable INTEGER NOT NULL CHECK (sellable IN (0,1)),
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+  created_at TEXT NOT NULL
+);
+INSERT INTO stores(id, name, kind, sellable, active, created_at) VALUES ('MAIN', 'المخزن الرئيسي', 'main', 1, 1, '2026-11-11T00:00:00.000Z');
+CREATE TRIGGER stores_no_delete BEFORE DELETE ON stores BEGIN SELECT RAISE(ABORT, 'stores are never deleted: deactivate'); END;
+CREATE TRIGGER stores_kind_locked BEFORE UPDATE OF kind, sellable ON stores BEGIN SELECT RAISE(ABORT, 'a store keeps its kind: create another store'); END;
+CREATE TABLE store_transfers (
+  id TEXT PRIMARY KEY,
+  transfer_no TEXT NOT NULL,
+  req_key TEXT NOT NULL,
+  from_store TEXT NOT NULL REFERENCES stores(id),
+  to_store TEXT NOT NULL REFERENCES stores(id),
+  item_id TEXT NOT NULL REFERENCES items(id),
+  batch_id TEXT NOT NULL REFERENCES batches(id),
+  qty_base INTEGER NOT NULL CHECK (qty_base > 0),
+  reason TEXT, by TEXT NOT NULL, at TEXT NOT NULL,
+  CHECK (from_store <> to_store)
+);
+CREATE INDEX store_transfers_no ON store_transfers(transfer_no);
+CREATE INDEX store_transfers_key ON store_transfers(req_key);
+CREATE TRIGGER store_transfers_no_update BEFORE UPDATE ON store_transfers BEGIN SELECT RAISE(ABORT, 'transfers are append-only'); END;
+CREATE TRIGGER store_transfers_no_delete BEFORE DELETE ON store_transfers BEGIN SELECT RAISE(ABORT, 'transfers are append-only'); END;` },
 ];

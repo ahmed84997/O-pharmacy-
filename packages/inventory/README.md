@@ -22,3 +22,10 @@ Item master for the Hub. The module owns its tables (`inv_0001_items`, plugged i
 - Expiry written as month/year means the last day of the month.
 
 Decisions taken in this sprint: default unit for a barcode with no unit named = the largest unit (the retail pack); item kind never changes after creation (archive and create a new item); prices are integer piasters.
+
+## Stores and stock views (Sprint 3.3, `stock.ts`, migration `inv_0003_stores` + hub `0005_movements_by_item`)
+- **Stores:** `MAIN` exists from the start. Kinds: main, sales_floor, warehouse, returns, expired, quarantine; the last three are not sellable. Created with `settings.branch`; switched off only when empty (never the main store); never deleted; kind and sellable flag are locked by trigger. FEFO allocation draws only from sellable active stores.
+- **Transfers** (`store.transfer.internal`): nearest expiry first across batches (or a chosen batch), all-or-nothing, idempotent by key (same key returns the same `T-000001`), writes transfer_out / transfer_in movements + `store_transfers` rows + audit + outbox `store.transferred`. Expired stock can be moved to an expired store.
+- **Stock card:** movements with running balance, opening balance for a date range, store filter; the lot is hidden without `stock.batch.view`.
+- **Summary:** total vs sellable per item in one aggregated query (expired and quarantined excluded from sellable). **Valuation:** at cost per batch, expired value apart, needs `stock.cost.view`. **Low stock:** sellable on-hand at or below the reorder level, biggest shortfall first.
+- **Speed (SQLite):** 75,000 movements over 25,000 items: summary 81 ms, one stock card 0.1 ms.

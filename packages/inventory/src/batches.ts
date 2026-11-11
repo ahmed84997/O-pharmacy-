@@ -53,9 +53,11 @@ export class BatchService {
     return this.db.prepare('SELECT * FROM batches WHERE item_id=? ORDER BY expiry, received_at, id').all(itemId).map(r => ({ ...this.toBatch(r, cost), qtyBase: bal.get(String(r.id)) ?? 0, expired: String(r.expiry) < today }));
   }
   /** Stock per batch comes straight from the ledger: there is no second copy that could disagree. */
-  balances(itemId: string): Map<string, number> {
-    const m = new Map<string, number>();
-    for (const r of this.db.prepare('SELECT batch_id, SUM(qty) q FROM movements WHERE branch_id=? AND item_id=? AND batch_id IS NOT NULL GROUP BY batch_id').all(this.hub.branchId, itemId)) m.set(String(r.batch_id), Number(r.q));
+  balances(itemId: string, o: { storeId?: string; sellableOnly?: boolean } = {}): Map<string, number> {
+    const m = new Map<string, number>(); const a: unknown[] = [this.hub.branchId, itemId];
+    let sql = 'SELECT m.batch_id, SUM(m.qty) q FROM movements m' + (o.sellableOnly ? ' JOIN stores s ON s.id = m.store_id AND s.sellable = 1 AND s.active = 1' : '') + ' WHERE m.branch_id=? AND m.item_id=? AND m.batch_id IS NOT NULL';
+    if (o.storeId) { sql += ' AND m.store_id=?'; a.push(o.storeId); }
+    for (const r of this.db.prepare(sql + ' GROUP BY m.batch_id').all(...a)) m.set(String(r.batch_id), Number(r.q));
     return m;
   }
 
@@ -70,6 +72,7 @@ export class BatchService {
     const unit = this.unit(item, i.unitName); const qtyBase = this.toBase(i.qty, unit);
     const pu = this.unit(item, i.priceUnitName ?? item.units[item.units.length - 1]!.name);
     for (const [n, v] of [['cost', i.costMinor], ['public price', i.publicPriceMinor], ['pharmacist price', i.pharmacistPriceMinor]] as const) if (v !== undefined && (!Number.isInteger(v) || v < 0)) throw new BatchError('invalid', `${n} must be whole piasters`);
+    const store = this.db.prepare('SELECT active FROM stores WHERE id=?').get(i.storeId ?? 'MAIN'); if (!store || Number(store.active) !== 1) throw new BatchError('invalid', 'unknown or inactive store');
     const warnings: string[] = [];
     if (item.kind === 'drug') {
       if (!i.publicPriceMinor) throw new BatchError('invalid', 'a drug batch needs the state public price (D14)');
@@ -103,15 +106,16 @@ export class BatchService {
   private toBase(q: number, u: Unit): number { if (!Number.isInteger(q) || q <= 0) throw new BatchError('invalid', 'quantity must be a positive whole number'); return q * u.factor; }
 
   /**
+   * Only stock in SELLABLE, active stores counts (not the returns, expired or quarantine stores); `storeId` narrows to one store.
    * FEFO (D21): nearest expiry first; expired and quarantined batches are never used; each pick keeps ITS OWN price (D14), so old and new
    * prices can sell side by side. `forceBatchId` lets a pharmacist pick a specific batch (still never an expired or quarantined one).
    * Drug price = the batch public price (cash) or pharmacist price when asked; non-drug = the item's free price.
    */
-  allocate(itemId: string, qtyBase: number, o: { forceBatchId?: string; priceKind?: 'public' | 'pharmacist' } = {}): Allocation {
+  allocate(itemId: string, qtyBase: number, o: { forceBatchId?: string; priceKind?: 'public' | 'pharmacist'; storeId?: string } = {}): Allocation {
     const item = this.items.get(itemId); if (!item) throw new BatchError('not-found', itemId);
     if (!Number.isInteger(qtyBase) || qtyBase <= 0) throw new BatchError('invalid', 'quantity must be a positive whole number');
     if (item.status !== 'active') throw new BatchError('blocked', `item is ${item.status}`);
-    const bal = this.balances(itemId); const today = this.today();
+    const bal = this.balances(itemId, { sellableOnly: true, storeId: o.storeId }); const today = this.today();
     let rows = this.db.prepare("SELECT * FROM batches WHERE item_id=? AND status='active' AND expiry >= ? ORDER BY expiry, received_at, id").all(itemId, today).filter(r => (bal.get(String(r.id)) ?? 0) > 0);
     if (o.forceBatchId) { rows = rows.filter(r => r.id === o.forceBatchId); if (!rows.length) throw new BatchError('blocked', 'that batch is expired, on hold or has no stock'); }
     let need = qtyBase; const picks: Pick[] = [];
