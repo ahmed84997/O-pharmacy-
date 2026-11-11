@@ -1,4 +1,4 @@
-name: Packages core, hub, inventory, cloud
+name: Packages core, hub, inventory, pos, cloud
 on:
   pull_request:
     paths: ['packages/**', '.github/workflows/core.yml']
@@ -33,6 +33,12 @@ jobs:
           npm test
       - name: inventory (items, units, barcodes, ETA codes)
         working-directory: packages/inventory
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+      - name: pos (cashier sessions, sales)
+        working-directory: packages/pos
         run: |
           npm ci
           npm run typecheck
