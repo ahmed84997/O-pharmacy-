@@ -11,9 +11,9 @@ export interface ReturnInput {
   /** resellable goes back to the main store; damaged goes to a returns store and is never sold. */
   condition?: 'resellable' | 'damaged';
   /** How the money goes back: cash from the drawer or the card (needs the card reference). Not needed for a swap that nets to zero. */
-  refund?: { method: 'cash' } | { method: 'card'; ref: string };
+  refund?: { method: 'cash' } | { method: 'card'; ref: string } | { method: 'account' };
 }
-export interface ReturnResult { id: string; returnNo: string; totalMinor: number; cashMinor: number; cardMinor: number; creditMinor: number; replay: boolean }
+export interface ReturnResult { id: string; returnNo: string; totalMinor: number; cashMinor: number; cardMinor: number; creditMinor: number; accountMinor: number; replay: boolean }
 export interface SwapInput extends Omit<ReturnInput, 'key'> { key: string; newLines: SaleLineInput[]; payments?: PaymentInput[]; cashMinor?: number; discountBp?: number }
 
 const div = (n: number, d: number) => Math.floor((2 * n + d) / (2 * d));
@@ -53,21 +53,23 @@ export class ReturnService {
     for (const [i, x] of pl.items.entries()) if (x.store) { const m = this.hub.record({ key: `${r.key}:${i}:ret`, storeId: x.store, itemId: x.itemId, batchId: x.batchId, qty: x.qtyBase, kind: 'return', ref: no, reason: r.reasonCode, actor: actor.id }); if (!m.ok) throw new PosError('state', 'the stock movement was refused'); }
   }
   private write(actor: Person, r: ReturnInput, pl: ReturnType<ReturnService['plan']>, kind: 'return' | 'swap', credit: number, swapSaleNo: string | null, no: string): ReturnResult {
-    const refundDue = pl.total - credit; let cash = 0, card = 0, ref: string | null = null;
+    const refundDue = pl.total - credit; let cash = 0, card = 0, acct = 0, ref: string | null = null;
     if (refundDue > 0) {
       const m = r.refund?.method; if (!m) throw new PosError('invalid', 'say how the money goes back (cash or card)');
       if (m === 'card') { ref = (r.refund as { ref?: string }).ref?.trim() ?? ''; if (!ref) throw new PosError('invalid', 'a card refund needs its reference'); const paid = Number(this.db.prepare("SELECT COALESCE(SUM(amount_minor),0) t FROM sale_payments WHERE sale_id=? AND method='card'").get(String(pl.sale.id))!.t); const done = Number(this.db.prepare('SELECT COALESCE(SUM(card_minor),0) t FROM sale_returns WHERE sale_id=?').get(String(pl.sale.id))!.t); if (refundDue > paid - done) throw new PosError('invalid', 'a card refund cannot exceed what was paid by card', { cardLeftMinor: paid - done }); card = refundDue; }
+      else if (m === 'account') { if (!pl.sale.customer_id) throw new PosError('invalid', 'this sale has no customer account'); const owed = Number(pl.sale.credit_minor); const done = Number(this.db.prepare("SELECT COALESCE(SUM(credit_minor),0) t FROM sale_returns WHERE kind='return' AND sale_id=?").get(String(pl.sale.id))!.t); if (refundDue > owed - done) throw new PosError('invalid', 'an account refund cannot exceed what was put on the account', { accountLeftMinor: owed - done }); acct = refundDue; }
       else cash = refundDue;
     }
     const id = uuidv7(); const now = this.hub.now();
-    this.db.prepare('INSERT INTO sale_returns(id,return_no,req_key,sale_id,session_id,kind,reason_code,note,total_minor,cash_minor,card_minor,credit_minor,card_ref,swap_sale_no,by,at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, no, r.key, String(pl.sale.id), r.sessionId, kind, r.reasonCode, r.note ?? null, pl.total, cash, card, credit, ref, swapSaleNo, actor.id, now);
+    this.db.prepare('INSERT INTO sale_returns(id,return_no,req_key,sale_id,session_id,kind,reason_code,note,total_minor,cash_minor,card_minor,credit_minor,card_ref,swap_sale_no,by,at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, no, r.key, String(pl.sale.id), r.sessionId, kind, r.reasonCode, r.note ?? null, pl.total, cash, card, credit + acct, ref, swapSaleNo, actor.id, now);
+    if (acct > 0) this.db.prepare("INSERT INTO customer_ledger(id,customer_id,kind,amount_minor,ref,session_id,by,at) VALUES(?,?,'return',?,?,?,?,?)").run(uuidv7(), String(pl.sale.customer_id), -acct, no, r.sessionId, actor.id, now);
     for (const x of pl.items) {
       this.db.prepare('INSERT INTO sale_return_lines(id,return_id,sale_line_id,item_id,batch_id,qty_base,refund_minor,store_id,condition) VALUES(?,?,?,?,?,?,?,?,?)').run(uuidv7(), id, x.saleLineId, x.itemId, x.batchId, x.qtyBase, x.refund, x.store, pl.cond);
     }
-    this.hub.audit(actor.id, `sale.${kind}`, 'sale_return', no, { saleNo: r.saleNo, totalMinor: pl.total, cashMinor: cash, cardMinor: card, creditMinor: credit, reason: r.reasonCode, condition: pl.cond }); this.hub.emit(`sale.${kind === 'swap' ? 'swapped' : 'returned'}`, { returnNo: no, saleNo: r.saleNo, totalMinor: pl.total, cashMinor: cash, cardMinor: card, creditMinor: credit });
-    return { id, returnNo: no, totalMinor: pl.total, cashMinor: cash, cardMinor: card, creditMinor: credit, replay: false };
+    this.hub.audit(actor.id, `sale.${kind}`, 'sale_return', no, { saleNo: r.saleNo, totalMinor: pl.total, cashMinor: cash, cardMinor: card, accountMinor: acct, creditMinor: credit, reason: r.reasonCode, condition: pl.cond }); this.hub.emit(`sale.${kind === 'swap' ? 'swapped' : 'returned'}`, { returnNo: no, saleNo: r.saleNo, totalMinor: pl.total, cashMinor: cash, cardMinor: card, creditMinor: credit });
+    return { id, returnNo: no, totalMinor: pl.total, cashMinor: cash, cardMinor: card, creditMinor: credit, accountMinor: acct, replay: false };
   }
-  private replay(key: string): ReturnResult | null { const p = this.db.prepare('SELECT * FROM sale_returns WHERE req_key=?').get(key); return p ? { id: String(p.id), returnNo: String(p.return_no), totalMinor: Number(p.total_minor), cashMinor: Number(p.cash_minor), cardMinor: Number(p.card_minor), creditMinor: Number(p.credit_minor), replay: true } : null; }
+  private replay(key: string): ReturnResult | null { const p = this.db.prepare('SELECT * FROM sale_returns WHERE req_key=?').get(key); return p ? { id: String(p.id), returnNo: String(p.return_no), totalMinor: Number(p.total_minor), cashMinor: Number(p.cash_minor), cardMinor: Number(p.card_minor), creditMinor: Number(p.credit_minor), accountMinor: p.kind === 'return' ? Number(p.credit_minor) : 0, replay: true } : null; }
 
   /** Return goods from a sale (`sale.return`): stock back to the batch it came from, money back as cash or card. */
   returnSale(actor: Person, r: ReturnInput): ReturnResult {
@@ -88,7 +90,7 @@ export class ReturnService {
   /** What has been returned from a sale (own sales, or all with sale.view_all). */
   returnsOf(actor: Person, saleNo: string) {
     const all = can(actor, 'sale.view_all', this.hub.branchId); if (!all) this.need(actor, 'sale.view_own'); const sale = this.db.prepare('SELECT * FROM sales WHERE sale_no=?').get(saleNo); if (!sale) throw new PosError('not-found', saleNo); if (!all && String(sale.created_by) !== actor.id) throw new PosError('forbidden', 'you may only see your own sales');
-    return this.db.prepare('SELECT * FROM sale_returns WHERE sale_id=? ORDER BY rowid').all(String(sale.id)).map(r => ({ returnNo: String(r.return_no), kind: String(r.kind), reasonCode: String(r.reason_code), totalMinor: Number(r.total_minor), cashMinor: Number(r.cash_minor), cardMinor: Number(r.card_minor), creditMinor: Number(r.credit_minor), swapSaleNo: (r.swap_sale_no as string) ?? null, by: String(r.by), at: String(r.at),
+    return this.db.prepare('SELECT * FROM sale_returns WHERE sale_id=? ORDER BY rowid').all(String(sale.id)).map(r => ({ returnNo: String(r.return_no), kind: String(r.kind), reasonCode: String(r.reason_code), totalMinor: Number(r.total_minor), cashMinor: Number(r.cash_minor), cardMinor: Number(r.card_minor), accountMinor: r.kind === 'return' ? Number(r.credit_minor) : 0, creditMinor: r.kind === 'return' ? 0 : Number(r.credit_minor), swapSaleNo: (r.swap_sale_no as string) ?? null, by: String(r.by), at: String(r.at),
       lines: this.db.prepare('SELECT l.*, i.name_ar, b.lot FROM sale_return_lines l JOIN items i ON i.id = l.item_id LEFT JOIN batches b ON b.id = l.batch_id WHERE l.return_id=? ORDER BY l.rowid').all(String(r.id)).map(x => ({ itemName: String(x.name_ar), lot: (x.lot as string) ?? null, qtyBase: Number(x.qty_base), refundMinor: Number(x.refund_minor), condition: String(x.condition) })) }));
   }
   /** Reviewers: all returns of a session (the drawer closing needs them). */
