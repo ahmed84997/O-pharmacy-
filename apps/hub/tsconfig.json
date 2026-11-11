@@ -1,0 +1,53 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": [
+      "node"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@o-pharmacy/core": [
+        "../../packages/core/src/index.ts"
+      ],
+      "@o-pharmacy/hub": [
+        "../../packages/hub/src/index.ts"
+      ],
+      "@o-pharmacy/inventory": [
+        "../../packages/inventory/src/index.ts"
+      ],
+      "@o-pharmacy/pos": [
+        "../../packages/pos/src/index.ts"
+      ],
+      "@o-pharmacy/ops": [
+        "../../packages/ops/src/index.ts"
+      ],
+      "@o-pharmacy/accounts": [
+        "../../packages/accounts/src/index.ts"
+      ],
+      "@o-pharmacy/hr": [
+        "../../packages/hr/src/index.ts"
+      ],
+      "@o-pharmacy/contracts": [
+        "../../packages/contracts/src/index.ts"
+      ],
+      "@o-pharmacy/reports": [
+        "../../packages/reports/src/index.ts"
+      ],
+      "@o-pharmacy/eta": [
+        "../../packages/eta/src/index.ts"
+      ],
+      "@o-pharmacy/print": [
+        "../../packages/print/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "src"
+  ]
+}

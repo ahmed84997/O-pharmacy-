@@ -1,0 +1,31 @@
+name: Deploy to the test server
+# Free Oracle Cloud server behind Cloudflare Tunnel (D33). Seed data only. Skipped until the two secrets exist (docs/governance/test-server.md).
+on:
+  push:
+    branches: [main]
+    paths: ['apps/**', 'packages/**', '.github/workflows/deploy-test.yml']
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: build
+        run: |
+          (cd apps/hub && npm ci && npm run build)
+          (cd apps/web && npm ci && npm run build)
+          mkdir -p out/web && cp apps/hub/dist/hub.mjs out/ && cp -r apps/web/dist/. out/web/
+      - name: upload
+        env:
+          KEY: ${{ secrets.TEST_SSH_KEY }}
+          TARGET: ${{ secrets.TEST_TARGET }}
+          KNOWN: ${{ secrets.TEST_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$KEY" ] || [ -z "$TARGET" ]; then echo "::notice::test server secrets not set yet: deploy skipped"; exit 0; fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/test_key && chmod 600 ~/.ssh/test_key
+          if [ -n "$KNOWN" ]; then printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts; OPT="-o StrictHostKeyChecking=yes"; else OPT="-o StrictHostKeyChecking=accept-new"; fi
+          tar -czf - -C out . | ssh -i ~/.ssh/test_key $OPT -o BatchMode=yes "$(echo "$TARGET" | tr -d '[:space:]')"

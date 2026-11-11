@@ -3,7 +3,7 @@
 Updated 11 Nov 2026 (Phase 7 plan, D32-D35). Items stay here until done; each says why it matters.
 
 ## For Phase 7 (added 11 Nov 2026)
-1. **Now:** create the Oracle Cloud free account (oracle.com/cloud/free, home region Germany Central (Frankfurt)). Do **not** create the server yet: exact steps come with Sprint 7.1 (an idle free server can be reclaimed).
+1. **Now:** create the Oracle Cloud free account (oracle.com/cloud/free, home region Germany Central (Frankfurt)). **After Sprint 7.1 merges:** create the server and run the setup in `docs/governance/test-server.md`.
 2. **Friday 13 Nov:** the pharmacy PC's Windows version and RAM (with the printer kit, item 1 below) - needed to try the 7.1 installer.
 3. **Later (7.1 test server):** a domain on Cloudflare for a fixed test address (never the YK domain); until then a temporary link is used.
 4. **Deferred to Phase 10:** Apple Developer and Google Play accounts in the company name (staff mobile app, D34).
