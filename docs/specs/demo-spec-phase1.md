@@ -6,9 +6,9 @@
 Let the owner and two or three pharmacist testers **see and click** the vision, then give the "his way" change list. The demo proves the look, the speed of use and the workflows. It does not prove sync, printing, hardware or security (those are Phase 0 spikes).
 
 ## 2. Form and delivery
-- A **web page opened from a link** (works on the owner's phone and on a PC). Arabic, right-to-left, IBM Plex Sans Arabic, dark theme with the teal/orange tokens carried over from YK for now.
+- A **web page opened from a link**, **desktop first and good on the phone (D31)**. Arabic, right-to-left, IBM Plex Sans Arabic, dark theme with the teal/orange tokens carried over from YK for now.
 - **No backend, no login to a real system, no real data.** All data is in the browser and resets on reload ("Reset demo" button). Nothing is shared between visitors.
-- **Ribbon shell** (D12): tabs, groups with icon + label, collapse/expand, Quick Access bar, key tips; on phone the ribbon becomes a side menu. Built in React so the same shell is reused in the product.
+- **Ribbon shell** (D12): tabs, groups with icon + label, collapse/expand, Quick Access bar, key tips; on the phone a bottom bar (sale, items, shortages, deleted) plus a side drawer. Built in React so the same shell is reused in the product.
 - No installer in Phase 1 (the installer is Phase 2 and the pilot Phase 7).
 - A visible "DEMO - not a real system" strip on every screen.
 
@@ -51,9 +51,9 @@ Not in the demo: stocktake, sales return screen, contracts/insurance, drawer clo
 - Accessible contrast and keyboard operation on desktop; touch targets at least 44 px on phone.
 
 ## 7. Acceptance (what "done" means)
-1. The owner can complete, from his phone, in under 10 minutes: make a cash sale with 3 lines, hold one sale and resume it, void one invoice with a reason, add a shortage from a no-stock attempt, record a purchase invoice, record a customer payment, and open the deleted-items view.
+1. The owner can complete, on a PC and again on his phone, in under 10 minutes on each: make a cash sale with 3 lines, hold one sale and resume it, void one invoice with a reason, add a shortage from a no-stock attempt, record a purchase invoice, record a customer payment, and open the deleted-items view.
 2. Role switcher changes visible data as in section 4 item 1 and the matrix (`permission-matrix.md`).
-3. Every Ribbon behaviour in D12 works (collapse, expand, Quick Access, key tips, phone side menu).
+3. Every Ribbon behaviour in D12 works (collapse, expand, Quick Access, key tips; phone bottom bar and side menu). Every screen is checked on desktop and phone, and any screen left out of the phone version is listed for the owner's approval (D31). The product name appears as "O Pharmacy" in Latin letters everywhere (D30).
 4. Each testers' feedback is captured in a **change list** (table: screen, what he expects, priority) kept in `docs/specs/demo-feedback.md`; the list becomes the input to Phase 2/3 design.
 5. No real data, no network calls after load, no secrets in the page.
 
@@ -63,5 +63,5 @@ Ribbon shell (reuse of spike S5) - seed data generator - screens 1-2 (the heart)
 ## 9. Decisions needed from the owner
 1. Approve the screen list (section 3), or add/remove screens.
 2. Approve generic drug names in seed data (instead of trade names).
-3. Who are the 2-3 pharmacist testers, and do they use phone or PC?
+3. Who are the 2-3 pharmacist testers, and which devices do they use (PC, phone, both)?
 4. Send the missing eStock screens when convenient: add-item form, stocktake, sales return, contracts, drawer closing, settings; and the printed receipt photo.

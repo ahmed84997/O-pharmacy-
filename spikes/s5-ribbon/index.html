@@ -1,4 +1,4 @@
-<title>ريبون أو-فارماسي</title>
+<title>O Pharmacy - Ribbon prototype</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -113,7 +113,13 @@ kbd { font-family: var(--font); background: var(--ribbon); border: 1px solid var
 .drawer .grp { padding: 4px 16px 2px; font-size: 12px; color: var(--muted); }
 .drawer .rb { flex-direction: row; justify-content: flex-start; gap: 12px; width: 100%; border-radius: 0; padding: 11px 16px 11px 16px; font-size: 15px; text-align: start; }
 .drawer .rb svg.i { font-size: 20px; }
+.bbar { display: none; }
 @media (max-width: 760px) {
+  .bbar { display: flex; position: sticky; bottom: 0; z-index: 30; background: var(--panel); border-top: 1px solid var(--line); }
+  .bbar button { flex: 1; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: none; border: 0; color: var(--text, inherit); font: inherit; font-size: 12px; cursor: pointer; }
+  .bbar button.on { color: var(--teal); font-weight: 700; }
+  .bbar svg.i { font-size: 22px; }
+  table { min-width: 440px; }
   .tabs, .ribbon-wrap, .qat, .demo, .collapse { display: none; }
   .menu-btn { display: grid; }
   .title { padding: 8px 12px; }
@@ -208,14 +214,14 @@ function ribbonHTML() {
     return `<div class="group" role="group" aria-label="${g.label}"><div class="items">${g.stack ? `<div class="stack">${its.map(i => itemBtn(i, 1, showItemTips)).join('')}</div>` : its.map(i => itemBtn(i, 0, showItemTips)).join('')}</div><div class="glabel">${g.label}</div></div>`; }).join('');
 }
 function drawerHTML() {
-  return `<div class="drawer-bg" data-close="1"></div><nav class="drawer" aria-label="القائمة"><h3>أو-فارماسي <button class="qbtn" style="float:left" data-close="1" aria-label="إغلاق">${icon('x')}</button></h3>${visTabs().map(t => `<details${t.id === S.tab ? ' open' : ''}><summary>${t.label}</summary>${t.groups.map(g => { const its = visItems(g); return its.length ? `<div class="grp">${g.label}</div>${its.map(i => itemBtn(i, 0, 0)).join('')}` : ''; }).join('')}</details>`).join('')}</nav>`;
+  return `<div class="drawer-bg" data-close="1"></div><nav class="drawer" aria-label="القائمة"><h3><span dir="ltr">O Pharmacy</span> <button class="qbtn" style="float:left" data-close="1" aria-label="إغلاق">${icon('x')}</button></h3>${visTabs().map(t => `<details${t.id === S.tab ? ' open' : ''}><summary>${t.label}</summary>${t.groups.map(g => { const its = visItems(g); return its.length ? `<div class="grp">${g.label}</div>${its.map(i => itemBtn(i, 0, 0)).join('')}` : ''; }).join('')}</details>`).join('')}</nav>`;
 }
 function render() {
   const t = curTab(), expanded = !S.collapsed || S.popup;
   $('#app').innerHTML = `
   <header class="title">
     <button class="qbtn menu-btn" data-open="1" aria-label="القائمة">${icon('menu')}</button>
-    <span class="brand">أو-<b>فارماسي</b></span>
+    <span class="brand" dir="ltr">O <b>Pharmacy</b></span>
     <div class="qat" role="toolbar" aria-label="شريط الوصول السريع">
       <button class="qbtn" data-run="save" title="حفظ">${icon('save')}</button><button class="qbtn" data-run="undo" title="تراجع">${icon('undo')}</button>
       <button class="qbtn" data-run="sale" title="فاتورة بيع جديدة">${icon('cart')}</button><button class="qbtn" data-run="print" title="طباعة">${icon('print')}</button>
@@ -229,6 +235,7 @@ function render() {
   </div>
   <div class="ribbon-wrap">${expanded ? `<div class="ribbon${S.collapsed ? ' popup' : ''}" role="tabpanel">${ribbonHTML()}</div>` : ''}</div>
   <main id="work">${screenHTML()}</main>
+  <nav class="bbar" aria-label="تنقل سريع">${[['sale','فاتورة بيع','cart'],['items','الأصناف','box'],['short','النواقص','bell'],['del','المحذوفات','trash']].filter(x => x[0] !== 'del' || ['owner','manager'].includes(S.role)).map(x => `<button data-go="${x[0]}" class="${S.screen === x[0] ? 'on' : ''}">${icon(x[2])}<span>${x[1]}</span></button>`).join('')}<button data-open="1">${icon('menu')}<span>القائمة</span></button></nav>
   <footer class="status"><span><span class="dot${S.offline ? ' off' : ''}"></span>${S.offline ? 'بدون إنترنت - البيع شغال والمزامنة مؤجلة' : 'متصل بالـ Hub والسحابة'}</span><button data-offline="1">${S.offline ? 'رجّع الاتصال' : 'جرّب قطع الإنترنت'}</button><span class="spacer"></span><span>فرع التجربة</span><span>${ROLES[S.role]}</span></footer>
   ${S.drawer ? drawerHTML() : ''}${S.toast ? `<div class="toast" role="status">${S.toast}</div>` : ''}`;
 }
@@ -271,7 +278,7 @@ document.addEventListener('click', e => {
   if (!t) { if (S.popup) { S.popup = false; render(); } return; }
   const d = t.dataset;
   if (d.tab) { if (S.collapsed && S.tab === d.tab && S.popup) { S.popup = false; render(); } else selectTab(d.tab); }
-  else if (d.run) run(d.run);
+  else if (d.go) { S.screen = d.go; S.drawer = false; render(); } else if (d.run) run(d.run);
   else if (d.collapse) { S.collapsed = !S.collapsed; S.popup = false; try { localStorage.setItem('ribbon-collapsed', S.collapsed ? '1' : '0'); } catch (x) {} render(); }
   else if (d.offline) { S.offline = !S.offline; render(); }
   else if (d.open) { S.drawer = true; render(); } else if (d.close) { S.drawer = false; render(); }
