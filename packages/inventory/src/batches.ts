@@ -50,7 +50,7 @@ export class BatchService {
   /** Cost is hidden unless the person may see cost (matrix rule 1: hidden from Pharmacist, Cashier, Employee by default). */
   batches(actor: Person, itemId: string): (Batch & { qtyBase: number; expired: boolean })[] {
     this.need(actor, 'stock.batch.view'); const cost = can(actor, 'stock.cost.view', this.hub.branchId); const today = this.today(); const bal = this.balances(itemId);
-    return this.db.prepare('SELECT * FROM batches WHERE item_id=? ORDER BY expiry, received_at, id').all(itemId).map(r => ({ ...this.toBatch(r, cost), qtyBase: bal.get(String(r.id)) ?? 0, expired: String(r.expiry) < today }));
+    return this.db.prepare('SELECT * FROM batches WHERE item_id=? ORDER BY expiry, received_at, rowid').all(itemId).map(r => ({ ...this.toBatch(r, cost), qtyBase: bal.get(String(r.id)) ?? 0, expired: String(r.expiry) < today }));
   }
   /** Stock per batch comes straight from the ledger: there is no second copy that could disagree. */
   balances(itemId: string, o: { storeId?: string; sellableOnly?: boolean } = {}): Map<string, number> {
@@ -116,7 +116,7 @@ export class BatchService {
     if (!Number.isInteger(qtyBase) || qtyBase <= 0) throw new BatchError('invalid', 'quantity must be a positive whole number');
     if (item.status !== 'active') throw new BatchError('blocked', `item is ${item.status}`);
     const bal = this.balances(itemId, { sellableOnly: true, storeId: o.storeId }); const today = this.today();
-    let rows = this.db.prepare("SELECT * FROM batches WHERE item_id=? AND status='active' AND expiry >= ? ORDER BY expiry, received_at, id").all(itemId, today).filter(r => (bal.get(String(r.id)) ?? 0) > 0);
+    let rows = this.db.prepare("SELECT * FROM batches WHERE item_id=? AND status='active' AND expiry >= ? ORDER BY expiry, received_at, rowid").all(itemId, today).filter(r => (bal.get(String(r.id)) ?? 0) > 0);
     if (o.forceBatchId) { rows = rows.filter(r => r.id === o.forceBatchId); if (!rows.length) throw new BatchError('blocked', 'that batch is expired, on hold or has no stock'); }
     let need = qtyBase; const picks: Pick[] = [];
     for (const r of rows) {
