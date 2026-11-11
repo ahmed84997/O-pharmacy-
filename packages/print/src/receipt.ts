@@ -47,7 +47,9 @@ export function buildReceipt(sale: SaleView, ctx: ReceiptContext): ReceiptLine[]
   const byLine = new Map<number, SaleView['lines']>(); for (const l of sale.lines) byLine.set(l.lineNo, [...(byLine.get(l.lineNo) ?? []), l]);
   for (const picks of byLine.values()) {
     const first = picks[0]!; const total = picks.reduce((s, p) => s + p.amountMinor, 0);
-    L.push({ cols: [first.itemName, first.reqUnit, n(first.reqQty), m(total)], size: 24, widths });
+    // a long name gets its own line so it never runs into the unit column (owner test, Sprint 7.2)
+    if (first.itemName.length > 20) { L.push({ t: first.itemName, size: 24, align: 'right' }); L.push({ cols: ['', first.reqUnit, n(first.reqQty), m(total)], size: 24, widths }); }
+    else L.push({ cols: [first.itemName, first.reqUnit, n(first.reqQty), m(total)], size: 24, widths });
     const extra: string[] = []; if (st.showUnitPrice) extra.push('سعر الوحدة ' + [...new Set(picks.map(p => m(p.unitPriceMinor)))].join(' / '));
     if (st.showExpiry) { const e = picks.filter(p => p.expiry).map(p => n(p.expiry!)); if (e.length) extra.push('صلاحية ' + e.join(' / ')); }
     if (st.showBatch) { const b = picks.filter(p => p.lot).map(p => n(p.lot!)); if (b.length) extra.push('تشغيلة ' + b.join(' / ')); }

@@ -24,7 +24,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: hub application (API, people, devices, Ribbon)
+      - name: print package dependencies (receipt pictures)
+        working-directory: packages/print
+        run: npm ci
+      - name: hub application (API, people, devices, Ribbon, till)
         working-directory: apps/hub
         run: |
           npm ci
@@ -50,10 +53,12 @@ jobs:
           node-version: '22'
       - name: build Hub and screens
         run: |
+          (cd packages/print && npm ci)
           (cd apps/hub && npm ci && npm run build)
           (cd apps/web && npm ci && npm run build)
           mkdir -p apps/desktop/res/hub apps/desktop/res/web apps/desktop/res/node
-          cp apps/hub/dist/hub.mjs apps/desktop/res/hub/
+          cp apps/hub/dist/hub.mjs apps/hub/dist/package.json apps/desktop/res/hub/
+          (cd apps/desktop/res/hub && npm install --omit=dev --no-audit --no-fund)
           cp -r apps/web/dist/. apps/desktop/res/web/
           cp "$(node -p process.execPath)" apps/desktop/res/node/node.exe
           node -p "'bundled Node ' + process.version"

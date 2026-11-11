@@ -1,15 +1,16 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
-import { can, ROLE_NAMES, type Person, type RoleCode } from '@o-pharmacy/core';
+import { can, ROLE_NAMES, roleTemplate, type Person, type RoleCode } from '@o-pharmacy/core';
 import type { App } from './compose';
 import { AccessError } from './access';
 import { ribbonFor } from './ribbon';
 import { seedTestData } from './seed';
+import { posRoutes } from './pos-api';
 
-export const VERSION = '0.7.1';
+export const VERSION = '0.7.2';
 export interface ServerOptions { webDir?: string; staffSecret?: string; logger?: boolean }
-const STATUS: Record<string, number> = { forbidden: 403, 'device-pending': 403, 'device-revoked': 403, 'not-found': 404, 'device-unknown': 401, unauthenticated: 401, 'bad-credentials': 401, locked: 423, inactive: 403, invalid: 400, state: 409, duplicate: 409, 'price-rule': 400, 'reason-required': 400 };
+const STATUS: Record<string, number> = { insufficient: 409, underpaid: 400, 'no-price': 409, session: 409, 'discount-limit': 403, 'credit-limit': 409, 'day-closed': 409, blocked: 409, 'window-closed': 409, forbidden: 403, 'device-pending': 403, 'device-revoked': 403, 'not-found': 404, 'device-unknown': 401, unauthenticated: 401, 'bad-credentials': 401, locked: 423, inactive: 403, invalid: 400, state: 409, duplicate: 409, 'price-rule': 400, 'reason-required': 400 };
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff' };
 declare module 'fastify' { interface FastifyRequest { person?: Person; deviceId?: string } }
 
@@ -43,7 +44,7 @@ export function buildServer(app: App, o: ServerOptions = {}): FastifyInstance {
     s.get('/api/me', async (q) => { const p = me(q); const v = app.access.view1(p.id); const perms = new Set(app.access.permissions(p.id)); return { person: { id: v.id, username: v.username, displayName: v.displayName, roles: v.roles, roleNames: v.roles.map(r => ROLE_NAMES[r]), mustChangeSecret: v.mustChangeSecret }, permissions: [...perms], ribbon: ribbonFor(perms), pharmacyName: app.access.setting('pharmacy.name'), branchId: app.hub.branchId, version: VERSION, testMode: app.testMode }; });
     s.post('/api/me/secret', async (q) => { const b = (q.body ?? {}) as B; app.access.changeOwnSecret(me(q).id, String(b.current ?? ''), String(b.next ?? '')); return { ok: true }; });
     // people
-    s.get('/api/people', async (q) => ({ people: app.access.list(me(q)), roles: Object.entries(ROLE_NAMES).map(([code, name]) => ({ code, name })) }));
+    s.get('/api/people', async (q) => ({ people: app.access.list(me(q)), roles: Object.entries(ROLE_NAMES).map(([code, name]) => ({ code, name, optional: roleTemplate(code as RoleCode).optional })) }));
     s.post('/api/people', async (q) => { const b = (q.body ?? {}) as B; return app.access.create(me(q), { username: String(b.username ?? ''), displayName: String(b.displayName ?? ''), secret: String(b.secret ?? ''), roles: b.roles as RoleCode[], grants: b.grants as string[] | undefined, denies: b.denies as string[] | undefined }); });
     s.patch('/api/people/:id', async (q) => { const b = (q.body ?? {}) as B; return app.access.update(me(q), (q.params as B).id as string, { displayName: b.displayName as string | undefined, roles: b.roles as RoleCode[] | undefined, grants: b.grants as string[] | undefined, denies: b.denies as string[] | undefined }); });
     s.post('/api/people/:id/secret', async (q) => { app.access.resetSecret(me(q), (q.params as B).id as string, String(((q.body ?? {}) as B).secret ?? '')); return { ok: true }; });
@@ -73,6 +74,7 @@ export function buildServer(app: App, o: ServerOptions = {}): FastifyInstance {
       if (can(p, 'customer.view', app.hub.branchId)) out.customers = n('SELECT COUNT(*) n FROM customers');
       out.empty = n('SELECT COUNT(*) n FROM items') === 0; out.testMode = app.testMode; return out;
     });
+    posRoutes(s, app);
     // test server only
     s.post('/api/test/seed', async (q) => { if (!app.testMode) throw new AccessError('not-found', 'not available'); const p = me(q); if (!p.roles.includes('O')) throw new AccessError('forbidden', 'owner only'); return seedTestData(app, p, { staffSecret: o.staffSecret }); });
   });
