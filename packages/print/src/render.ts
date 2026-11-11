@@ -1,4 +1,5 @@
 import { createCanvas, GlobalFonts, type SKRSContext2D } from '@napi-rs/canvas';
+import qrcode from 'qrcode-generator';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import type { GrayImage } from './bitmap';
@@ -47,7 +48,11 @@ export class SkiaRasterizer implements Rasterizer {
           if (!dry) { ctx.fillStyle = '#000'; for (let i = 0; i < mods.length; i++) if (mods[i] === '1') ctx.fillRect(x0 + i * mw, y + 4, mw, h); ctx.font = `20px ${FAMILY}`; ctx.textAlign = 'center'; ctx.direction = 'ltr'; ctx.fillText(l.barcode, width / 2, y + h + 26); }
           y += h + 36; continue;
         }
-        if ('qr' in l) { const s = 150; if (!dry) { ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeRect((width - s) / 2, y + 4, s, s); ctx.font = `20px ${FAMILY}`; ctx.fillStyle = '#000'; ctx.textAlign = 'center'; ctx.direction = 'ltr'; ctx.fillText('QR', width / 2, y + 4 + s / 2); } y += s + 14; continue; }
+        if ('qr' in l) {
+          if (l.text) { const q = qrcode(0, 'M'); q.addData(l.text, 'Byte'); q.make(); const c = q.getModuleCount(); const mod = Math.max(2, Math.floor(Math.min(width - 2 * pad, 300) / c)); const x0 = Math.round((width - c * mod) / 2);
+            if (!dry) { ctx.fillStyle = '#000'; for (let r = 0; r < c; r++) for (let k = 0; k < c; k++) if (q.isDark(r, k)) ctx.fillRect(x0 + k * mod, y + 8 + r * mod, mod, mod); } y += c * mod + 20; continue; }
+          const s = 150; if (!dry) { ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.strokeRect((width - s) / 2, y + 4, s, s); ctx.font = `20px ${FAMILY}`; ctx.fillStyle = '#000'; ctx.textAlign = 'center'; ctx.direction = 'ltr'; ctx.fillText('QR', width / 2, y + 4 + s / 2); } y += s + 14; continue;
+        }
         const size = l.size ?? 24; ctx.font = `${l.bold ? 700 : 400} ${size}px ${FAMILY}`; ctx.fillStyle = '#000'; ctx.direction = 'rtl'; const lh = Math.round(size * 1.45);
         if ('cols' in l) {
           const w = (l.widths ?? (l.cols.length === 2 ? [0.6, 0.4] : [0.5, 0.25, 0.25])).map(x => x * (width - 2 * pad)); let right = width - pad;

@@ -20,7 +20,7 @@ CREATE TRIGGER print_jobs_no_delete BEFORE DELETE ON print_jobs BEGIN SELECT RAI
 
 export class PrintError extends Error { constructor(public code: 'forbidden' | 'invalid' | 'not-found', message: string) { super(message); } }
 export interface PrinterSetup { transport: PrintTransport; kind: 'receipt' | 'label'; paperWidthMm?: 58 | 80; /** Open the drawer with the receipt of a sale that took cash (default on). */ drawerOnCash?: boolean; labelLanguage?: 'tspl' | 'zpl'; labelMm?: [number, number]; labelInvert?: boolean }
-export interface PrintEnv { pharmacy: PharmacyInfo; style?: ReceiptStyle; nameOf(userId: string): string; customerNameOf?(customerId: string): string | null }
+export interface PrintEnv { pharmacy: PharmacyInfo; style?: ReceiptStyle; nameOf(userId: string): string; customerNameOf?(customerId: string): string | null; /** The ETA QR text of a sale (from the ETA queue), if the pharmacy issues e-receipts. */ qrTextOf?(saleNo: string): string | null }
 export interface PrintResult { ok: boolean; jobId: string; copyNo?: number; drawer?: boolean; error?: string; bytes: number }
 
 /** Printing is separate from selling: a sale is complete before anything prints, and a printer that is off never undoes a sale. A failed print is logged and can be repeated (it is still the original, with the drawer). A reprint is marked as a copy and needs a reason. */
@@ -40,7 +40,7 @@ export class PrintService {
     if (copy === 'delivery' && !sale.delivery) throw new PrintError('invalid', 'this sale has no delivery');
     const done = Number(this.db.prepare("SELECT COUNT(*) c FROM print_jobs WHERE kind='receipt' AND status='sent' AND ref=? AND copy_kind=?").get(r.saleNo, copy)!.c); const copyNo = done + 1;
     if (copyNo > 1 && !r.reason?.trim()) throw new PrintError('invalid', 'a reprint needs a reason');
-    const env = this.env(); const lines = buildReceipt(sale, { pharmacy: env.pharmacy, style: env.style, cashierName: env.nameOf(sale.createdBy), customerName: sale.customerId ? env.customerNameOf?.(sale.customerId) ?? null : null, copy, copyNo });
+    const env = this.env(); const lines = buildReceipt(sale, { pharmacy: env.pharmacy, style: env.style, cashierName: env.nameOf(sale.createdBy), customerName: sale.customerId ? env.customerNameOf?.(sale.customerId) ?? null : null, copy, copyNo, qrText: env.qrTextOf?.(r.saleNo) ?? null });
     const img = this.raster.receipt(lines, (p.paperWidthMm ?? 80) === 58 ? 384 : 576); const cash = sale.payments.some(x => x.method === 'cash' && x.amountMinor > 0);
     const drawer = copyNo === 1 && copy === 'counter' && (p.drawerOnCash ?? true) && cash && sale.status === 'posted'; const bytes = receiptBytes(img, { drawer }); const error = await this.deliver(p, bytes);
     const jobId = this.log(actor, { kind: 'receipt', ref: r.saleNo, copyKind: copy, copyNo, printer: r.printer, ok: !error, error: error ?? undefined, drawer, bytes: bytes.length, reason: r.reason?.trim() });

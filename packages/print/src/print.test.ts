@@ -111,3 +111,12 @@ describe('drawer closing report', () => {
     expect(await code(() => svc.printSessionReport(mgr, { sessionId: s.sid, printer: 'counter' }))).toBe('invalid'); expect(await code(() => s.svc.printSessionReport(mgr, { sessionId: s.sid, printer: 'counter' }))).toBe('invalid'); expect(decodeEscpos(s.tr.sent[0]!).commands).not.toContain('drawer');
   });
 });
+
+describe('ETA QR on the receipt', () => {
+  it('the receipt carries the QR text from the ETA queue; the picture is a real QR with more black than the placeholder', async () => {
+    const s = prep(); const sale = s.sell(); const url = 'https://invoicing.eta.gov.eg/receipts/search/' + 'a'.repeat(64) + '/share/2026-12-01T10:00:00Z#Total:50.000,IssuerRIN:123456789';
+    const svc = new PrintService(s.hub, s.sales, s.raster, { counter: { transport: s.tr, kind: 'receipt' } }, () => ({ pharmacy: { name: 'ص' }, nameOf: id => id, qrTextOf: no => (no === sale.saleNo ? url : null) })); await svc.printReceipt(ph, { saleNo: sale.saleNo, printer: 'counter' }); expect(s.raster.last).toContainEqual({ qr: true, text: url });
+    const lines = [{ t: 'x', size: 24 }, { qr: true as const, text: url }]; const r = new SkiaRasterizer(); const img = r.receipt(lines, 576); const holder = r.receipt([{ t: 'x', size: 24 }, { qr: true as const }], 576); expect(img.gray.filter(v => v < 128).length).toBeGreaterThan(holder.gray.filter(v => v < 128).length); expect(img.height).toBeGreaterThan(200);
+    const none = prep(); const s2 = none.sell(); await none.svc.printReceipt(ph, { saleNo: s2.saleNo, printer: 'counter' }); expect(JSON.stringify(none.raster.last)).not.toContain('"qr"');
+  });
+});

@@ -1,0 +1,17 @@
+# @o-pharmacy/eta - ETA e-receipt adapter (Sprint 4.7, D26)
+
+Built against ETA's public SDK (receipt v1.2, return receipt v1.2, submit API, receipt issuance FAQ, serialization approach). **Nothing has been sent to ETA yet**: we have no pre-production credentials (owner action 12), so everything below is verified against our reading of the documents and a scripted ETA, not against ETA itself.
+
+- **Document** (`document.ts`): sale receipt (`receiptType` s), return receipt (r) for returns and swaps (refunded value per returned line, `referenceUUID` of the sale receipt, `salesIssuedDateTime`), and a full return receipt for a void that happens after the sale receipt exists (ETA has no delete either; a sale voided before it was ever queued needs none). Header, seller (registration data from `EtaConfig`), buyer type P, one line per batch pick (internal code, description, ETA item code from the item, unit code, quantity in the price unit, unit price, total sale, commercial discount, net, taxes), totals, payment code. Delivery fee is a service line and needs its registered code.
+- **UUID** (`serialize.ts`): SHA-256 (hex, 64) of ETA's normalised serialisation with an empty `header.uuid`; computed on the Hub at the moment of the sale, so it works offline. The chain `previousUUID` is per cashier terminal (each terminal is a registered POS device).
+- **Queue** (`service.ts`, migration `eta_0001_receipts`, never deleted or edited; accepted receipts are final):
+  - `enqueueSale` / `enqueueReturn` / `enqueueVoid` and `scan` (queues what is missing, in real time order; a document that cannot be built, for example an item without an ETA code, is listed in `problems` and retried on the next scan; it never blocks the others).
+  - `drain`: sends what is due in one batch, in order. Accepted keeps ETA's `longId`; rejected keeps the reason. A refusal or a dead line keeps receipts pending and backs off 1, 2, 4 ... 60 minutes (or ETA's `Retry-After`). Past the 24 hour deadline a receipt becomes `expired` and is no longer sent automatically.
+  - `resubmit`: a corrected receipt for a rejected one (same place in the chain, new UUID, `referenceOldUUID` = the old one; 96 hours from issue) or for an expired one (`compliance.eta.late_submit`). Receipts after it keep their content and UUIDs.
+  - `alerts`: under 6 hours to the deadline warning, under 1 hour critical, expired, rejected. `queue`, `receiptOf`, `attempts` for the screens.
+  - `qrText`: `{portal}/receipts/search/{uuid}/share/{issued UTC}#Total:{total},IssuerRIN:{rin}`; `@o-pharmacy/print` draws it as a real QR on the receipt (decoded with an independent reader in a manual check).
+  - Permissions: the existing `compliance.eta.view` / `retry` / `late_submit` (no new key). The Hub's worker runs with a system account that has them.
+- **Transport**: `HttpEtaTransport` (`POST /api/v1/receiptsubmissions`, sign-in headers and the issuer signature are injected) and `FakeEtaTransport` for tests.
+
+## Unconfirmed (to check against ETA's sample files and the pre-production account)
+Number text inside the hash (we send JSON numbers as JavaScript writes them), property order (schema order), `totalSale = quantity x unitPrice` tolerance (we send the exact line amount), the tax type and subtype for medicines, unit and payment codes, the portal address and the decimals in the QR total (3, as in ETA's example), the authentication flow and whether the issuer signature is enforced.

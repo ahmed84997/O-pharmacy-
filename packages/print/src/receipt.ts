@@ -5,14 +5,14 @@ export type Digits = 'western' | 'arabic';
 /** Everything a pharmacy can change about its receipt (becomes settings later; nothing is hardcoded here). */
 export interface ReceiptStyle { header?: string; footer?: string; returnPolicy?: string; digits?: Digits; showExpiry?: boolean; showBatch?: boolean; showUnitPrice?: boolean; reserveQr?: boolean; timeZone?: string }
 export interface PharmacyInfo { name: string; branch?: string; phones?: string[] }
-export interface ReceiptContext { pharmacy: PharmacyInfo; style?: ReceiptStyle; cashierName: string; customerName?: string | null; /** 'delivery' is the copy that goes with the order: only it carries the customer's phone and address. */ copy?: 'counter' | 'delivery'; /** 1 = the original; more = a reprint, marked as a copy. */ copyNo?: number }
+export interface ReceiptContext { pharmacy: PharmacyInfo; style?: ReceiptStyle; cashierName: string; customerName?: string | null; /** 'delivery' is the copy that goes with the order: only it carries the customer's phone and address. */ copy?: 'counter' | 'delivery'; /** 1 = the original; more = a reprint, marked as a copy. */ copyNo?: number; /** The ETA e-receipt link to print as a QR (the Hub's ETA queue provides it). */ qrText?: string | null }
 
 export type ReceiptLine =
   | { t: string; size?: number; bold?: boolean; align?: 'right' | 'center' | 'left' }
   | { cols: string[]; widths?: number[]; size?: number; bold?: boolean }
   | { rule: true }
   | { barcode: string }
-  | { qr: true };
+  | { qr: true; text?: string };
 
 const AR = '٠١٢٣٤٥٦٧٨٩';
 export const money = (minor: number, digits: Digits = 'western'): string => num((minor / 100).toFixed(2), digits);
@@ -66,7 +66,7 @@ export function buildReceipt(sale: SaleView, ctx: ReceiptContext): ReceiptLine[]
   if (sale.onAccountMinor > 0) L.push({ cols: ['آجل على حساب العميل', m(sale.onAccountMinor)], size: 26, bold: true });
   if (sale.returnedMinor > 0) L.push({ cols: ['مرتجع على هذه الفاتورة', m(sale.returnedMinor)], size: 22 });
   L.push({ rule: true }); L.push({ barcode: sale.saleNo });
-  if (st.reserveQr) L.push({ qr: true });
+  if (ctx.qrText) L.push({ qr: true, text: ctx.qrText }); else if (st.reserveQr) L.push({ qr: true });
   if (st.footer) L.push({ t: st.footer, size: 24, align: 'center' });
   if (st.returnPolicy) L.push({ t: st.returnPolicy, size: 18, align: 'center' });
   return L;
