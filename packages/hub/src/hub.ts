@@ -13,6 +13,7 @@ export interface MovementCmd {
 }
 export type MovementResult = { ok: true; id: string; replay: boolean } | { ok: false; reason: 'insufficient' | 'already-reversed' | 'not-found' | 'reason-required' };
 
+export interface RemoteEvent { id: string; type: string; branchId: string; payload: unknown; createdAt: string; cseq: number }
 export interface OutboxRow { seq: number; id: string; type: string; branchId: string; payload: unknown; createdAt: string; attempts: number }
 
 /** One Hub per branch: the single writer. Every business write = ledger row + outbox event + audit entry in ONE transaction. */
@@ -56,6 +57,32 @@ export class Hub {
   outboxFailed(ids: string[]): void {
     this.db.tx(() => { for (const id of ids) this.db.prepare('UPDATE outbox SET attempts=attempts+1 WHERE id=? AND sent_at IS NULL').run(id); });
   }
+
+  // ---- events from other branches (pull side of sync) ----
+  remoteCursor(): number { return Number(this.db.prepare("SELECT v FROM sync_state WHERE k='cloud_cursor'").get()?.v ?? 0); }
+  /** Stores events of other branches and advances the cursor in ONE transaction; duplicates are ignored, so a repeated pull is harmless. */
+  applyRemote(events: RemoteEvent[], cursor: number): number {
+    return this.db.tx(() => {
+      let added = 0;
+      for (const e of events) {
+        if (e.branchId === this.branchId) continue; // own events never come back
+        const r = this.db.prepare('INSERT OR IGNORE INTO remote_events(id,branch_id,type,payload,hub_created_at,cloud_seq,received_at) VALUES(?,?,?,?,?,?,?)')
+          .run(e.id, e.branchId, e.type, JSON.stringify(e.payload), e.createdAt, e.cseq, this.now());
+        added += Number(r.changes);
+      }
+      if (cursor > this.remoteCursor()) this.db.prepare("INSERT INTO sync_state(k,v) VALUES('cloud_cursor',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v").run(String(cursor));
+      return added;
+    });
+  }
+  remoteEvents(): RemoteEvent[] {
+    return this.db.prepare('SELECT * FROM remote_events ORDER BY cloud_seq').all().map(r => ({ id: String(r.id), type: String(r.type), branchId: String(r.branch_id), payload: JSON.parse(String(r.payload)), createdAt: String(r.hub_created_at), cseq: Number(r.cloud_seq) }));
+  }
+  /** Sync health shown to staff: how much is waiting, when it last worked. */
+  syncStatus(): { pending: number; oldestPendingAt: string | null; lastSuccessAt: string | null } {
+    const p = this.db.prepare('SELECT COUNT(*) c, MIN(created_at) o FROM outbox WHERE sent_at IS NULL').get()!;
+    return { pending: Number(p.c), oldestPendingAt: (p.o as string | null) ?? null, lastSuccessAt: (this.db.prepare("SELECT v FROM sync_state WHERE k='last_success'").get()?.v as string | undefined) ?? null };
+  }
+  markSyncSuccess(): void { this.db.prepare("INSERT INTO sync_state(k,v) VALUES('last_success',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v").run(this.now()); }
 
   // ---- ledger ----
   balance(itemId: string, o: { storeId?: string; batchId?: string | null } = {}): number {

@@ -9,4 +9,6 @@ The Branch Hub core: one writer per branch, works offline. SQLite through built-
 - **Audit** - persisted hash chain (core `AuditLog`); `verifyAudit()` reports the first broken entry.
 - **Atomicity** - movement + outbox + audit commit together or not at all (tested with a simulated crash).
 
+- **Sync (Sprint 2.5)** - `syncOnce(hub, transport)`: push first (oldest first, batches), pull second. An event leaves the outbox only when the Cloud acknowledges its id (a lost acknowledgement only causes a harmless re-send). A failure stops the round, counts the attempt and keeps everything; local work never waits for the network. Pulled events and the new cursor are stored in one transaction. `backoffMs` for retry timing, `httpTransport` for the real Cloud, `syncStatus()` for the screen.
+
 Uses `@o-pharmacy/core` through a path alias (no publishing step yet). Next: 2.4 Cloud (Postgres RLS), 2.5 sync Hub to Cloud and devices.
