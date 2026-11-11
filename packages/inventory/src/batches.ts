@@ -15,6 +15,8 @@ export interface ReceiveInput {
   key: string; itemId: string; lot: string; expiry: string; qty: number; unitName?: string;
   costMinor: number; publicPriceMinor?: number; pharmacistPriceMinor?: number; priceUnitName?: string;
   storeId?: string; sourceRef?: string; deviceId?: string;
+  /** Opening balance (data import): needs `item.import`, may be an already expired lot, written as an `opening` movement. */
+  opening?: boolean;
 }
 export interface Pick { batchId: string; lot: string; expiry: string; qtyBase: number; unitPriceMinor: number | null; priceUnitFactor: number; amountMinor: number }
 export interface Allocation { picks: Pick[]; missingBase: number; totalMinor: number }
@@ -63,11 +65,11 @@ export class BatchService {
 
   /** Receive stock into a batch (the purchase invoice of Sprint 3.5 calls this per line). Creates the batch, or adds to the same lot and expiry when prices match. */
   receive(actor: Person, i: ReceiveInput): { batch: Batch; created: boolean; replay: boolean; warnings: string[] } {
-    this.need(actor, 'purchase_invoice.create');
+    this.need(actor, i.opening ? 'item.import' : 'purchase_invoice.create');
     const item = this.items.get(i.itemId); if (!item) throw new BatchError('not-found', i.itemId);
     if (item.kind === 'service') throw new BatchError('invalid', 'a service holds no stock');
     if (item.status !== 'active') throw new BatchError('blocked', `item is ${item.status}`);
-    const expiry = parseExpiry(i.expiry); if (expiry < this.today()) throw new BatchError('expired', 'this batch is already expired and cannot be received');
+    const expiry = parseExpiry(i.expiry); if (!i.opening && expiry < this.today()) throw new BatchError('expired', 'this batch is already expired and cannot be received');
     const lot = i.lot.trim(); if (!lot) throw new BatchError('invalid', 'lot number is required');
     const unit = this.unit(item, i.unitName); const qtyBase = this.toBase(i.qty, unit);
     const pu = this.unit(item, i.priceUnitName ?? item.units[item.units.length - 1]!.name);
@@ -79,7 +81,7 @@ export class BatchService {
       if (i.pharmacistPriceMinor !== undefined && i.pharmacistPriceMinor > i.publicPriceMinor) throw new BatchError('invalid', 'pharmacist price cannot exceed the public price');
       if (i.costMinor > (i.pharmacistPriceMinor ?? i.publicPriceMinor)) warnings.push('cost-above-price');
     } else if (i.publicPriceMinor !== undefined || i.pharmacistPriceMinor !== undefined) throw new BatchError('invalid', 'non-drug prices are set on the item, not on the batch (D20)');
-    const warnDays = this.o.warningDays?.() ?? 90; const left = daysBetween(this.today(), expiry); if (left <= warnDays) warnings.push(`near-expiry:${left}`);
+    if (!i.opening) { const warnDays = this.o.warningDays?.() ?? 90; const left = daysBetween(this.today(), expiry); if (left <= warnDays) warnings.push(`near-expiry:${left}`); }
 
     return this.db.tx(() => {
       const exist = this.db.prepare('SELECT * FROM batches WHERE item_id=? AND lot=? AND expiry=?').get(i.itemId, lot, expiry);
@@ -95,7 +97,7 @@ export class BatchService {
             .run(id, i.itemId, lot, expiry, pu.id, i.costMinor, i.publicPriceMinor ?? null, i.pharmacistPriceMinor ?? null, this.hub.now(), actor.id, i.sourceRef ?? null);
         } catch (e) { if (e instanceof Error && /CHECK constraint/.test(e.message)) throw new BatchError('invalid', 'a batch value breaks a rule'); throw e; }
       }
-      const r = this.hub.record({ key: i.key, storeId: i.storeId ?? 'MAIN', itemId: i.itemId, batchId: id, qty: qtyBase, kind: 'purchase', ref: i.sourceRef, actor: actor.id, deviceId: i.deviceId });
+      const r = this.hub.record({ key: i.key, storeId: i.storeId ?? 'MAIN', itemId: i.itemId, batchId: id, qty: qtyBase, kind: i.opening ? 'opening' : 'purchase', ref: i.sourceRef, actor: actor.id, deviceId: i.deviceId });
       if (!r.ok) throw new BatchError('invalid', 'stock movement refused');
       if (created) { this.hub.audit(actor.id, 'batch.created', 'batch', id, { itemId: i.itemId, lot, expiry, costMinor: i.costMinor, publicPriceMinor: i.publicPriceMinor ?? null }); this.hub.emit('batch.created', { batchId: id, itemId: i.itemId, lot, expiry, priceUnit: pu.name, publicPriceMinor: i.publicPriceMinor ?? null, pharmacistPriceMinor: i.pharmacistPriceMinor ?? null }); }
       const b = this.toBatch(this.db.prepare('SELECT * FROM batches WHERE id=?').get(id)!, can(actor, 'stock.cost.view', this.hub.branchId));

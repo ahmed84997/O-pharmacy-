@@ -229,4 +229,20 @@ CREATE TABLE purchase_return_lines (
 );
 CREATE TRIGGER purchase_return_lines_no_update BEFORE UPDATE ON purchase_return_lines BEGIN SELECT RAISE(ABORT, 'returns are append-only'); END;
 CREATE TRIGGER purchase_return_lines_no_delete BEFORE DELETE ON purchase_return_lines BEGIN SELECT RAISE(ABORT, 'returns are append-only'); END;` },
+  { id: 'inv_0006_import', sql: `
+CREATE TABLE imports (
+  id TEXT PRIMARY KEY, import_no TEXT NOT NULL UNIQUE, kind TEXT NOT NULL CHECK (kind IN ('items','stock','suppliers')),
+  source TEXT NOT NULL, file_hash TEXT NOT NULL, mode TEXT NOT NULL CHECK (mode IN ('all_or_nothing','valid_only')),
+  rows_total INTEGER NOT NULL, created INTEGER NOT NULL, skipped INTEGER NOT NULL, failed INTEGER NOT NULL,
+  report TEXT NOT NULL, by TEXT NOT NULL, at TEXT NOT NULL, UNIQUE (kind, file_hash)
+);
+CREATE TRIGGER imports_no_update BEFORE UPDATE ON imports BEGIN SELECT RAISE(ABORT, 'import records are append-only'); END;
+CREATE TRIGGER imports_no_delete BEFORE DELETE ON imports BEGIN SELECT RAISE(ABORT, 'import records are append-only'); END;
+CREATE TABLE import_refs (
+  source TEXT NOT NULL, entity TEXT NOT NULL CHECK (entity IN ('item','supplier')), source_code TEXT NOT NULL, entity_id TEXT NOT NULL, import_id TEXT NOT NULL REFERENCES imports(id),
+  PRIMARY KEY (source, entity, source_code)
+);
+CREATE INDEX import_refs_entity ON import_refs(entity_id);
+CREATE TRIGGER import_refs_no_update BEFORE UPDATE ON import_refs BEGIN SELECT RAISE(ABORT, 'import references are append-only'); END;
+CREATE TRIGGER import_refs_no_delete BEFORE DELETE ON import_refs BEGIN SELECT RAISE(ABORT, 'import references are append-only'); END;` },
 ];
