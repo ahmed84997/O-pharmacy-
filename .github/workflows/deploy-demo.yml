@@ -40,6 +40,9 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEMO_SSH_KEY" > ~/.ssh/demo_key
           chmod 600 ~/.ssh/demo_key
+          # Copy-paste from a phone often adds hidden characters or spaces: keep only the characters a user@host can contain.
+          DEMO_TARGET="$(printf '%s' "$DEMO_TARGET" | tr -cd 'A-Za-z0-9@._-')"
+          case "$DEMO_TARGET" in ?*@?*) ;; *) echo "::error::DEMO_TARGET must look like user@address (for example u123456789@203.0.113.7)."; exit 1;; esac
           HOST="${DEMO_TARGET#*@}"
           ssh-keyscan -p 65002 -t ed25519,ecdsa,rsa "$HOST" > ~/.ssh/known_hosts 2>/dev/null
           for attempt in 1 2 3; do
