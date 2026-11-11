@@ -21,6 +21,7 @@ Updated 11 Nov 2026 (end of Sprint 0.5). Items stay here until done; each says w
 | 9 | Approve ARD, Roadmap, Masterplan v1.1 (D30 name "O Pharmacy" in English, D31 desktop first with an effective phone version) | PR for Sprint 0.5 |
 | 10 | Re-render the kit's sample receipt in the structure of the pharmacy's current receipt (not started, needs "go") | current-receipt-analysis.md section 4 |
 | 11 | Send one real eStock export of each: items list, stock by expiry report, suppliers list (CSV or Excel saved as CSV, 20-30 rows, no customer data) so the import headers can be confirmed. The import already understands the usual Arabic headers (Sprint 3.6) | ROADMAP.md Sprint 3.6 |
+| 12 | ETA e-receipt (Sprint 4.7), from the accountant or the pharmacy's ETA account: (a) registration number (RIN), registered trade name, branch code and branch address; (b) the activity code and the pharmacist syndicate licence number; (c) the POS serial registered for each cashier terminal; (d) which tax type and subtype ETA expects for medicines and for non-drug items (exempt or taxable), the ETA unit-of-measure code for each unit we use (box, strip, tube...), and the payment-method codes; (e) a pre-production (test) ETA account with client id and secret, to run the first real submission; (f) the code of the delivery service line, if you charge delivery. Until (e) arrives nothing has been sent to ETA | eta README, compliance-eta-eda.md |
 
 ## Still to send (when convenient)
 Missing eStock screens: add-item form, stocktake, sales return, contracts, drawer closing, settings.
