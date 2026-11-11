@@ -1,13 +1,14 @@
-import { useMemo, useState } from 'react';
-import { Item, PurchaseDraftLine, effectiveCost, itemById, marginPct, round2, savePurchase, searchItems, stockOf } from './domain';
+import { useEffect, useMemo, useState } from 'react';
+import { Item, PurchaseDraftLine, draftLineFor, effectiveCost, itemById, marginPct, round2, savePurchase, searchItems, stockOf } from './domain';
 import { ERR, Icon, dmy, money, useApp } from './ui';
 
 const addMonths = (today: string, m: number) => { const d = new Date(today + 'T00:00:00Z'); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + m + 1, 0)).toISOString().slice(0, 10); };
 
 export default function Purchase() {
-  const { db, setDb, role, toast, now } = useApp();
+  const { db, setDb, role, toast, now, purchaseSeed, clearPurchaseSeed } = useApp();
   const [sup, setSup] = useState(db.suppliers[0].id);
-  const [lines, setLines] = useState<PurchaseDraftLine[]>([]);
+  const [lines, setLines] = useState<PurchaseDraftLine[]>(() => purchaseSeed.map(id => draftLineFor(db, id)).filter((x): x is PurchaseDraftLine => !!x));
+  useEffect(() => { if (purchaseSeed.length) clearPurchaseSeed(); }, [purchaseSeed, clearPurchaseSeed]);
   const [paid, setPaid] = useState(0);
   const [q, setQ] = useState('');
   const [it, setIt] = useState<Item | null>(null);
@@ -66,14 +67,16 @@ export default function Purchase() {
         )}
       </div>
 
-      <div className="tablewrap"><table>
+      <div className="tablewrap"><table className="cards">
         <thead><tr><th>#</th><th>الصنف</th><th>الصلاحية</th><th className="n">الكمية</th><th className="n">بونص</th><th className="n">سعر الشراء</th><th className="n">التكلفة الفعلية</th><th className="n">سعر البيع</th><th className="n">الهامش</th><th className="n">الاجمالي</th><th /></tr></thead>
         <tbody>
           {lines.length === 0 && <tr><td colSpan={11} className="hint" style={{ padding: 18 }}>لا توجد اسطر - ابحث عن صنف وضيفه.</td></tr>}
           {lines.map((l, i) => (
-            <tr key={i}><td>{i + 1}</td><td>{itemById(db, l.itemId)!.name}</td><td>{dmy(l.expiry)}</td><td className="n">{l.qtyPack}</td><td className="n">{l.bonusPack}</td><td className="n">{money(l.costPack)}</td>
-              <td className="n">{money(effectiveCost(l))}</td><td className="n">{money(l.pricePack)}</td><td className="n">{marginPct(l)}٪</td><td className="n">{money(l.costPack * l.qtyPack)}</td>
-              <td><button className="qbtn" aria-label="حذف السطر" onClick={() => setLines(x => x.filter((_, k) => k !== i))}><Icon n="x" /></button></td></tr>
+            <tr key={i}><td className="idx">{i + 1}</td><td className="nm" data-label="الصنف">{itemById(db, l.itemId)!.name}</td><td data-label="الصلاحية">{dmy(l.expiry)}</td><td className="n" data-label="الكمية">
+                <input className="num" type="number" min={1} aria-label="الكمية" value={l.qtyPack} onChange={e => setLines(x => x.map((y, k) => k === i ? { ...y, qtyPack: Math.max(0, +e.target.value || 0) } : y))} /></td><td className="n" data-label="بونص">{l.bonusPack}</td><td className="n" data-label="سعر الشراء">
+                <input className="num" type="number" min={0} step="0.25" aria-label="سعر الشراء" value={l.costPack} onChange={e => setLines(x => x.map((y, k) => k === i ? { ...y, costPack: +e.target.value || 0 } : y))} /></td>
+              <td className="n" data-label="التكلفة الفعلية">{money(effectiveCost(l))}</td><td className="n" data-label="سعر البيع">{money(l.pricePack)}</td><td className="n" data-label="الهامش">{marginPct(l)}٪</td><td className="n" data-label="الاجمالي">{money(l.costPack * l.qtyPack)}</td>
+              <td className="x"><button className="qbtn" aria-label="حذف السطر" onClick={() => setLines(x => x.filter((_, k) => k !== i))}><Icon n="x" /></button></td></tr>
           ))}
         </tbody>
       </table></div>

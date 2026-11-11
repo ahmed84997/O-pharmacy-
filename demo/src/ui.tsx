@@ -30,9 +30,9 @@ export const money = (n: number) => n.toLocaleString('en-US', { minimumFractionD
 export const dmy = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 export const dmyHm = (iso: string) => { const d = new Date(iso); const p = (x: number) => String(x).padStart(2, '0'); return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
 
-export type Screen = 'sale' | 'purchase' | 'items' | 'short' | 'invoices' | 'del' | 'soon';
+export type Screen = 'sale' | 'purchase' | 'items' | 'short' | 'invoices' | 'del' | 'customers' | 'receipt' | 'soon';
 export interface Ctx {
-  db: Db; setDb: (d: Db) => void; role: Role; toast: (m: string) => void; go: (s: Screen, soon?: string) => void; now: () => string;
+  db: Db; setDb: (d: Db) => void; role: Role; toast: (m: string) => void; go: (s: Screen, soon?: string) => void; now: () => string; seedPurchase: (itemIds: string[]) => void; purchaseSeed: string[]; clearPurchaseSeed: () => void;
 }
 export const AppCtx = createContext<Ctx>(null as unknown as Ctx);
 export const useApp = () => useContext(AppCtx);
@@ -42,6 +42,9 @@ export const ERR: Record<string, string> = {
   'credit-limit': 'العميل تعدّى حد الائتمان', 'credit-not-allowed': 'البيع الآجل غير متاح لهذا العميل', 'no-customer': 'اختار العميل', forbidden: 'ليس لديك صلاحية',
   'reason-required': 'اكتب سبب الإلغاء', 'already-void': 'الفاتورة ملغاة بالفعل', 'not-found': 'غير موجود', 'no-supplier': 'اختار المورد', 'bad-line': 'راجع الكمية والأسعار',
   'bad-expiry': 'تاريخ الصلاحية لازم يكون في المستقبل', 'no-item': 'صنف غير معروف',
+  'name-required': 'اكتب الاسم', duplicate: 'الاسم موجود قبل كده', 'bad-limit': 'حد الائتمان لازم يكون صفر او اكتر', 'bad-amount': 'اكتب مبلغ صحيح', 'over-balance': 'المبلغ اكبر من رصيد العميل',
+  'bad-barcode': 'الباركود لازم يكون من 8 لـ 14 رقم', 'dup-barcode': 'الباركود مستخدم لصنف تاني', 'bad-pack': 'عدد القطع في العلبة لازم رقم صحيح 1 او اكتر', 'bad-price': 'اكتب سعر صحيح',
+  'drug-price-locked': 'سعر الدواء مسعّر من الدولة - بيتغير من فاتورة مشتريات بباتش جديد', 'drug-flag-locked': 'نوع الصنف (دواء / غير دواء) مش بيتغير بعد الاضافة',
 };
 export const ROLE_LABEL: Record<Role, string> = { owner: 'المالك', manager: 'مدير الفرع', pharmacist: 'صيدلي', cashier: 'كاشير' };
 export const TYPE_LABEL = { cash: 'كاش', card: 'كارت', credit: 'آجل', delivery: 'توصيل' } as const;

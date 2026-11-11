@@ -6,9 +6,10 @@ import { AppCtx, Icon, ROLE_LABEL, Screen } from './ui';
 import Sale from './Sale';
 import Purchase from './Purchase';
 import { Deleted, Invoices, Items, Shortages, Soon } from './Lists';
+import { Customers, CashReceipt } from './Customers';
 
 type Tips = null | 'tabs' | 'items';
-const BOTTOM: [Screen, string, string][] = [['sale', 'فاتورة بيع', 'cart'], ['items', 'الأصناف', 'box'], ['short', 'النواقص', 'bell'], ['invoices', 'الفواتير', 'history']];
+const BOTTOM: [Screen, string, string][] = [['sale', 'فاتورة بيع', 'cart'], ['items', 'الأصناف', 'box'], ['customers', 'العملاء', 'users'], ['short', 'النواقص', 'bell']];
 
 export default function App() {
   const [db, setDb] = useState<Db>(() => buildSeed(isoDay(new Date())));
@@ -22,6 +23,7 @@ export default function App() {
   const [drawer, setDrawer] = useState(false);
   const [offline, setOffline] = useState(false);
   const [msg, setMsg] = useState('');
+  const [purchaseSeed, setPurchaseSeed] = useState<string[]>([]);
   const timer = useRef<number>();
   const tabsList = useMemo(() => visTabs(role), [role]);
   const cur = tabsList.find(t => t.id === tab) ?? tabsList[0];
@@ -29,7 +31,9 @@ export default function App() {
   const toast = useCallback((m: string) => { setMsg(m); window.clearTimeout(timer.current); timer.current = window.setTimeout(() => setMsg(''), 4200); }, []);
   const go = useCallback((s: Screen, label = '') => { setScreen(s); setSoonLabel(label); setPopup(false); setDrawer(false); setTips(null); }, []);
   const now = useCallback(() => new Date().toISOString(), []);
-  const ctx = useMemo(() => ({ db, setDb, role, toast, go, now }), [db, role, toast, go, now]);
+  const seedPurchase = useCallback((ids: string[]) => { setPurchaseSeed(ids); setScreen('purchase'); setSoonLabel(''); }, []);
+  const clearPurchaseSeed = useCallback(() => setPurchaseSeed([]), []);
+  const ctx = useMemo(() => ({ db, setDb, role, toast, go, now, seedPurchase, purchaseSeed, clearPurchaseSeed }), [db, role, toast, go, now, seedPurchase, purchaseSeed, clearPurchaseSeed]);
 
   const run = useCallback((c: Cmd) => {
     setTips(null); setPopup(false); setDrawer(false);
@@ -71,6 +75,8 @@ export default function App() {
       case 'items': return <Items />;
       case 'short': return <Shortages />;
       case 'invoices': return <Invoices />;
+      case 'customers': return <Customers />;
+      case 'receipt': return <CashReceipt />;
       case 'del': return canSeeDeleted(role) ? <Deleted /> : <Soon label="غير مسموح" />;
       default: return <Soon label={soonLabel} />;
     }

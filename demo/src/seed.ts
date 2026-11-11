@@ -59,7 +59,7 @@ export function buildSeed(todayIso: string): Db {
   const mk = (name: string, drug: boolean, per: number, form: string, price: number) => {
     n++;
     const barcode = '6221' + String(100000000 + n * 7919).padStart(9, '0').slice(0, 9);
-    items.push({ id: `i${n}`, name, drug, packUnit: drug ? 'علبة' : 'قطعة', subUnit: per > 1 ? form : '', perPack: per, barcode, publicPrice: q25(price), suspended: false, otherBranchQty: r() < .5 ? Math.floor(r() * 12) : 0 });
+    items.push({ id: `i${n}`, name, drug, packUnit: drug ? 'علبة' : 'قطعة', subUnit: per > 1 ? form : '', perPack: per, barcode, publicPrice: q25(price), suspended: false, otherBranchQty: r() < .5 ? Math.floor(r() * 12) : 0, alt: [] });
   };
   for (const [name, strengths, unit, form, per, base] of DRUGS) {
     strengths.forEach((s, k) => {
@@ -68,6 +68,8 @@ export function buildSeed(todayIso: string): Db {
       if (per > 1 && k % 2 === 0) mk(`${name} ${s} ${unit} - ${per * 2} ${form}`, true, per * 2, form, base * (1 + k * 0.35) * 1.85);
     });
   }
+  // Alternatives: other strengths/packs of the same active ingredient (same first word).
+  for (const it of items) if (it.drug) it.alt = items.filter(o => o.drug && o.id !== it.id && o.name.split(' ')[0] === it.name.split(' ')[0]).slice(0, 3).map(o => o.id);
   const drugCount = items.length;
   for (const [name, price] of NONDRUG) mk(name, false, 1, '', price);
   // Trim or extend to about 300 so the numbers in the spec hold.
@@ -125,5 +127,5 @@ export function buildSeed(todayIso: string): Db {
   }
   invoices.sort((a, b) => b.at.localeCompare(a.at));
 
-  return { today: todayIso, items, batches, customers, suppliers, invoices, purchases: [], movements: [], shortages: [], held: [], counters: { sale: 150, purchase: 0, id: 1000 } };
+  return { today: todayIso, items, batches, customers, suppliers, invoices, purchases: [], movements: [], shortages: [], held: [], receipts: [], counters: { sale: 150, purchase: 0, receipt: 0, id: 1000 } };
 }
