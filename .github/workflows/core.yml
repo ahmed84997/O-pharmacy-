@@ -1,4 +1,4 @@
-name: Core package (Phase 2) on Windows, macOS, Linux
+name: Packages core and hub (Phase 2) on Windows, macOS, Linux
 on:
   pull_request:
     paths: ['packages/**', '.github/workflows/core.yml']
@@ -14,12 +14,20 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: packages/core
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
+      - name: core
+        working-directory: packages/core
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+      - name: hub (node:sqlite ledger, outbox, audit)
+        working-directory: packages/hub
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
