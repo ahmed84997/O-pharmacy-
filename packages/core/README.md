@@ -11,4 +11,7 @@ Shared foundation used by Hub, Cloud and devices. No I/O, no framework: pure Typ
 - `identity.ts` - scrypt secret hashing, user directory (login, lockout after repeated failures, deactivate-never-delete).
 - `devices.ts` - device registry: pending until approved, revoke is final, branch bound, full log.
 
+- `licence.ts` - Ed25519-signed licences (edition, branch limit, features, expiry, grace days); states valid / grace / read-only / invalid; `entitlements()` for screens and APIs. Policy: never lock out mid-day; after grace, read-only and data stays exportable.
+- `update.ts` - signed update manifest, version compare (never downgrade), staged rollout (stable bucket per device), business-hours rule, forced minimum version, artifact SHA-256 check, rollback rule.
+
 Next sprints: (2.2 done) 2.2 identity, roles, permissions, devices; 2.3 Hub ledger and outbox; 2.4 Cloud (Postgres RLS); 2.5 sync; 2.6 installer and auto-update.
