@@ -8,8 +8,9 @@ import { ribbonFor } from './ribbon';
 import { seedTestData } from './seed';
 import { posRoutes } from './pos-api';
 import { invRoutes } from './inv-api';
+import { opsRoutes } from './ops-api';
 
-export const VERSION = '0.7.3';
+export const VERSION = '0.7.4';
 export interface ServerOptions { webDir?: string; staffSecret?: string; logger?: boolean }
 const STATUS: Record<string, number> = { separation: 403, file: 400, 'duplicate-barcode': 409, 'duplicate-code': 409, 'same-status': 409, insufficient: 409, underpaid: 400, 'no-price': 409, session: 409, 'discount-limit': 403, 'credit-limit': 409, 'day-closed': 409, blocked: 409, 'window-closed': 409, forbidden: 403, 'device-pending': 403, 'device-revoked': 403, 'not-found': 404, 'device-unknown': 401, unauthenticated: 401, 'bad-credentials': 401, locked: 423, inactive: 403, invalid: 400, state: 409, duplicate: 409, 'price-rule': 400, 'reason-required': 400 };
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff' };
@@ -77,6 +78,7 @@ export function buildServer(app: App, o: ServerOptions = {}): FastifyInstance {
     });
     posRoutes(s, app);
     invRoutes(s, app);
+    opsRoutes(s, app);
     // test server only
     s.post('/api/test/seed', async (q) => { if (!app.testMode) throw new AccessError('not-found', 'not available'); const p = me(q); if (!p.roles.includes('O')) throw new AccessError('forbidden', 'owner only'); return seedTestData(app, p, { staffSecret: o.staffSecret }); });
   });

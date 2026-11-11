@@ -6,7 +6,7 @@ const C = (id: string, label: string, icon: string, key: string, perms: string[]
 
 export const RIBBON: RibbonTab[] = [
   { id: 'home', label: 'الرئيسية', key: 'KeyH', groups: [
-    { label: 'البداية', items: [C('home', 'الصفحة الرئيسية', 'store', 'KeyH', ['item.view', 'user.view', 'report.view', 'staff_tasks.my'], { primary: true })] },
+    { label: 'البداية', items: [C('home', 'الصفحة الرئيسية', 'store', 'KeyH', ['item.view', 'user.view', 'report.view', 'staff_tasks.my'], { primary: true }), C('alerts2', 'التنبيهات', 'bell', 'KeyN', ['notification.view'], { screen: 'alerts' })] },
     { label: 'البيع', items: [C('sale', 'فاتورة بيع', 'cart', 'KeyS', ['sale.create']), C('session', 'جلسة الكاشير', 'wallet', 'KeyJ', ['cashier_session.open'])] },
     { label: 'بحث', items: [C('items', 'الأصناف والأرصدة', 'search', 'KeyF', ['item.view'])] } ] },
   { id: 'sales', label: 'المبيعات', key: 'KeyS', groups: [
@@ -21,10 +21,11 @@ export const RIBBON: RibbonTab[] = [
     { label: 'الشراء', items: [C('pinv', 'فاتورة مشتريات', 'file', 'KeyP', ['purchase_invoice.create'], { primary: true }), C('po', 'أوامر الشراء', 'clip', 'KeyO', ['purchase_order.create']), C('pret', 'مرتجع مشتريات', 'undo', 'KeyR', ['purchase_return.create'])] },
     { label: 'الموردون', items: [C('suppliers', 'الموردون', 'users', 'KeyS', ['supplier.view'])] } ] },
   { id: 'cust', label: 'العملاء', key: 'KeyU', groups: [
-    { label: 'العملاء', items: [C('customers', 'العملاء والآجل', 'users', 'KeyL', ['customer.view'], { sprint: '7.4' })] } ] },
+    { label: 'العملاء', items: [C('customers', 'العملاء والآجل والتحصيل', 'users', 'KeyL', ['customer.view'], { primary: true })] } ] },
   { id: 'ops', label: 'العمليات', key: 'KeyO', groups: [
-    { label: 'الطلبات', items: [C('requests', 'طلبات العملاء والنواقص', 'bell', 'KeyN', ['customer_request.create', 'shortage.view'], { sprint: '7.4' }), C('delivery', 'التوصيل', 'truck', 'KeyD', ['home_delivery.create', 'home_delivery.deliver'], { sprint: '7.4' })] },
-    { label: 'الفريق', items: [C('tasks', 'المهام', 'check', 'KeyT', ['staff_tasks.my', 'staff_tasks.manage'], { sprint: '7.4' }), C('attendance', 'الحضور', 'cal', 'KeyA', ['attendance.record_own', 'attendance.approve'], { sprint: '7.4' })] } ] },
+    { label: 'الطلبات', items: [C('requests', 'طلبات العملاء والنواقص', 'bell', 'KeyN', ['customer_request.create', 'shortage.view'], { primary: true }), C('notify', 'إبلاغ العملاء', 'bell', 'KeyB', ['notification.view']), C('handovers', 'التسليم والتوصيل', 'truck', 'KeyD', ['customer_request.create'])] },
+    { label: 'الطلبيات', items: [C('stages', 'مراحل الطلبيات', 'clip', 'KeyS', ['purchase_order.create', 'receiving.verify'])] },
+    { label: 'الفريق', items: [C('tasks', 'المهام', 'check', 'KeyT', ['staff_tasks.my', 'staff_tasks.manage']), C('attendance', 'الحضور والإجازات', 'cal', 'KeyA', ['attendance.record_own', 'attendance.approve']), C('alerts', 'التنبيهات', 'bell', 'KeyI', ['notification.view'])] } ] },
   { id: 'acc', label: 'الحسابات', key: 'KeyA', groups: [
     { label: 'الخزن والبنوك', items: [C('ledger', 'دفتر الخزن والبنوك', 'wallet', 'KeyL', ['ledger.view'], { sprint: '7.5' }), C('cheques', 'الشيكات', 'file', 'KeyC', ['bank_cheque.manage'], { sprint: '7.5' })] },
     { label: 'العامة', items: [C('books', 'القيود والقوائم المالية', 'chart', 'KeyF', ['statements.view'], { sprint: '7.5' })] },
