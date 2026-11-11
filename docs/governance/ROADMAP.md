@@ -38,6 +38,7 @@ Items and units, batches with expiry and per-batch prices (D14), non-drug free p
 
 ## Phase 4 - POS, printing, e-receipt
 Cashier sessions, all sale types, FEFO batch selection (D21), returns and swaps, held bills, customer balances, receipts and labels, drawer closing, ETA e-receipt adapter (D26).
+**Progress:** Sprint 4.1 (in PR): `packages/pos` (migration `pos_0001_sales`, plugs into the Hub after inventory): cashier sessions (one open per terminal and per person, opening float, close with counted cash: the cashier counts blind, reviewers with `drawer.close.review` see expected and difference, a difference needs a note); cash sale in one transaction (nearest expiry first, each batch at its own price, money in whole piasters rounded half up once per batch pick, change, batch spread over several stores drawn from each, chosen batch honoured, held/expired/returns-store stock never sold, non-drug at the item price, services take no stock, pharmacist price needs `sale.discount`, negative stock only for non-drugs when configured, repeated key sells nothing twice, refusals leave no trace); void by management with a reason while the session is open (reverses every movement, never deleted; after close a return is the way, Sprint 4.3); cost and profit per sale only for cost viewers; view own / view all; 13 POS tests. Next: 4.2 invoice types, held bills, discounts.
 
 ## Phase 5 - Operations (YK base, D5)
 Customer requests, shortages, PO stages, notifications, delivery, tasks, attendance, closings, alerts, AI - on the native stock.
