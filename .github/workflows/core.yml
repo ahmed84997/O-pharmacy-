@@ -67,6 +67,12 @@ jobs:
           npm ci
           npm run typecheck
           npm test
+      - name: hr (pay profiles, payroll)
+        working-directory: packages/hr
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
       - name: cloud (Postgres RLS, tenant keys, device auth, ingest) - Linux and macOS only
         if: runner.os != 'Windows'
         working-directory: packages/cloud
