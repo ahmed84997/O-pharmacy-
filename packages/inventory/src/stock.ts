@@ -104,7 +104,7 @@ export class StockService {
       const prior = this.db.prepare('SELECT transfer_no, batch_id, qty_base FROM store_transfers WHERE req_key=? ORDER BY rowid').all(t.key);
       if (prior.length) return { transferNo: String(prior[0]!.transfer_no), moved: prior.map(r => ({ batchId: String(r.batch_id), qtyBase: Number(r.qty_base) })), replay: true };
       const bal = this.batches.balances(t.itemId, { storeId: t.fromStore });
-      let order = this.db.prepare('SELECT id FROM batches WHERE item_id=? ORDER BY expiry, received_at, id').all(t.itemId).map(r => String(r.id)).filter(id => (bal.get(id) ?? 0) > 0);
+      let order = this.db.prepare('SELECT id FROM batches WHERE item_id=? ORDER BY expiry, received_at, rowid').all(t.itemId).map(r => String(r.id)).filter(id => (bal.get(id) ?? 0) > 0);
       if (t.batchId) order = order.filter(id => id === t.batchId);
       let need = t.qtyBase; const picks: { batchId: string; q: number }[] = [];
       for (const id of order) { if (need <= 0) break; const q = Math.min(need, bal.get(id)!); picks.push({ batchId: id, q }); need -= q; }
