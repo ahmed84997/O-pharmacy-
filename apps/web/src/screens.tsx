@@ -5,7 +5,7 @@ import { Icon, useApp, type RibbonCmd } from './ui';
 import Printers from './Printers';
 
 type Dash = { pharmacyName: string | null; items?: number; nearExpiry?: number; people?: number; pendingDevices?: number; suppliers?: number; customers?: number; empty: boolean; testMode: boolean };
-const SPRINTS: [string, string][] = [['7.3', 'المخزون والمشتريات واستيراد eStock'], ['7.4', 'العملاء والعمليات (الطلبات والنواقص والتوصيل والمهام والحضور)'], ['7.5', 'الحسابات والمرتبات والتأمين ومركز التقارير'], ['7.6', 'تقوية البرنامج: الخدمة والتحديث والنسخ الاحتياطي']];
+const SPRINTS: [string, string][] = [['7.5', 'الحسابات والمرتبات والتأمين ومركز التقارير'], ['7.6', 'تقوية البرنامج: الخدمة والتحديث والنسخ الاحتياطي']];
 
 export function Home() {
   const { me, go, toast } = useApp(); const [d, setD] = useState<Dash | null>(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');

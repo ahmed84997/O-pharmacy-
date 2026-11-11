@@ -2,7 +2,7 @@ import { Hub } from '@o-pharmacy/hub';
 import { BatchService, ImportService, ItemService, MIGRATIONS, PurchasingService, StockService, StocktakeService } from '@o-pharmacy/inventory';
 import { ClosingService, CustomerService, POS_MIGRATIONS, ReturnService, SaleService } from '@o-pharmacy/pos';
 import { PRINT_MIGRATIONS } from '@o-pharmacy/print';
-import { OPS_MIGRATIONS } from '@o-pharmacy/ops';
+import { AlertService, AttendanceService, DeliveryService, NotificationService, OPS_MIGRATIONS, OrderStageService, RequestService, TaskService } from '@o-pharmacy/ops';
 import { ACCOUNTS_MIGRATIONS } from '@o-pharmacy/accounts';
 import { HR_MIGRATIONS } from '@o-pharmacy/hr';
 import { CONTRACT_MIGRATIONS } from '@o-pharmacy/contracts';
@@ -22,6 +22,7 @@ export function openApp(o: AppOptions = {}) {
   const access = new AccessService(hub);
   const items = new ItemService(hub); const batches = new BatchService(hub, items); const stock = new StockService(hub, items, batches);
   const purchasing = new PurchasingService(hub, items, batches); const stocktake = new StocktakeService(hub); const imports = new ImportService(hub, items, batches, stock, purchasing); const sales = new SaleService(hub, items, batches); const customers = new CustomerService(hub, sales); const returns = new ReturnService(hub, items, sales); const closing = new ClosingService(hub, sales);
+  const requests = new RequestService(hub, items); const stages = new OrderStageService(hub, requests); const notifications = new NotificationService(hub, requests); const handovers = new DeliveryService(hub, requests); const tasks = new TaskService(hub); const attendance = new AttendanceService(hub); const alerts = new AlertService(hub);
   const reports = new ReportCentre(hub);
-  return { hub, access, items, batches, stock, purchasing, stocktake, imports, sales, customers, returns, closing, reports, testMode: !!o.testMode };
+  return { hub, access, items, batches, stock, purchasing, stocktake, imports, sales, customers, returns, closing, requests, stages, notifications, handovers, tasks, attendance, alerts, reports, testMode: !!o.testMode };
 }
