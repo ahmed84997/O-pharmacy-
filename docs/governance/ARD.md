@@ -126,7 +126,7 @@ Baseline of the eStock feature set: `docs/research/estock-inventory.md`.
   - **Printing:** the Arabic receipt is rendered as a raster image and sent as ESC/POS (drawer pulse, cut) and TSPL/ZPL labels; tested in CI by rendering only, **real printers pending (Friday kit)** (S3).
   - **Cloud database: PostgreSQL with Row-Level Security**, per-tenant keys, tested 13/13 on Linux and macOS; known limit and the stronger per-tenant-login tier documented (S6).
   - **UI:** Ribbon prototype accepted for review (S5).
-- **Still open:** desktop-window shell (Electron vs Tauri), auto-update, real power-cut test, backend framework (decide at the start of Phase 2), sync library vs custom beyond two branches.
+- **Still open:** desktop-window shell (Electron vs Tauri), auto-update, real power-cut test, backend framework (decided in Sprint 2.4: Fastify, see docs/governance/adr-0001-backend-framework.md), sync library vs custom beyond two branches.
 
 ## 11. UI and UX **[DECIDED: Ribbon]**
 - **Ribbon like Microsoft Word** instead of drop-down menus: tabs (e.g. المبيعات - المشتريات - الأصناف - المخازن - العملاء - الموردين - الحسابات - العمليات - شئون العاملين - التقارير - الإعدادات), each tab with labelled icon groups.
