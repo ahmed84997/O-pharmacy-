@@ -38,13 +38,13 @@
 - **Key tips:** press Alt, letters appear; mapped by physical key so they work on the Arabic keyboard layout.
 - Role switcher (owner, manager, pharmacist, cashier): the Ribbon shows only what the role may do (matrix v0.1).
 - Mock screens: sale, items, shortages, deleted items (D13). Offline toggle shows the Hub banner.
-- Phone (under 760 px): the Ribbon becomes a side drawer; dark-first colours (teal, orange, dark blue).
+- Phone (under 760 px): bottom bar (sale, items, shortages, deleted) plus a side drawer for everything else; dark-first colours (teal, orange, dark blue). **Version 2 (11 Nov):** desktop first, effective phone layout (D31), brand shown as "O Pharmacy" in English (D30).
 
 **How to test (2 minutes):** open the link, switch roles, press Alt, collapse the Ribbon, toggle offline, shrink the window or open on the phone.
 
 **Not proven:** real keyboard-first cashier speed, screen readers, user testing with the pharmacists (Phase 1 demo is where that happens).
 
-**Owner decisions:** (1) Ribbon tab order and names; (2) keep Alt key tips as a standard feature; (3) phone layout as drawer or bottom bar.
+**Owner decisions:** (1) Ribbon tab order and names; (2) keep Alt key tips as a standard feature; (3) phone layout: bottom bar plus drawer is in v2, confirm.
 
 ## Sprint 0.4 summary
 S6 isolation proven (known limit and stronger tier documented). S5 prototype ready for the owner's hands-on review. Compliance, printing on real printers (Friday kit) and Hub on real hardware remain the open Phase 0 risks.
