@@ -61,3 +61,12 @@ describe('no-delete lifecycle', () => {
     expect(() => transition(r, 'active', 'u1', 'x')).toThrow();
   });
 });
+
+import { StateMachine, StateMachineError } from './index';
+describe('shared state machine', () => {
+  const m = new StateMachine({ a: ['b', 'c'], b: ['a'], c: [] } as const);
+  it('allows only declared transitions; terminal states have no way out; undeclared targets are refused at construction', () => {
+    expect(m.can('a', 'b')).toBe(true); expect(m.can('a', 'a')).toBe(false); expect(m.can('c', 'a')).toBe(false); expect(m.isTerminal('c')).toBe(true); expect(m.isTerminal('a')).toBe(false); expect(m.states()).toEqual(['a', 'b', 'c']); expect(m.next('b')).toEqual(['a']);
+    expect(() => m.assert('c', 'a')).toThrow(StateMachineError); expect(() => m.assert('a', 'b')).not.toThrow(); expect(() => new StateMachine({ a: ['z'] } as never)).toThrow(/not declared/);
+  });
+});
