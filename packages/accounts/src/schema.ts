@@ -39,4 +39,30 @@ CREATE TABLE ledger_inbox (
 );
 CREATE TRIGGER ledger_inbox_no_delete BEFORE DELETE ON ledger_inbox BEGIN SELECT RAISE(ABORT, 'inbox rows are never deleted: ignore them'); END;
 CREATE TRIGGER ledger_inbox_facts BEFORE UPDATE ON ledger_inbox WHEN NEW.ref <> OLD.ref OR NEW.amount_minor <> OLD.amount_minor OR NEW.business_date <> OLD.business_date OR OLD.status <> 'pending' BEGIN SELECT RAISE(ABORT, 'a proposal never changes and is decided once'); END;` },
+  { id: 'acc_0002_chart_journal', sql: `
+CREATE TABLE coa_accounts (
+  id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE CHECK (length(trim(code)) > 0), name TEXT NOT NULL CHECK (length(trim(name)) > 0), type TEXT NOT NULL CHECK (type IN ('asset','liability','equity','income','expense')), parent_id TEXT REFERENCES coa_accounts(id), active INTEGER NOT NULL DEFAULT 1, created_by TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TRIGGER coa_accounts_no_delete BEFORE DELETE ON coa_accounts BEGIN SELECT RAISE(ABORT, 'accounts are never deleted: switch them off'); END;
+CREATE TRIGGER coa_accounts_facts BEFORE UPDATE ON coa_accounts WHEN NEW.code <> OLD.code OR NEW.type <> OLD.type OR IFNULL(NEW.parent_id,'') <> IFNULL(OLD.parent_id,'') BEGIN SELECT RAISE(ABORT, 'code, type and parent never change'); END;
+CREATE TABLE journal_entries (
+  id TEXT PRIMARY KEY, journal_no TEXT NOT NULL UNIQUE, req_key TEXT NOT NULL UNIQUE, entry_date TEXT NOT NULL, memo TEXT NOT NULL CHECK (length(trim(memo)) > 0), source_ref TEXT UNIQUE, reverses_id TEXT REFERENCES journal_entries(id), reversed_by TEXT REFERENCES journal_entries(id), reason TEXT, created_by TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX journal_entries_by_date ON journal_entries(entry_date);
+CREATE TRIGGER journal_entries_no_delete BEFORE DELETE ON journal_entries BEGIN SELECT RAISE(ABORT, 'journal entries are never deleted: reverse them'); END;
+CREATE TRIGGER journal_entries_facts BEFORE UPDATE ON journal_entries WHEN NEW.entry_date <> OLD.entry_date OR NEW.memo <> OLD.memo OR NEW.journal_no <> OLD.journal_no OR IFNULL(NEW.reverses_id,'') <> IFNULL(OLD.reverses_id,'') OR (OLD.reversed_by IS NOT NULL AND IFNULL(NEW.reversed_by,'') <> OLD.reversed_by) BEGIN SELECT RAISE(ABORT, 'a journal entry only changes by being reversed once'); END;
+CREATE TABLE journal_lines (
+  id TEXT PRIMARY KEY, entry_id TEXT NOT NULL REFERENCES journal_entries(id), line_no INTEGER NOT NULL, coa_id TEXT NOT NULL REFERENCES coa_accounts(id), debit_minor INTEGER NOT NULL DEFAULT 0 CHECK (debit_minor >= 0), credit_minor INTEGER NOT NULL DEFAULT 0 CHECK (credit_minor >= 0),
+  CHECK ((debit_minor > 0) <> (credit_minor > 0)), UNIQUE (entry_id, line_no)
+);
+CREATE INDEX journal_lines_by_coa ON journal_lines(coa_id);
+CREATE TRIGGER journal_lines_no_update BEFORE UPDATE ON journal_lines BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TRIGGER journal_lines_no_delete BEFORE DELETE ON journal_lines BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TABLE account_mappings (kind TEXT NOT NULL CHECK (kind IN ('money','category','opening')), ref_id TEXT NOT NULL, coa_id TEXT NOT NULL REFERENCES coa_accounts(id), PRIMARY KEY (kind, ref_id));
+CREATE TRIGGER account_mappings_no_delete BEFORE DELETE ON account_mappings BEGIN SELECT RAISE(ABORT, 'mappings are never deleted: map to another account'); END;
+CREATE TABLE fin_periods (month TEXT PRIMARY KEY CHECK (month GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'), status TEXT NOT NULL CHECK (status IN ('closed','open')), changed_by TEXT NOT NULL, changed_at TEXT NOT NULL);
+CREATE TRIGGER fin_periods_no_delete BEFORE DELETE ON fin_periods BEGIN SELECT RAISE(ABORT, 'periods are never deleted'); END;
+CREATE TABLE period_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, month TEXT NOT NULL, action TEXT NOT NULL CHECK (action IN ('closed','reopened')), reason TEXT, by TEXT NOT NULL, at TEXT NOT NULL);
+CREATE TRIGGER period_events_no_update BEFORE UPDATE ON period_events BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TRIGGER period_events_no_delete BEFORE DELETE ON period_events BEGIN SELECT RAISE(ABORT, 'append-only'); END;` },
 ];
