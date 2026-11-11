@@ -42,4 +42,20 @@ CREATE TABLE notifications (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT N
 CREATE INDEX notifications_by_item ON notifications(request_item_id);
 CREATE TRIGGER notifications_no_update BEFORE UPDATE ON notifications BEGIN SELECT RAISE(ABORT, 'append-only'); END;
 CREATE TRIGGER notifications_no_delete BEFORE DELETE ON notifications BEGIN SELECT RAISE(ABORT, 'append-only'); END;` },
+  { id: 'ops_0003_handover_tasks', sql: `
+CREATE TABLE item_handovers (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, request_item_id TEXT NOT NULL REFERENCES request_items(id), step TEXT NOT NULL CHECK (step IN ('dispatched','delivered','failed','not_collected')), method TEXT CHECK (method IN ('pickup','home')), address TEXT, receiver TEXT, note TEXT, by TEXT NOT NULL, at TEXT NOT NULL);
+CREATE INDEX item_handovers_by_item ON item_handovers(request_item_id, seq);
+CREATE TRIGGER item_handovers_no_update BEFORE UPDATE ON item_handovers BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TRIGGER item_handovers_no_delete BEFORE DELETE ON item_handovers BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TABLE staff_tasks (
+  id TEXT PRIMARY KEY, task_no TEXT NOT NULL UNIQUE, req_key TEXT NOT NULL UNIQUE, title TEXT NOT NULL CHECK (length(trim(title)) > 0), body TEXT, assigned_to TEXT NOT NULL, due_date TEXT, status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','done','cancelled')),
+  created_by TEXT NOT NULL, created_at TEXT NOT NULL, closed_by TEXT, closed_at TEXT, close_note TEXT
+);
+CREATE INDEX staff_tasks_by_person ON staff_tasks(assigned_to, status);
+CREATE TRIGGER staff_tasks_no_delete BEFORE DELETE ON staff_tasks BEGIN SELECT RAISE(ABORT, 'tasks are never deleted: cancel them'); END;
+CREATE TRIGGER staff_tasks_facts BEFORE UPDATE ON staff_tasks WHEN NEW.title <> OLD.title OR NEW.task_no <> OLD.task_no OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at BEGIN SELECT RAISE(ABORT, 'what a task asks never changes: cancel and create another'); END;
+CREATE TRIGGER staff_tasks_closed BEFORE UPDATE ON staff_tasks WHEN OLD.status <> 'open' BEGIN SELECT RAISE(ABORT, 'a closed task cannot change'); END;
+CREATE TABLE staff_task_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, task_id TEXT NOT NULL REFERENCES staff_tasks(id), action TEXT NOT NULL CHECK (action IN ('created','assigned','done','cancelled')), note TEXT, by TEXT NOT NULL, at TEXT NOT NULL);
+CREATE TRIGGER staff_task_events_no_update BEFORE UPDATE ON staff_task_events BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TRIGGER staff_task_events_no_delete BEFORE DELETE ON staff_task_events BEGIN SELECT RAISE(ABORT, 'append-only'); END;` },
 ];
