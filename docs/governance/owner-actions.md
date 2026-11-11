@@ -6,7 +6,8 @@ Updated 11 Nov 2026 (Phase 7 plan, D32-D35). Items stay here until done; each sa
 1. **Now:** create the Oracle Cloud free account (oracle.com/cloud/free, home region Germany Central (Frankfurt)). **After Sprint 7.1 merges:** create the server and run the setup in `docs/governance/test-server.md`.
 2. **Friday 13 Nov:** the pharmacy PC's Windows version and RAM (with the printer kit, item 1 below) - needed to try the 7.1 installer.
 3. **Later (7.1 test server):** a domain on Cloudflare for a fixed test address (never the YK domain); until then a temporary link is used.
-4. **Deferred to Phase 10:** Apple Developer and Google Play accounts in the company name (staff mobile app, D34).
+4. **After Sprint 7.6 (for auto-update and licences, about 10 minutes):** two signing keys made in Termius and saved as GitHub secrets, and the update address variable. Steps in `docs/governance/release-and-updates.md`. Never paste the keys in the chat.
+5. **Deferred to Phase 10:** Apple Developer and Google Play accounts in the company name (staff mobile app, D34).
 
 ## Friday 13 Nov 2026 - at the pharmacy (agreed 10 Nov)
 1. **Run the printer test kit** on the pharmacy Windows PC (`spikes/s3-print/kit/`, steps in its README, about 10 minutes). Send back `RESULTS.md`, photos of the prints, and a photo of the model label on: receipt printer, label printer, barcode reader, and the PC (Windows version, RAM). Why: S3 cannot be called proven until the real printers are tested; also fixes the supported-hardware list.

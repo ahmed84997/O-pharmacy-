@@ -1,0 +1,40 @@
+name: Issue a licence
+# Run from the GitHub app (Actions > Issue a licence > Run workflow). The licence code appears in the run summary; paste it in O Pharmacy (About > Activate licence).
+on:
+  workflow_dispatch:
+    inputs:
+      tenant:
+        description: The pharmacy number shown in O Pharmacy (About)
+        required: true
+      edition:
+        description: single or chain
+        default: single
+      branches:
+        description: Number of branches (1 for single)
+        default: '1'
+      months:
+        description: How many months
+        default: '12'
+      grace:
+        description: Grace days after it ends
+        default: '14'
+jobs:
+  issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: sign
+        env:
+          KEY: ${{ secrets.LICENCE_SIGNING_KEY }}
+          TENANT: ${{ inputs.tenant }}
+          EDITION: ${{ inputs.edition }}
+          BRANCHES: ${{ inputs.branches }}
+          MONTHS: ${{ inputs.months }}
+          GRACE: ${{ inputs.grace }}
+        run: |
+          if [ -z "$KEY" ]; then echo "::error::LICENCE_SIGNING_KEY is not set"; exit 1; fi
+          node -e "
+          const c=require('crypto'); const e=process.env; const now=new Date(); const end=new Date(now); end.setUTCMonth(end.getUTCMonth()+Number(e.MONTHS));
+          if(!/^[0-9a-f-]{20,}$/.test(e.TENANT)) throw new Error('the pharmacy number looks wrong'); if(!['single','chain'].includes(e.EDITION)) throw new Error('edition is single or chain');
+          const branches=e.EDITION==='single'?1:Math.max(2,Number(e.BRANCHES)); const p={v:1,tenantId:e.TENANT,edition:e.EDITION,maxBranches:branches,features:[],issuedAt:now.toISOString(),expiresAt:end.toISOString(),graceDays:Number(e.GRACE)};
+          const body=Buffer.from(JSON.stringify(p)); const sig=c.sign(null,body,c.createPrivateKey(e.KEY)); const t=body.toString('base64url')+'.'+sig.toString('base64url');
+          require('fs').appendFileSync(e.GITHUB_STEP_SUMMARY, '### Licence for '+e.TENANT+' ('+e.EDITION+', until '+end.toISOString().slice(0,10)+')\n\n\`\`\`\n'+t+'\n\`\`\`\n'); console.log('issued until', end.toISOString().slice(0,10));"

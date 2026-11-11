@@ -3,7 +3,7 @@ import { api, ApiError, arabic, device, token } from './api';
 import type { Me } from './ui';
 import Shell from './Shell';
 
-type State = { setUp: boolean; pharmacyName: string | null; version: string; testMode: boolean };
+type State = { setUp: boolean; pharmacyName: string | null; version: string; testMode: boolean; readOnly?: boolean };
 type Gate = 'loading' | 'offline' | 'setup' | 'pending' | 'revoked' | 'login' | 'change' | 'in';
 const isDesktop = () => /Electron/.test(navigator.userAgent);
 const defaultName = () => (isDesktop() ? 'كمبيوتر الصيدلية' : /Mobi|Android|iPhone/.test(navigator.userAgent) ? 'موبايل' : 'متصفح');
