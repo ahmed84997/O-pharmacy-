@@ -3,9 +3,9 @@ import { BatchService, ImportService, ItemService, MIGRATIONS, PurchasingService
 import { ClosingService, CustomerService, POS_MIGRATIONS, ReturnService, SaleService } from '@o-pharmacy/pos';
 import { PRINT_MIGRATIONS } from '@o-pharmacy/print';
 import { AlertService, AttendanceService, DeliveryService, NotificationService, OPS_MIGRATIONS, OrderStageService, RequestService, TaskService } from '@o-pharmacy/ops';
-import { ACCOUNTS_MIGRATIONS } from '@o-pharmacy/accounts';
-import { HR_MIGRATIONS } from '@o-pharmacy/hr';
-import { CONTRACT_MIGRATIONS } from '@o-pharmacy/contracts';
+import { ACCOUNTS_MIGRATIONS, AccountService, BooksService, ChequeService, InboxService, LedgerService } from '@o-pharmacy/accounts';
+import { HR_MIGRATIONS, PayrollService } from '@o-pharmacy/hr';
+import { ClaimService, CONTRACT_MIGRATIONS, ContractService } from '@o-pharmacy/contracts';
 import { REPORT_MIGRATIONS, ReportCentre } from '@o-pharmacy/reports';
 import { APP_MIGRATIONS } from './schema';
 import { AccessService } from './access';
@@ -23,6 +23,11 @@ export function openApp(o: AppOptions = {}) {
   const items = new ItemService(hub); const batches = new BatchService(hub, items); const stock = new StockService(hub, items, batches);
   const purchasing = new PurchasingService(hub, items, batches); const stocktake = new StocktakeService(hub); const imports = new ImportService(hub, items, batches, stock, purchasing); const sales = new SaleService(hub, items, batches); const customers = new CustomerService(hub, sales); const returns = new ReturnService(hub, items, sales); const closing = new ClosingService(hub, sales);
   const requests = new RequestService(hub, items); const stages = new OrderStageService(hub, requests); const notifications = new NotificationService(hub, requests); const handovers = new DeliveryService(hub, requests); const tasks = new TaskService(hub); const attendance = new AttendanceService(hub); const alerts = new AlertService(hub);
+  const money = new AccountService(hub); const ledger = new LedgerService(hub, money); const books = new BooksService(hub); const inbox = new InboxService(hub, ledger);
+  // the category a cleared cheque is posted under: the one the Admin chose in settings, else the first active one of that kind (nothing hardcoded)
+  const chequeCategory = (d: 'received' | 'issued') => { const k = d === 'received' ? 'in' : 'out'; const set = hub.db.prepare('SELECT v FROM app_settings WHERE k=?').get(`acc.cheque_category.${d}`); if (set) return String(set.v); const r = hub.db.prepare('SELECT id FROM ledger_categories WHERE kind=? AND active=1 ORDER BY sort, name LIMIT 1').get(k); if (!r) throw Object.assign(new Error('add a ledger category first'), { code: 'invalid' }); return String(r.id); };
+  const cheques = new ChequeService(hub, ledger, chequeCategory);
+  const payroll = new PayrollService(hub); const contracts = new ContractService(hub); const claims = new ClaimService(hub, contracts);
   const reports = new ReportCentre(hub);
-  return { hub, access, items, batches, stock, purchasing, stocktake, imports, sales, customers, returns, closing, requests, stages, notifications, handovers, tasks, attendance, alerts, reports, testMode: !!o.testMode };
+  return { hub, access, items, batches, stock, purchasing, stocktake, imports, sales, customers, returns, closing, requests, stages, notifications, handovers, tasks, attendance, alerts, money, ledger, books, inbox, cheques, payroll, contracts, claims, reports, testMode: !!o.testMode };
 }
