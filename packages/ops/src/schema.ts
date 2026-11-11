@@ -81,4 +81,16 @@ CREATE TABLE leave_requests (
 CREATE TRIGGER leave_requests_no_delete BEFORE DELETE ON leave_requests BEGIN SELECT RAISE(ABORT, 'requests are never deleted'); END;
 CREATE TRIGGER leave_requests_facts BEFORE UPDATE ON leave_requests WHEN NEW.person_id <> OLD.person_id OR NEW.work_date <> OLD.work_date OR NEW.type <> OLD.type OR NEW.reason <> OLD.reason BEGIN SELECT RAISE(ABORT, 'what was asked never changes'); END;
 CREATE TRIGGER leave_requests_decided BEFORE UPDATE ON leave_requests WHEN OLD.status <> 'pending' BEGIN SELECT RAISE(ABORT, 'a decided request cannot change'); END;` },
+  { id: 'ops_0005_alerts_ai', sql: `
+CREATE TABLE alerts (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, person_id TEXT NOT NULL, category TEXT NOT NULL CHECK (category IN ('customer_requests','orders','attendance','tasks','system')), title TEXT NOT NULL CHECK (length(trim(title)) > 0), body TEXT, ref TEXT,
+  dedupe_key TEXT UNIQUE, created_at TEXT NOT NULL, read_at TEXT
+);
+CREATE INDEX alerts_by_person ON alerts(person_id, read_at);
+CREATE TRIGGER alerts_no_delete BEFORE DELETE ON alerts BEGIN SELECT RAISE(ABORT, 'alerts are never deleted: mark them read'); END;
+CREATE TRIGGER alerts_facts BEFORE UPDATE ON alerts WHEN NEW.person_id <> OLD.person_id OR NEW.category <> OLD.category OR NEW.title <> OLD.title OR IFNULL(NEW.body,'') <> IFNULL(OLD.body,'') OR IFNULL(NEW.dedupe_key,'') <> IFNULL(OLD.dedupe_key,'') OR NEW.created_at <> OLD.created_at BEGIN SELECT RAISE(ABORT, 'an alert only changes by being read'); END;
+CREATE TABLE ai_runs (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, person_id TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('day_summary','shortage_insight')), input TEXT NOT NULL, output TEXT, status TEXT NOT NULL CHECK (status IN ('ok','failed')), model TEXT NOT NULL, error TEXT, at TEXT NOT NULL);
+CREATE INDEX ai_runs_by_person ON ai_runs(person_id, at);
+CREATE TRIGGER ai_runs_no_update BEFORE UPDATE ON ai_runs BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TRIGGER ai_runs_no_delete BEFORE DELETE ON ai_runs BEGIN SELECT RAISE(ABORT, 'append-only'); END;` },
 ];

@@ -5,3 +5,5 @@ export * from './orders';
 export * from './delivery';
 export * from './tasks';
 export * from './attendance';
+export * from './alerts';
+export * from './ai';
