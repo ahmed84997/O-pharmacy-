@@ -5,6 +5,7 @@
   "description": "O Pharmacy desktop window (Electron, ADR-0002) over the local Hub",
   "author": "O Pharmacy",
   "main": "main.cjs",
+  "testBuild": true,
   "scripts": { "start": "electron .", "dist:win": "electron-builder --win --publish never" },
   "devDependencies": { "electron": "33.2.1", "electron-builder": "25.1.8" },
   "build": {
