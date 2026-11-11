@@ -27,4 +27,19 @@ CREATE TABLE request_comments (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NO
 CREATE INDEX request_comments_by_request ON request_comments(request_id, seq);
 CREATE TRIGGER request_comments_no_update BEFORE UPDATE ON request_comments BEGIN SELECT RAISE(ABORT, 'append-only'); END;
 CREATE TRIGGER request_comments_no_delete BEFORE DELETE ON request_comments BEGIN SELECT RAISE(ABORT, 'append-only'); END;` },
+  { id: 'ops_0002_orders_notifications', sql: `
+CREATE TABLE request_item_orders (id TEXT PRIMARY KEY, request_item_id TEXT NOT NULL REFERENCES request_items(id), po_id TEXT NOT NULL REFERENCES purchase_orders(id), by TEXT NOT NULL, at TEXT NOT NULL, UNIQUE (request_item_id, po_id));
+CREATE INDEX request_item_orders_by_po ON request_item_orders(po_id);
+CREATE TRIGGER request_item_orders_no_update BEFORE UPDATE ON request_item_orders BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TRIGGER request_item_orders_no_delete BEFORE DELETE ON request_item_orders BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TABLE order_stages (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, po_id TEXT NOT NULL REFERENCES purchase_orders(id), stage TEXT NOT NULL CHECK (stage IN ('ordered','received','counted','entered','labelled','shelved')), by TEXT NOT NULL, at TEXT NOT NULL, minutes_since_prev INTEGER, note TEXT, UNIQUE (po_id, stage));
+CREATE TRIGGER order_stages_no_update BEFORE UPDATE ON order_stages BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TRIGGER order_stages_no_delete BEFORE DELETE ON order_stages BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TABLE count_results (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, po_id TEXT NOT NULL REFERENCES purchase_orders(id), request_item_id TEXT NOT NULL REFERENCES request_items(id), result TEXT NOT NULL CHECK (result IN ('arrived','missing','damaged')), note TEXT, by TEXT NOT NULL, at TEXT NOT NULL);
+CREATE TRIGGER count_results_no_update BEFORE UPDATE ON count_results BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TRIGGER count_results_no_delete BEFORE DELETE ON count_results BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TABLE notifications (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, request_item_id TEXT NOT NULL REFERENCES request_items(id), customer_id TEXT REFERENCES customers(id), channel TEXT NOT NULL CHECK (channel IN ('phone','whatsapp','sms','in_person')), template TEXT NOT NULL, body TEXT NOT NULL, by TEXT NOT NULL, at TEXT NOT NULL);
+CREATE INDEX notifications_by_item ON notifications(request_item_id);
+CREATE TRIGGER notifications_no_update BEFORE UPDATE ON notifications BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TRIGGER notifications_no_delete BEFORE DELETE ON notifications BEGIN SELECT RAISE(ABORT, 'append-only'); END;` },
 ];

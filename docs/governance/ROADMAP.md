@@ -46,7 +46,7 @@ Cashier sessions, all sale types, FEFO batch selection (D21), returns and swaps,
 
 ## Phase 5 - Operations (YK base, D5)
 Customer requests, shortages, PO stages, notifications, delivery, tasks, attendance, closings, alerts, AI - on the native stock.
-**Progress:** Sprint 5.1 (in PR): `packages/ops` (migration `ops_0001_requests`) and the shared `StateMachine` in core: customer requests (CR-) and shortages (NQ-) on one 13-state item lifecycle taken from YK, derived header status, cancel with reason, the supplier-cannot-provide flow, claim and assign, comments, timeline, search, my work. Orders and receiving come in 5.2, delivery and pickup in 5.3.
+**Progress:** Sprint 5.1 (merged): `packages/ops` (migration `ops_0001_requests`) and the shared `StateMachine` in core: customer requests (CR-) and shortages (NQ-) on one 13-state item lifecycle taken from YK, derived header status, cancel with reason, the supplier-cannot-provide flow, claim and assign, comments, timeline, search, my work. Sprint 5.2 (in PR): migration `ops_0002`, order stages (ordered, received, counted, entered, labelled, shelved, each stamped with who, when and minutes since the previous one), count results that move the linked request items, and customer notifications recorded by staff (message template, channel, who). Delivery and pickup come in 5.3.
 
 ## Phase 6 - Accounts, HR/payroll, contracts and insurance, report centre
 Daily cash, banks, cheques, chart of accounts and statements; payroll; contracts → insurance claims; the report centre.
