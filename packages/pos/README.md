@@ -26,3 +26,9 @@ Cashier sessions and the sale core for the Hub. Migration `pos_0001_sales` plugs
 - **Customer payment:** `receivePayment` (cash or card with its reference) into the receiver's own open session; cash is added to the drawer's expected cash; never more than the balance.
 - **Return to account:** `refund: { method: 'account' }` on a credit sale, up to what was charged to the account. It is stored in `credit_minor` of a `return` row (swap credit only exists on `swap` rows), which keeps the migration additive.
 
+## Sprint 4.6 (migration `pos_0005`, `closing.ts`)
+- **Session report** (`ClosingService.report`): sales by payment (cash, card, on account, cash on delivery), discounts, returns (cash, card, account, swap credit), voids, customer payments. Reviewers (`drawer.close.review`) also get the drawer part: float, expected, counted, difference, note, latest review. The cashier sees their own closed session without it (blind count stays blind).
+- **Review** (`reviewSession`): a reviewer accepts or escalates a closed session; a difference or an escalation needs a note. Separation of duties: the cashier cannot review their own session, except in a one-person pharmacy where it is allowed and flagged. Append-only; the latest review counts.
+- **Close the day** (`closeDay`): `drawer.close.review`. Every session of the day (and any older one still open) must be closed and every difference accepted (`blockers` tells which). Stores a snapshot of the totals (`day_closings`, final: corrections go forward), a repeat key is safe, and no new session opens on a closed day (`day-closed`). The date is the pharmacy's calendar date (`timeZone`, default Africa/Cairo).
+- **Not here:** cash drops and pay-outs from the drawer (the permission catalogue is locked at 93 and has no key for them; ask the owner if they are needed). Printing the report is in `@o-pharmacy/print` (`printSessionReport`).
+

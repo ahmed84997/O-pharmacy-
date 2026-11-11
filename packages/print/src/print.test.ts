@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Person } from '@o-pharmacy/core';
 import { Hub } from '@o-pharmacy/hub';
 import { BatchService, ItemService, MIGRATIONS } from '@o-pharmacy/inventory';
-import { CustomerService, POS_MIGRATIONS, SaleService } from '@o-pharmacy/pos';
+import { ClosingService, CustomerService, POS_MIGRATIONS, SaleService } from '@o-pharmacy/pos';
 import { MemoryTransport, PRINT_MIGRATIONS, PrintService, SkiaRasterizer, TcpTransport, buildReceipt, code39Modules, dateText, decodeEscpos, ean13Of, ean13check, money, receiptBytes, tspl, zpl, type GrayImage, type PrinterSetup, type Rasterizer } from './index';
 
 const owner: Person = { id: 'owner', roles: ['O'], branchIds: 'all' };
@@ -100,5 +100,14 @@ describe('real rendering and network transport', () => {
     const got: Buffer[] = []; const srv = createServer(c => { c.on('data', d => got.push(d)); }); await new Promise<void>(r => srv.listen(0, '127.0.0.1', r)); const port = (srv.address() as { port: number }).port;
     await new TcpTransport('net', '127.0.0.1', port).send(Buffer.from([1, 2, 3, 4])); await new Promise(r => setTimeout(r, 50)); expect(Buffer.concat(got)).toEqual(Buffer.from([1, 2, 3, 4])); await new Promise<void>(r => srv.close(() => r()));
     await expect(new TcpTransport('net', '127.0.0.1', port, 500).send(Buffer.from([1]))).rejects.toThrow();
+  });
+});
+
+describe('drawer closing report', () => {
+  it('the reviewer copy has expected, counted and difference; the cashier copy is blind; a reprint is a marked copy with a reason', async () => {
+    const s = prep(); const closing = new ClosingService(s.hub, s.sales); const svc = new PrintService(s.hub, s.sales, s.raster, { counter: { transport: s.tr, kind: 'receipt' } }, () => ({ pharmacy: { name: 'صيدلية الشفاء' }, nameOf: id => id }), closing);
+    s.sell(); s.sales.closeSession(ph, s.sid, { countedCashMinor: 4000, note: 'short' }); const rev = await svc.printSessionReport(mgr, { sessionId: s.sid, printer: 'counter' }); expect(rev).toMatchObject({ ok: true, copyNo: 1, drawer: false }); const t = texts(s.raster.last); expect(t).toContain('المتوقع في الدرج'); expect(t).toContain('عجز'); expect(t).toContain('تقرير قفل الدرج');
+    const mine = await svc.printSessionReport(ph, { sessionId: s.sid, printer: 'counter', reason: 'cashier copy' }); expect(mine.copyNo).toBe(2); expect(texts(s.raster.last)).not.toContain('المتوقع'); expect(texts(s.raster.last)).toContain('نسخة مكررة رقم 2');
+    expect(await code(() => svc.printSessionReport(mgr, { sessionId: s.sid, printer: 'counter' }))).toBe('invalid'); expect(await code(() => s.svc.printSessionReport(mgr, { sessionId: s.sid, printer: 'counter' }))).toBe('invalid'); expect(decodeEscpos(s.tr.sent[0]!).commands).not.toContain('drawer');
   });
 });

@@ -111,4 +111,16 @@ CREATE TRIGGER customer_ledger_no_delete BEFORE DELETE ON customer_ledger BEGIN 
 ALTER TABLE sales ADD COLUMN customer_id TEXT REFERENCES customers(id);
 ALTER TABLE sales ADD COLUMN credit_minor INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX sales_by_customer ON sales(customer_id);` },
+  { id: 'pos_0005_closing', sql: `
+CREATE TABLE session_reviews (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, session_id TEXT NOT NULL REFERENCES cashier_sessions(id), decision TEXT NOT NULL CHECK (decision IN ('accepted','escalated')), note TEXT, flagged INTEGER NOT NULL DEFAULT 0, by TEXT NOT NULL, at TEXT NOT NULL
+);
+CREATE INDEX session_reviews_by_session ON session_reviews(session_id, seq);
+CREATE TRIGGER session_reviews_no_update BEFORE UPDATE ON session_reviews BEGIN SELECT RAISE(ABORT, 'reviews are append-only'); END;
+CREATE TRIGGER session_reviews_no_delete BEFORE DELETE ON session_reviews BEGIN SELECT RAISE(ABORT, 'reviews are append-only'); END;
+CREATE TABLE day_closings (
+  id TEXT PRIMARY KEY, business_date TEXT NOT NULL UNIQUE, req_key TEXT NOT NULL UNIQUE, sessions_count INTEGER NOT NULL, totals_json TEXT NOT NULL, note TEXT, closed_by TEXT NOT NULL, closed_at TEXT NOT NULL
+);
+CREATE TRIGGER day_closings_no_update BEFORE UPDATE ON day_closings BEGIN SELECT RAISE(ABORT, 'a closed day cannot change: corrections go forward'); END;
+CREATE TRIGGER day_closings_no_delete BEFORE DELETE ON day_closings BEGIN SELECT RAISE(ABORT, 'a closed day is never deleted'); END;` },
 ];
