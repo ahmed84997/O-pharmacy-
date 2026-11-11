@@ -1,4 +1,4 @@
-name: Packages core and hub (Phase 2) on Windows, macOS, Linux
+name: Packages core, hub, cloud (Phase 2)
 on:
   pull_request:
     paths: ['packages/**', '.github/workflows/core.yml']
@@ -27,6 +27,13 @@ jobs:
           npm test
       - name: hub (node:sqlite ledger, outbox, audit)
         working-directory: packages/hub
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+      - name: cloud (Postgres RLS, tenant keys, device auth, ingest) - Linux and macOS only
+        if: runner.os != 'Windows'
+        working-directory: packages/cloud
         run: |
           npm ci
           npm run typecheck
