@@ -58,4 +58,27 @@ CREATE TRIGGER staff_tasks_closed BEFORE UPDATE ON staff_tasks WHEN OLD.status <
 CREATE TABLE staff_task_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, task_id TEXT NOT NULL REFERENCES staff_tasks(id), action TEXT NOT NULL CHECK (action IN ('created','assigned','done','cancelled')), note TEXT, by TEXT NOT NULL, at TEXT NOT NULL);
 CREATE TRIGGER staff_task_events_no_update BEFORE UPDATE ON staff_task_events BEGIN SELECT RAISE(ABORT, 'append-only'); END;
 CREATE TRIGGER staff_task_events_no_delete BEFORE DELETE ON staff_task_events BEGIN SELECT RAISE(ABORT, 'append-only'); END;` },
+  { id: 'ops_0004_attendance', sql: `
+CREATE TABLE shift_schedules (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, person_id TEXT NOT NULL, weekday INTEGER NOT NULL CHECK (weekday BETWEEN 0 AND 6), start_hm TEXT NOT NULL, end_hm TEXT NOT NULL, effective_from TEXT NOT NULL, set_by TEXT NOT NULL, at TEXT NOT NULL);
+CREATE INDEX shift_schedules_by_person ON shift_schedules(person_id, effective_from);
+CREATE TRIGGER shift_schedules_no_update BEFORE UPDATE ON shift_schedules BEGIN SELECT RAISE(ABORT, 'append-only: set a new schedule'); END;
+CREATE TRIGGER shift_schedules_no_delete BEFORE DELETE ON shift_schedules BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TABLE attendance_days (
+  id TEXT PRIMARY KEY, person_id TEXT NOT NULL, work_date TEXT NOT NULL, planned_start TEXT, planned_end TEXT, check_in TEXT, check_out TEXT,
+  status TEXT NOT NULL CHECK (status IN ('present','absent','leave')), late_minutes INTEGER NOT NULL DEFAULT 0, early_minutes INTEGER NOT NULL DEFAULT 0, worked_minutes INTEGER NOT NULL DEFAULT 0, overtime_minutes INTEGER NOT NULL DEFAULT 0,
+  overtime_status TEXT NOT NULL DEFAULT 'none' CHECK (overtime_status IN ('none','pending','approved','rejected')), overtime_by TEXT, overtime_note TEXT, created_at TEXT NOT NULL, UNIQUE (person_id, work_date)
+);
+CREATE INDEX attendance_days_by_date ON attendance_days(work_date);
+CREATE TRIGGER attendance_days_no_delete BEFORE DELETE ON attendance_days BEGIN SELECT RAISE(ABORT, 'attendance days are never deleted: correct them with a reason'); END;
+CREATE TRIGGER attendance_days_facts BEFORE UPDATE ON attendance_days WHEN NEW.person_id <> OLD.person_id OR NEW.work_date <> OLD.work_date BEGIN SELECT RAISE(ABORT, 'whose day and which day never change'); END;
+CREATE TABLE attendance_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, day_id TEXT NOT NULL REFERENCES attendance_days(id), action TEXT NOT NULL CHECK (action IN ('check_in','check_out','correction','overtime','absent','leave')), before TEXT, after TEXT, reason TEXT, by TEXT NOT NULL, at TEXT NOT NULL);
+CREATE TRIGGER attendance_events_no_update BEFORE UPDATE ON attendance_events BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TRIGGER attendance_events_no_delete BEFORE DELETE ON attendance_events BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TABLE leave_requests (
+  id TEXT PRIMARY KEY, person_id TEXT NOT NULL, work_date TEXT NOT NULL, type TEXT NOT NULL CHECK (type IN ('leave','permission')), reason TEXT NOT NULL CHECK (length(trim(reason)) > 0), status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  created_at TEXT NOT NULL, decided_by TEXT, decided_at TEXT, decision_note TEXT, UNIQUE (person_id, work_date, type)
+);
+CREATE TRIGGER leave_requests_no_delete BEFORE DELETE ON leave_requests BEGIN SELECT RAISE(ABORT, 'requests are never deleted'); END;
+CREATE TRIGGER leave_requests_facts BEFORE UPDATE ON leave_requests WHEN NEW.person_id <> OLD.person_id OR NEW.work_date <> OLD.work_date OR NEW.type <> OLD.type OR NEW.reason <> OLD.reason BEGIN SELECT RAISE(ABORT, 'what was asked never changes'); END;
+CREATE TRIGGER leave_requests_decided BEFORE UPDATE ON leave_requests WHEN OLD.status <> 'pending' BEGIN SELECT RAISE(ABORT, 'a decided request cannot change'); END;` },
 ];
