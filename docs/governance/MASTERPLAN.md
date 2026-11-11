@@ -42,7 +42,7 @@ Editions (D11): **Single pharmacy** and **Chain**. Product name: **O Pharmacy**,
 ## 6. Business model **[LATER]**
 Per-branch subscription by edition plus add-ons (Customer App + Website, insurance, AI, extra devices, dedicated server tier), setup/import fee, training. Competitor prices are not public; collect them in Phase 0 demos. Customer app (D29): we prepare each pharmacy's build from our white-label base; the pharmacy publishes it on its own App Store / Google Play accounts and pays their fees; we charge for the build and its updates.
 
-## 7. Go-to-market [ASSUMPTION - to discuss before Phase 11]
+## 7. Go-to-market [ASSUMPTION - to discuss before Phase 12]
 Pilot at the owner's pharmacy → case study → 3-5 friendly pharmacies → referrals and pharmacist communities → sales and support team. The eStock import service and the customer app are the main sales hooks.
 
 ## 8. Governance
