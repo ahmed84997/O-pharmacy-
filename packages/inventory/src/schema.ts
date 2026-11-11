@@ -126,4 +126,48 @@ CREATE INDEX store_transfers_no ON store_transfers(transfer_no);
 CREATE INDEX store_transfers_key ON store_transfers(req_key);
 CREATE TRIGGER store_transfers_no_update BEFORE UPDATE ON store_transfers BEGIN SELECT RAISE(ABORT, 'transfers are append-only'); END;
 CREATE TRIGGER store_transfers_no_delete BEFORE DELETE ON store_transfers BEGIN SELECT RAISE(ABORT, 'transfers are append-only'); END;` },
+  { id: 'inv_0004_stocktake', sql: `
+CREATE TABLE adjustments (
+  id TEXT PRIMARY KEY,
+  adj_no TEXT NOT NULL UNIQUE,
+  req_key TEXT NOT NULL UNIQUE,
+  item_id TEXT NOT NULL REFERENCES items(id),
+  batch_id TEXT NOT NULL REFERENCES batches(id),
+  store_id TEXT NOT NULL REFERENCES stores(id),
+  qty_base INTEGER NOT NULL CHECK (qty_base <> 0),
+  reason_code TEXT NOT NULL CHECK (reason_code IN ('damaged','lost','found','expired','count_error','other')),
+  note TEXT NOT NULL CHECK (length(trim(note)) > 0),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  by TEXT NOT NULL, at TEXT NOT NULL,
+  decided_by TEXT, decided_at TEXT, decision_note TEXT,
+  flagged INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX adjustments_status ON adjustments(status, at);
+CREATE TRIGGER adjustments_no_delete BEFORE DELETE ON adjustments BEGIN SELECT RAISE(ABORT, 'adjustments are never deleted: reject or reverse'); END;
+CREATE TRIGGER adjustments_decided BEFORE UPDATE ON adjustments WHEN OLD.status <> 'pending' BEGIN SELECT RAISE(ABORT, 'a decided adjustment cannot change'); END;
+CREATE TRIGGER adjustments_facts BEFORE UPDATE ON adjustments WHEN NEW.qty_base <> OLD.qty_base OR NEW.item_id <> OLD.item_id OR NEW.batch_id <> OLD.batch_id OR NEW.store_id <> OLD.store_id OR NEW.by <> OLD.by BEGIN SELECT RAISE(ABORT, 'adjustment facts never change'); END;
+CREATE TABLE stocktakes (
+  id TEXT PRIMARY KEY,
+  st_no TEXT NOT NULL UNIQUE,
+  req_key TEXT NOT NULL UNIQUE,
+  store_id TEXT NOT NULL REFERENCES stores(id),
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','submitted','applied','cancelled')),
+  blind INTEGER NOT NULL DEFAULT 1 CHECK (blind IN (0,1)),
+  note TEXT, created_by TEXT NOT NULL, created_at TEXT NOT NULL,
+  submitted_by TEXT, submitted_at TEXT, decided_by TEXT, decided_at TEXT, cancel_reason TEXT, flagged INTEGER NOT NULL DEFAULT 0
+);
+CREATE TRIGGER stocktakes_no_delete BEFORE DELETE ON stocktakes BEGIN SELECT RAISE(ABORT, 'stocktakes are never deleted: cancel'); END;
+CREATE TRIGGER stocktakes_closed BEFORE UPDATE ON stocktakes WHEN OLD.status IN ('applied','cancelled') BEGIN SELECT RAISE(ABORT, 'a closed stocktake cannot change'); END;
+CREATE TABLE stocktake_lines (
+  id TEXT PRIMARY KEY,
+  stocktake_id TEXT NOT NULL REFERENCES stocktakes(id),
+  item_id TEXT NOT NULL REFERENCES items(id),
+  batch_id TEXT NOT NULL REFERENCES batches(id),
+  snap_qty INTEGER NOT NULL,
+  counted_qty INTEGER CHECK (counted_qty IS NULL OR counted_qty >= 0),
+  sys_at_count INTEGER, counted_by TEXT, counted_at TEXT, applied_qty INTEGER,
+  UNIQUE (stocktake_id, item_id, batch_id)
+);
+CREATE TRIGGER stocktake_lines_no_delete BEFORE DELETE ON stocktake_lines BEGIN SELECT RAISE(ABORT, 'stocktake lines are never deleted'); END;
+CREATE TRIGGER stocktake_lines_closed BEFORE UPDATE ON stocktake_lines WHEN (SELECT status FROM stocktakes WHERE id = OLD.stocktake_id) IN ('applied','cancelled') BEGIN SELECT RAISE(ABORT, 'a closed stocktake cannot change'); END;` },
 ];
