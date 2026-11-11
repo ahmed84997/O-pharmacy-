@@ -7,4 +7,8 @@ Shared foundation used by Hub, Cloud and devices. No I/O, no framework: pure Typ
 - `audit.ts` - append-only hash-chained audit trail; `AuditLog.verify` finds the first tampered entry. No update or delete API.
 - `lifecycle.ts` - No-Delete transitions (active / void / archived) with who, when, why; history is kept on restore.
 
-Next sprints: 2.2 identity, roles, permissions, devices; 2.3 Hub ledger and outbox; 2.4 Cloud (Postgres RLS); 2.5 sync; 2.6 installer and auto-update.
+- `permissions.ts` - permission catalogue (135 keys, one per action) and 9 role templates from the permission matrix; a person holds several roles (union, D23) plus per-person grants and denials; `can(person, key, branch)` with branch scope (Owner all, others own branch, D15); separation of duties with the one-person relaxation. No delete permission exists.
+- `identity.ts` - scrypt secret hashing, user directory (login, lockout after repeated failures, deactivate-never-delete).
+- `devices.ts` - device registry: pending until approved, revoke is final, branch bound, full log.
+
+Next sprints: (2.2 done) 2.2 identity, roles, permissions, devices; 2.3 Hub ledger and outbox; 2.4 Cloud (Postgres RLS); 2.5 sync; 2.6 installer and auto-update.
