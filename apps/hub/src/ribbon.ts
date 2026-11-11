@@ -14,12 +14,12 @@ export const RIBBON: RibbonTab[] = [
     { label: 'التوصيل', items: [C('deliveries', 'توصيل الفواتير', 'truck', 'KeyD', ['home_delivery.create'])] },
     { label: 'نهاية اليوم', items: [C('closing', 'تقفيل الدرج واليوم', 'check', 'KeyL', ['drawer.close.review']), C('eta', 'الفاتورة الإلكترونية', 'file', 'KeyE', ['compliance.eta.view'])] } ] },
   { id: 'inv', label: 'المخزون', key: 'KeyI', groups: [
-    { label: 'الأصناف', items: [C('items2', 'الأصناف والأرصدة', 'box', 'KeyL', ['item.view'], { screen: 'items' }), C('itemcard', 'كارت الصنف والتشغيلات', 'cal', 'KeyB', ['stock.view'], { sprint: '7.3' })] },
-    { label: 'الجرد والمخازن', items: [C('stocktake', 'الجرد والتسويات', 'clip', 'KeyJ', ['stocktake.count', 'stock.adjust'], { sprint: '7.3' }), C('transfer', 'التحويل بين المخازن', 'truck', 'KeyN', ['store.transfer.internal'], { sprint: '7.3' })] },
-    { label: 'الاستيراد', items: [C('import', 'استيراد من eStock', 'file', 'KeyE', ['item.import'], { sprint: '7.3' })] } ] },
+    { label: 'الأصناف', items: [C('items2', 'الأصناف وكارت الصنف', 'box', 'KeyL', ['item.view'], { screen: 'items', primary: true }), C('expiry', 'الصلاحية والنواقص والتقييم', 'cal', 'KeyB', ['expiry.alerts.view', 'stock.view'])] },
+    { label: 'الجرد والمخازن', items: [C('stocktake', 'الجرد والتسويات', 'clip', 'KeyJ', ['stocktake.count', 'stock.adjust', 'stock.adjust.approve']), C('stores', 'المخازن والتحويل', 'truck', 'KeyN', ['store.transfer.internal', 'settings.branch'])] },
+    { label: 'الاستيراد', items: [C('import', 'استيراد من eStock', 'file', 'KeyE', ['item.import'])] } ] },
   { id: 'buy', label: 'المشتريات', key: 'KeyP', groups: [
-    { label: 'الشراء', items: [C('pinv', 'فاتورة مشتريات', 'file', 'KeyP', ['purchase_invoice.create'], { primary: true, sprint: '7.3' }), C('po', 'أوامر الشراء', 'clip', 'KeyO', ['purchase_order.create'], { sprint: '7.3' }), C('pret', 'مرتجع مشتريات', 'undo', 'KeyR', ['purchase_return.create'], { sprint: '7.3' })] },
-    { label: 'الموردون', items: [C('suppliers', 'الموردون', 'users', 'KeyS', ['supplier.view'], { sprint: '7.3' })] } ] },
+    { label: 'الشراء', items: [C('pinv', 'فاتورة مشتريات', 'file', 'KeyP', ['purchase_invoice.create'], { primary: true }), C('po', 'أوامر الشراء', 'clip', 'KeyO', ['purchase_order.create']), C('pret', 'مرتجع مشتريات', 'undo', 'KeyR', ['purchase_return.create'])] },
+    { label: 'الموردون', items: [C('suppliers', 'الموردون', 'users', 'KeyS', ['supplier.view'])] } ] },
   { id: 'cust', label: 'العملاء', key: 'KeyU', groups: [
     { label: 'العملاء', items: [C('customers', 'العملاء والآجل', 'users', 'KeyL', ['customer.view'], { sprint: '7.4' })] } ] },
   { id: 'ops', label: 'العمليات', key: 'KeyO', groups: [
@@ -34,7 +34,7 @@ export const RIBBON: RibbonTab[] = [
   { id: 'rep', label: 'التقارير', key: 'KeyR', groups: [
     { label: 'مركز التقارير', items: [C('reports', 'مركز التقارير', 'chart', 'KeyC', ['report.view'], { primary: true, sprint: '7.5' })] } ] },
   { id: 'adm', label: 'الإدارة', key: 'KeyM', groups: [
-    { label: 'الأمان', items: [C('people', 'المستخدمون والصلاحيات', 'users', 'KeyU', ['user.view']), C('devices', 'الأجهزة', 'shield', 'KeyD', ['device.approve'])] },
+    { label: 'الأمان', items: [C('people', 'المستخدمون والصلاحيات', 'users', 'KeyU', ['user.view']), C('devices', 'الأجهزة', 'shield', 'KeyD', ['device.approve']), C('deleted', 'المحذوفات والموقوف', 'trash', 'KeyR', ['deleted_items.view'])] },
     { label: 'النظام', items: [C('settings', 'الإعدادات', 'gear', 'KeyS', ['settings.branch', 'settings.security']), C('about', 'عن البرنامج', 'file', 'KeyB', ['user.view', 'licence.view'])] } ] },
 ];
 

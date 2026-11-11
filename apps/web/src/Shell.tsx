@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { AppCtx, Icon, ROLE_AR, type Me, type RibbonCmd } from './ui';
-import { About, Home, Items, Settings, Soon } from './screens';
+import { About, Home, Settings, Soon } from './screens';
+import { DeletedScreen, ExpiryScreen, ImportScreen, ItemsScreen, OrdersScreen, PurchaseInvoiceScreen, PurchaseReturnScreen, StocktakeScreen, StoresScreen, SuppliersScreen } from './inv';
 import People from './People';
 import Devices from './Devices';
 import { ClosingScreen, DeliveriesScreen, EtaScreen, HeldScreen, InvoicesScreen, ReturnsScreen, SaleScreen, SessionScreen } from './pos';
@@ -39,7 +40,7 @@ export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () =
   const tip = (code: string) => (tips ? <span className="tip" aria-hidden="true">{AR[code] ?? code.replace('Key', '')}</span> : null);
   const expanded = !collapsed || popup;
   const body = (() => { switch (screen.id) {
-    case 'home': return <Home />; case 'items': return <Items />; case 'people': return <People />; case 'devices': return <Devices />;
+    case 'home': return <Home />; case 'items': return <ItemsScreen />; case 'expiry': return <ExpiryScreen />; case 'stocktake': return <StocktakeScreen />; case 'stores': return <StoresScreen />; case 'import': return <ImportScreen />; case 'pinv': return <PurchaseInvoiceScreen />; case 'po': return <OrdersScreen />; case 'pret': return <PurchaseReturnScreen />; case 'suppliers': return <SuppliersScreen />; case 'deleted': return <DeletedScreen />; case 'people': return <People />; case 'devices': return <Devices />;
     case 'sale': return <SaleScreen />; case 'session': return <SessionScreen />; case 'held': return <HeldScreen />; case 'invoices': return <InvoicesScreen />; case 'returns': return <ReturnsScreen />; case 'deliveries': return <DeliveriesScreen />; case 'closing': return <ClosingScreen />; case 'eta': return <EtaScreen />;
     case 'settings': return <Settings />; case 'about': return <About />; default: return <Soon cmd={screen.cmd} />;
   } })();
