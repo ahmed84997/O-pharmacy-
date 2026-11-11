@@ -4,6 +4,7 @@ import { AppCtx, Icon, ROLE_AR, type Me, type RibbonCmd } from './ui';
 import { About, Home, Items, Settings, Soon } from './screens';
 import People from './People';
 import Devices from './Devices';
+import { ClosingScreen, DeliveriesScreen, EtaScreen, HeldScreen, InvoicesScreen, ReturnsScreen, SaleScreen, SessionScreen } from './pos';
 
 /* physical key -> Arabic letter, so Alt key tips work whichever keyboard layout is active (from the S5 prototype) */
 const AR: Record<string, string> = { KeyQ: 'ض', KeyW: 'ص', KeyE: 'ث', KeyR: 'ق', KeyT: 'ف', KeyY: 'غ', KeyU: 'ع', KeyI: 'ه', KeyO: 'خ', KeyP: 'ح', KeyA: 'ش', KeyS: 'س', KeyD: 'ي', KeyF: 'ب', KeyG: 'ل', KeyH: 'ا', KeyJ: 'ت', KeyK: 'ن', KeyL: 'م', KeyZ: 'ئ', KeyX: 'ء', KeyC: 'ؤ', KeyV: 'ر', KeyB: 'لا', KeyN: 'ى', KeyM: 'ة' };
@@ -39,6 +40,7 @@ export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () =
   const expanded = !collapsed || popup;
   const body = (() => { switch (screen.id) {
     case 'home': return <Home />; case 'items': return <Items />; case 'people': return <People />; case 'devices': return <Devices />;
+    case 'sale': return <SaleScreen />; case 'session': return <SessionScreen />; case 'held': return <HeldScreen />; case 'invoices': return <InvoicesScreen />; case 'returns': return <ReturnsScreen />; case 'deliveries': return <DeliveriesScreen />; case 'closing': return <ClosingScreen />; case 'eta': return <EtaScreen />;
     case 'settings': return <Settings />; case 'about': return <About />; default: return <Soon cmd={screen.cmd} />;
   } })();
 
@@ -50,7 +52,7 @@ export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () =
           <span className="brand" dir="ltr">O <b>Pharmacy</b></span>
           <div className="qat" role="toolbar" aria-label="شريط الوصول السريع">
             <button className="qbtn" title="الرئيسية" onClick={() => go('home')}><Icon n="store" /></button>
-            {perms.has('item.view') && <button className="qbtn" title="الأصناف والأرصدة" onClick={() => go('items')}><Icon n="search" /></button>}
+            {perms.has('sale.create') && <button className="qbtn" title="فاتورة بيع" onClick={() => go('sale')}><Icon n="cart" /></button>}{perms.has('item.view') && <button className="qbtn" title="الأصناف والأرصدة" onClick={() => go('items')}><Icon n="search" /></button>}
             <button className="qbtn" title="اختصارات لوحة المفاتيح (Alt)" onClick={() => setTips(t => (t ? null : 'tabs'))}><Icon n="kbd" /></button>
           </div>
           <span className="muted">{me.pharmacyName}</span>{me.testMode && <span className="tests">نسخة تجربة</span>}<span className="spacer" />

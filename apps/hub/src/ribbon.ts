@@ -7,11 +7,12 @@ const C = (id: string, label: string, icon: string, key: string, perms: string[]
 export const RIBBON: RibbonTab[] = [
   { id: 'home', label: 'الرئيسية', key: 'KeyH', groups: [
     { label: 'البداية', items: [C('home', 'الصفحة الرئيسية', 'store', 'KeyH', ['item.view', 'user.view', 'report.view', 'staff_tasks.my'], { primary: true })] },
-    { label: 'البيع', items: [C('sale', 'فاتورة بيع', 'cart', 'KeyS', ['sale.create'], { sprint: '7.2' }), C('session', 'جلسة الكاشير', 'wallet', 'KeyJ', ['cashier_session.open'], { sprint: '7.2' })] },
+    { label: 'البيع', items: [C('sale', 'فاتورة بيع', 'cart', 'KeyS', ['sale.create']), C('session', 'جلسة الكاشير', 'wallet', 'KeyJ', ['cashier_session.open'])] },
     { label: 'بحث', items: [C('items', 'الأصناف والأرصدة', 'search', 'KeyF', ['item.view'])] } ] },
   { id: 'sales', label: 'المبيعات', key: 'KeyS', groups: [
-    { label: 'الفواتير', items: [C('sale2', 'فاتورة بيع', 'cart', 'KeyS', ['sale.create'], { screen: 'sale', sprint: '7.2' }), C('returns', 'مرتجع واستبدال', 'undo', 'KeyR', ['sale.return', 'sale.swap'], { sprint: '7.2' }), C('held', 'الفواتير المعلّقة', 'pause', 'KeyH', ['sale.hold'], { sprint: '7.2' })] },
-    { label: 'نهاية اليوم', items: [C('closing', 'تقفيل الدرج واليوم', 'check', 'KeyL', ['cashier_session.close', 'drawer.close.review'], { sprint: '7.2' })] } ] },
+    { label: 'الفواتير', items: [C('sale2', 'فاتورة بيع', 'cart', 'KeyS', ['sale.create'], { screen: 'sale' }), C('invoices', 'سجل الفواتير', 'history', 'KeyC', ['sale.create', 'sale.view_own', 'sale.view_all']), C('returns', 'مرتجع واستبدال', 'undo', 'KeyR', ['sale.return', 'sale.swap']), C('held', 'الفواتير المعلّقة', 'pause', 'KeyH', ['sale.hold'])] },
+    { label: 'التوصيل', items: [C('deliveries', 'توصيل الفواتير', 'truck', 'KeyD', ['home_delivery.create'])] },
+    { label: 'نهاية اليوم', items: [C('closing', 'تقفيل الدرج واليوم', 'check', 'KeyL', ['drawer.close.review']), C('eta', 'الفاتورة الإلكترونية', 'file', 'KeyE', ['compliance.eta.view'])] } ] },
   { id: 'inv', label: 'المخزون', key: 'KeyI', groups: [
     { label: 'الأصناف', items: [C('items2', 'الأصناف والأرصدة', 'box', 'KeyL', ['item.view'], { screen: 'items' }), C('itemcard', 'كارت الصنف والتشغيلات', 'cal', 'KeyB', ['stock.view'], { sprint: '7.3' })] },
     { label: 'الجرد والمخازن', items: [C('stocktake', 'الجرد والتسويات', 'clip', 'KeyJ', ['stocktake.count', 'stock.adjust'], { sprint: '7.3' }), C('transfer', 'التحويل بين المخازن', 'truck', 'KeyN', ['store.transfer.internal'], { sprint: '7.3' })] },

@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { api, arabic } from './api';
 import { ChangeSecret } from './App';
 import { Icon, money, useApp, type RibbonCmd } from './ui';
+import Printers from './Printers';
 
 type Dash = { pharmacyName: string | null; items?: number; nearExpiry?: number; people?: number; pendingDevices?: number; suppliers?: number; customers?: number; empty: boolean; testMode: boolean };
-const SPRINTS: [string, string][] = [['7.2', 'الكاشير: البيع والمرتجع والطباعة وتقفيل اليوم'], ['7.3', 'المخزون والمشتريات واستيراد eStock'], ['7.4', 'العملاء والعمليات (الطلبات والنواقص والتوصيل والمهام والحضور)'], ['7.5', 'الحسابات والمرتبات والتأمين ومركز التقارير'], ['7.6', 'تقوية البرنامج: الخدمة والتحديث والنسخ الاحتياطي']];
+const SPRINTS: [string, string][] = [['7.3', 'المخزون والمشتريات واستيراد eStock'], ['7.4', 'العملاء والعمليات (الطلبات والنواقص والتوصيل والمهام والحضور)'], ['7.5', 'الحسابات والمرتبات والتأمين ومركز التقارير'], ['7.6', 'تقوية البرنامج: الخدمة والتحديث والنسخ الاحتياطي']];
 
 export function Home() {
   const { me, go, toast } = useApp(); const [d, setD] = useState<Dash | null>(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
@@ -50,6 +51,7 @@ export function Settings() {
   return (<div style={{ display: 'grid', gap: 16 }}>
     <h2><Icon n="gear" />الإعدادات</h2>
     {can('settings.branch') && <form className="card formgrid" onSubmit={save}><label>اسم الصيدلية<input value={name} onChange={e => setName(e.target.value)} /></label><button className="btn primary">حفظ</button>{err && <p className="err">{err}</p>}</form>}
+    {can('settings.branch') && <Printers />}
     <div className="card"><b>كلمة السر بتاعتي</b><ChangeSecret done={() => toast('اتغيرت كلمة السر')} /></div>
   </div>);
 }

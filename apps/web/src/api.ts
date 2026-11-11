@@ -20,6 +20,7 @@ const MSG: Record<string, string> = {
   forbidden: 'مش مسموح لك بالعملية دي.', 'not-found': 'مش موجود.', duplicate: 'موجود قبل كده.', server: 'حصل خطأ غير متوقع. جرّب تاني.',
 };
 const DETAIL: [RegExp, string][] = [
+  [/note is required when the count differs/, 'العدّ مختلف عن المتوقع: اكتب ملاحظة وانت بتقفل.'], [/reprint needs a reason/, 'النسخة التانية محتاجة سبب.'], [/a note is required/, 'اكتب ملاحظة.'], [/already has an open session|already has an ope/, 'فيه جلسة مفتوحة على الجهاز ده أو باسمك.'], [/cannot review their own/, 'مينفعش تراجع جلستك بنفسك.'], [/held bill/, 'فيه فواتير معلّقة: كمّلها أو الغيها قبل التقفيل.'], [/more than was sold|cannot return more/, 'مينفعش ترجّع أكتر من اللي اتباع.'], [/day cannot close yet/, 'اليوم لسه مينفعش يتقفل.'], [/already closed/, 'اتقفل قبل كده.'],
   [/username taken/, 'اسم المستخدم ده مستخدم قبل كده.'], [/username:/, 'اسم المستخدم: من 3 لـ 32 حرف إنجليزي أو رقم (والنقطة والشرطة مسموحين).'], [/password needs at least (\d+)/, 'كلمة السر لازم تبقى $1 حروف على الأقل.'],
   [/current password is wrong/, 'كلمة السر الحالية غلط.'], [/different password/, 'اختار كلمة سر مختلفة عن القديمة.'], [/at least one active owner/, 'لازم يفضل مالك واحد نشط على الأقل.'], [/only an owner/, 'الحركة دي للمالك بس.'],
   [/cannot deactivate yourself/, 'مينفعش توقف حسابك بنفسك.'], [/cannot revoke the device you are using/, 'مينفعش تلغي الجهاز اللي شغال عليه.'], [/reason is required/, 'اكتب السبب.'], [/name is required/, 'اكتب الاسم.'],

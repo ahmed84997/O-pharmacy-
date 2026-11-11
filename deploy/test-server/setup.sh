@@ -26,6 +26,8 @@ cat > "$B/receive.sh" <<'R'
 set -euo pipefail
 B="$HOME/o-pharmacy"; export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 R="$B/releases/$(date -u +%Y%m%d%H%M%S)"; mkdir -p "$R"; tar -xzf - -C "$R"; test -f "$R/hub.mjs"
+# the receipt pictures need the native canvas for this server's CPU
+if [ -f "$R/package.json" ]; then PATH="$B/node/bin:$PATH" npm install --omit=dev --no-audit --no-fund --prefix "$R" >/dev/null; fi
 ln -sfn "$R" "$B/current"; systemctl --user restart o-pharmacy-hub
 ls -1dt "$B"/releases/* | tail -n +6 | xargs -r rm -rf
 echo "deployed $(basename "$R")"
