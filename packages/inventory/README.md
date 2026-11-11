@@ -12,4 +12,13 @@ Item master for the Hub. The module owns its tables (`inv_0001_items`, plugged i
 - **Alternatives:** same active ingredient, strength and form.
 - **Permissions:** from the matrix: Pharmacist can create and edit items but not set non-drug prices, suspend or archive (those are optional grants); Cashier can only read.
 
+## Batches (Sprint 3.2, `batches.ts`, migration `inv_0002_batches`)
+- **Receive** (`purchase_invoice.create`): creates the batch and the stock movement in one transaction. Same lot + expiry + same prices adds to the batch; other prices raise `price-conflict` for management. A repeated delivery (same key) adds nothing. Expired batches are refused; near-expiry and cost-above-price come back as warnings.
+- **Prices (D14):** a drug batch carries the state public price and the pharmacist price (pharmacist <= public); the item itself has no drug price. Non-drug prices stay on the item (D20) and are per its largest (retail) unit. Money is whole piasters per price unit, rounded half up once per pick.
+- **Facts never change:** price, cost, lot, expiry (database triggers). A mistake is a new batch plus a stock adjustment, so every past sale stays explainable.
+- **FEFO (D21):** `allocate(item, qtyBase)` takes nearest expiry first (ties: received first); expired and quarantined batches are never used; each pick keeps its own price; a chosen batch is allowed but never an expired, held or empty one; a shortage is reported (`missingBase`), never invented. Stock per batch is read from the ledger, so there is no second copy.
+- **Expiry report** (`expiry.alerts.view`): within N days, nearest first, only batches with stock; value at cost only for those who may see cost (matrix rule 1).
+- **Quarantine / release** (`recall.manage`): reason required, logged; the Phase 10 recall process builds on it.
+- Expiry written as month/year means the last day of the month.
+
 Decisions taken in this sprint: default unit for a barcode with no unit named = the largest unit (the retail pack); item kind never changes after creation (archive and create a new item); prices are integer piasters.

@@ -64,4 +64,38 @@ CREATE TRIGGER items_kind_locked BEFORE UPDATE OF kind ON items WHEN NEW.kind <>
 CREATE TRIGGER item_status_log_no_update BEFORE UPDATE ON item_status_log BEGIN SELECT RAISE(ABORT, 'status log is append-only'); END;
 CREATE TRIGGER item_status_log_no_delete BEFORE DELETE ON item_status_log BEGIN SELECT RAISE(ABORT, 'status log is append-only'); END;
 CREATE TRIGGER item_groups_no_delete BEFORE DELETE ON item_groups BEGIN SELECT RAISE(ABORT, 'groups are never deleted'); END;` },
+  { id: 'inv_0002_batches', sql: `
+CREATE TABLE batches (
+  id TEXT PRIMARY KEY,
+  item_id TEXT NOT NULL REFERENCES items(id),
+  lot TEXT NOT NULL CHECK (length(trim(lot)) > 0),
+  expiry TEXT NOT NULL CHECK (expiry GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  price_unit_id TEXT NOT NULL REFERENCES item_units(id),
+  cost_minor INTEGER NOT NULL CHECK (cost_minor >= 0),
+  public_price_minor INTEGER CHECK (public_price_minor IS NULL OR public_price_minor > 0),
+  pharmacist_price_minor INTEGER CHECK (pharmacist_price_minor IS NULL OR pharmacist_price_minor > 0),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','quarantined')),
+  received_at TEXT NOT NULL, received_by TEXT NOT NULL, source_ref TEXT,
+  UNIQUE (item_id, lot, expiry),
+  CHECK (pharmacist_price_minor IS NULL OR public_price_minor IS NOT NULL AND pharmacist_price_minor <= public_price_minor)
+);
+CREATE INDEX batches_item_expiry ON batches(item_id, expiry);
+CREATE TABLE batch_status_log (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id TEXT NOT NULL REFERENCES batches(id),
+  from_status TEXT NOT NULL, to_status TEXT NOT NULL, by TEXT NOT NULL, at TEXT NOT NULL, reason TEXT NOT NULL CHECK (length(trim(reason)) > 0)
+);
+-- a drug batch must carry the state price (D14); services hold no stock
+CREATE TRIGGER batches_drug_price BEFORE INSERT ON batches
+  WHEN (SELECT kind FROM items WHERE id = NEW.item_id) = 'drug' AND NEW.public_price_minor IS NULL
+  BEGIN SELECT RAISE(ABORT, 'a drug batch needs the state public price'); END;
+CREATE TRIGGER batches_no_service BEFORE INSERT ON batches
+  WHEN (SELECT kind FROM items WHERE id = NEW.item_id) = 'service'
+  BEGIN SELECT RAISE(ABORT, 'a service has no batches'); END;
+-- what was sold must stay explainable: prices, lot and expiry never change; a mistake is a new batch plus a stock adjustment
+CREATE TRIGGER batches_facts_locked BEFORE UPDATE OF item_id, lot, expiry, price_unit_id, cost_minor, public_price_minor, pharmacist_price_minor ON batches
+  BEGIN SELECT RAISE(ABORT, 'batch facts never change: receive a new batch'); END;
+CREATE TRIGGER batches_no_delete BEFORE DELETE ON batches BEGIN SELECT RAISE(ABORT, 'batches are never deleted'); END;
+CREATE TRIGGER batch_status_log_no_update BEFORE UPDATE ON batch_status_log BEGIN SELECT RAISE(ABORT, 'batch status log is append-only'); END;
+CREATE TRIGGER batch_status_log_no_delete BEFORE DELETE ON batch_status_log BEGIN SELECT RAISE(ABORT, 'batch status log is append-only'); END;` },
 ];
