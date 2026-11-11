@@ -46,6 +46,10 @@ jobs:
     defaults:
       run:
         shell: bash
+    env:
+      UPDATE_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+      LICENCE_KEY: ${{ secrets.LICENCE_SIGNING_KEY }}
+      UPDATE_BASE_URL: ${{ vars.UPDATE_BASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -56,12 +60,19 @@ jobs:
           (cd packages/print && npm ci)
           (cd apps/hub && npm ci && npm run build)
           (cd apps/web && npm ci && npm run build)
-          mkdir -p apps/desktop/res/hub apps/desktop/res/web apps/desktop/res/node
+          mkdir -p apps/desktop/res/hub apps/desktop/res/web apps/desktop/res/node apps/desktop/res/extra
           cp apps/hub/dist/hub.mjs apps/hub/dist/package.json apps/desktop/res/hub/
           (cd apps/desktop/res/hub && npm install --omit=dev --no-audit --no-fund)
           cp -r apps/web/dist/. apps/desktop/res/web/
           cp "$(node -p process.execPath)" apps/desktop/res/node/node.exe
           node -p "'bundled Node ' + process.version"
+      - name: update and licence keys (public halves derived from the signing secrets; nothing secret is shipped)
+        run: |
+          (cd apps/hub && npx esbuild ../../packages/core/src/update.ts --bundle --platform=node --format=cjs --outfile=../desktop/res/extra/update.cjs --log-level=warning)
+          node -e "require('fs').writeFileSync('apps/desktop/res/extra/update.json', JSON.stringify({ baseUrl: process.env.UPDATE_BASE_URL || '' }))"
+          pub='const c=require("crypto");process.stdout.write(c.createPublicKey(c.createPrivateKey(process.env.K)).export({type:"spki",format:"pem"}))'
+          if [ -n "$UPDATE_KEY" ]; then K="$UPDATE_KEY" node -e "$pub" > apps/desktop/res/extra/update-public.pem; echo "update key: yes"; else echo "::notice::UPDATE_SIGNING_KEY not set: this build cannot update itself"; fi
+          if [ -n "$LICENCE_KEY" ]; then K="$LICENCE_KEY" node -e "$pub" > apps/desktop/res/hub/licence-public.pem; echo "licence key: yes"; else echo "::notice::LICENCE_SIGNING_KEY not set: licences cannot be activated in this build"; fi
       - name: installer (unsigned until the launch, D28)
         working-directory: apps/desktop
         env:
@@ -75,12 +86,30 @@ jobs:
           name: O-Pharmacy-Setup
           path: apps/desktop/release/O-Pharmacy-Setup-*.exe
           retention-days: 30
-      - name: publish the test build (main only)
+      - name: publish the test build and the versioned release (main only)
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          f=$(ls apps/desktop/release/O-Pharmacy-Setup-*.exe)
-          gh release view test-build >/dev/null 2>&1 || gh release create test-build --prerelease --title "Test build (latest main)" --notes "Unsigned test build of the latest main. Not for real data yet."
+          f=$(ls apps/desktop/release/O-Pharmacy-Setup-*.exe); v=$(node -p "require('./apps/desktop/package.json').version")
+          gh release view test-build >/dev/null 2>&1 || gh release create test-build --prerelease --title "Test build (latest main)" --notes "Unsigned test build of the latest main."
           gh release upload test-build "$f" --clobber
-          gh release edit test-build --notes "Unsigned test build of main at ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d)). Not for real data yet."
+          gh release edit test-build --notes "Unsigned test build of main at ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d)), version $v. Not for real data yet."
+          gh release view "v$v" >/dev/null 2>&1 || gh release create "v$v" --prerelease --title "O Pharmacy $v (test)" --notes "Phase 7 test build $v. Unsigned (D28). Install guide: docs/guides/getting-started.md"
+          gh release upload "v$v" "$f" --clobber
+      - name: publish the signed update (main only, when the update secrets exist)
+        if: github.event_name == 'push'
+        env:
+          SSH_KEY: ${{ secrets.DEMO_SSH_KEY }}
+          TARGET: ${{ secrets.DEMO_TARGET }}
+        run: |
+          if [ -z "$UPDATE_KEY" ] || [ -z "$UPDATE_BASE_URL" ] || [ -z "$SSH_KEY" ] || [ -z "$TARGET" ]; then echo "::notice::update channel not set up (UPDATE_SIGNING_KEY, UPDATE_BASE_URL, DEMO_SSH_KEY, DEMO_TARGET): skipped"; exit 0; fi
+          mkdir -p out/updates && cp apps/desktop/release/O-Pharmacy-Setup-*.exe out/updates/O-Pharmacy-Setup.exe
+          node -e "
+          const c=require('crypto'),fs=require('fs'); const b=fs.readFileSync('out/updates/O-Pharmacy-Setup.exe'); const v=require('./apps/desktop/package.json').version;
+          const m={v:1,version:v,channel:'stable',minSupportedVersion:'0.7.0',publishedAt:new Date().toISOString(),rolloutPercent:100,notes:'',artifacts:[{platform:'win32',arch:'x64',url:'O-Pharmacy-Setup.exe',sha256:c.createHash('sha256').update(b).digest('hex'),size:b.length}]};
+          const body=Buffer.from(JSON.stringify(m)); const sig=c.sign(null,body,c.createPrivateKey(process.env.UPDATE_KEY));
+          fs.writeFileSync('out/updates/manifest.txt', body.toString('base64url')+'.'+sig.toString('base64url')); console.log('manifest for',v);"
+          mkdir -p ~/.ssh && printf '%s\n' "$SSH_KEY" > ~/.ssh/demo_key && chmod 600 ~/.ssh/demo_key
+          tar -czf - -C out updates | ssh -i ~/.ssh/demo_key -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$(echo "$TARGET" | tr -d '[:space:]')"
+          echo "published updates/ for $(node -p "require('./apps/desktop/package.json').version")"

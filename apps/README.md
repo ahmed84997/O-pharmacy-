@@ -26,3 +26,8 @@ Settings (environment): `O_DATA_DIR`, `O_PORT` (4870), `O_HOST` (127.0.0.1), `O_
 ## Where to try it (D33)
 - **Pharmacy PC**: the installer from the `test-build` release (Actions builds it on every merge).
 - **Test server**: Oracle Cloud Always Free behind a Cloudflare quick tunnel, deployed on every merge (`deploy-test.yml`, setup in `docs/governance/test-server.md`).
+
+## Desktop housekeeping (Sprint 7.6)
+- The window hides to the tray; the Hub keeps serving the other devices. Start with Windows, network access, restore and update are in the tray menu.
+- Daily database backups by the Hub (`<data>/backups`, 14 kept), restore by the desktop (the current data is kept beside, never deleted).
+- Signed auto-update and licences: `docs/governance/release-and-updates.md`. User guide: `docs/guides/getting-started.md`.

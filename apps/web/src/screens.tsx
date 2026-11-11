@@ -5,7 +5,7 @@ import { Icon, useApp, type RibbonCmd } from './ui';
 import Printers from './Printers';
 
 type Dash = { pharmacyName: string | null; items?: number; nearExpiry?: number; people?: number; pendingDevices?: number; suppliers?: number; customers?: number; empty: boolean; testMode: boolean };
-const SPRINTS: [string, string][] = [['7.5', 'الحسابات والمرتبات والتأمين ومركز التقارير'], ['7.6', 'تقوية البرنامج: الخدمة والتحديث والنسخ الاحتياطي']];
+const SPRINTS: [string, string][] = [['8', 'الـ Pilot: شهر شغل حقيقي في الصيدلية جنب eStock'], ['10', 'تطبيق الموبايل للموظفين (بعد ما الديسكتوب ينضج)']];
 
 export function Home() {
   const { me, go, toast } = useApp(); const [d, setD] = useState<Dash | null>(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
@@ -18,7 +18,7 @@ export function Home() {
     {err && <p className="err">{err}</p>}
     {d && <div className="stats">{card('أصناف نشطة', d.items, 'items')}{card('تشغيلات تنتهي خلال 90 يوم', d.nearExpiry)}{card('موردين', d.suppliers)}{card('عملاء', d.customers)}{card('مستخدمين نشطين', d.people, 'people')}{card('أجهزة مستنية موافقة', d.pendingDevices, 'devices')}</div>}
     {d?.testMode && d.empty && me.person.roles.includes('O') && <div className="card warnbox" style={{ marginTop: 12 }}><p>دي نسخة تجربة وقاعدة البيانات فاضية. تحب تحمّل بيانات تجريبية (أصناف وتشغيلات وموردين وعملاء)؟ بتتعمل من خلال قواعد البرنامج الحقيقية.</p><button className="btn primary" disabled={busy} onClick={() => void seed()}>{busy ? 'بيحمّل...' : 'حمّل البيانات التجريبية'}</button></div>}
-    <div className="card soonbox" style={{ marginTop: 12 }}><b>اللي جاي في Phase 7</b>{SPRINTS.map(([s, t]) => <div key={s}><span className="pill">{s}</span> {t}</div>)}</div>
+    <div className="card soonbox" style={{ marginTop: 12 }}><b>اللي جاي</b>{SPRINTS.map(([s, t]) => <div key={s}><span className="pill">{s}</span> {t}</div>)}</div>
   </div>);
 }
 
@@ -37,7 +37,17 @@ export function Settings() {
   </div>);
 }
 
+type Info = { version: string; branchId: string; testMode: boolean; tenantId: string | null; licence: { state: string; configured: boolean; required: boolean; reason: string | null; edition: string | null; expiresAt: string | null; daysLeft: number | null }; addresses: string[]; backups: { name: string; bytes: number; at: string }[]; lastBackup: string | null };
+const LIC: Record<string, string> = { valid: 'ساري', grace: 'فترة سماح', 'read-only': 'انتهى: البرنامج للقراءة بس', invalid: 'مش متفعّل' };
 export function About() {
-  const { me } = useApp();
-  return (<div className="soonbox"><h2><Icon n="file" />عن البرنامج</h2><div className="card"><p><span dir="ltr">O Pharmacy</span> - الإصدار {me.version} - فرع {me.branchId}{me.testMode ? ' - نسخة تجربة' : ''}</p><p className="muted">الـ Hub شغال على جهاز الصيدلية وبيحفظ كل حاجة محليًا. مفيش حاجة بتتمسح: الإلغاء والإيقاف بيتسجلوا بالسبب.</p></div></div>);
+  const { can, toast, ask } = useApp(); const [i, setI] = useState<Info | null>(null);
+  const load = () => api<Info>('/api/system/info').then(setI, e => toast(arabic(e))); useEffect(() => { void load(); }, []);
+  if (!i) return <p>بيحمّل...</p>;
+  return (<div style={{ display: 'grid', gap: 12, maxWidth: 820 }}><h2><Icon n="file" />عن البرنامج</h2>
+    <div className="card"><p><span dir="ltr">O Pharmacy</span> - الإصدار {i.version} - فرع {i.branchId}{i.testMode ? ' - نسخة تجربة' : ''}</p><p className="muted">الـ Hub شغال على جهاز الصيدلية وبيحفظ كل حاجة محليًا. مفيش حاجة بتتمسح: الإلغاء والإيقاف بيتسجلوا بالسبب.</p>
+      {i.addresses.length > 0 ? <p>الأجهزة التانية في الصيدلية تفتح البرنامج من المتصفح على: {i.addresses.map(a => <span key={a} className="code"> {a} </span>)}</p> : <p className="hint">البرنامج مفتوح للجهاز ده بس. تقدر تسمح لأجهزة الشبكة من أيقونة البرنامج جنب الساعة.</p>}</div>
+    <div className="card" style={{ display: 'grid', gap: 6 }}><b>الترخيص</b><div>{i.licence.configured ? `${LIC[i.licence.state] ?? i.licence.state}${i.licence.expiresAt ? ` - لحد ${i.licence.expiresAt.slice(0, 10)}` : ''}${i.licence.edition ? ` - ${i.licence.edition === 'chain' ? 'سلسلة' : 'صيدلية واحدة'}` : ''}` : 'النسخة دي من غير ترخيص (نسخة تجربة).'}</div>{i.tenantId && <div className="muted">رقم الصيدلية للترخيص: <span className="code">{i.tenantId}</span></div>}{i.licence.configured && can('settings.security') && <div><button className="btn" onClick={() => void ask('الصق كود الترخيص').then(t => { if (t) void api('/api/system/licence', { body: { token: t } }).then(() => { toast('اتفعّل الترخيص'); void load(); }, e => toast(arabic(e))); })}>تفعيل الترخيص</button></div>}</div>
+    {can('settings.security') && <div className="card" style={{ display: 'grid', gap: 6 }}><b>النسخ الاحتياطي</b><div>آخر نسخة: {i.lastBackup ? new Date(i.lastBackup).toLocaleString('en-GB', { timeZone: 'Africa/Cairo' }) : 'لسه'}</div><p className="hint">نسخة كاملة بتتعمل كل يوم لوحدها وبيتحفظ آخر 14 يوم في فولدر البيانات. الاسترجاع من أيقونة البرنامج جنب الساعة.</p><div><button className="btn primary" onClick={() => void api<{ name: string }>('/api/system/backup', { body: {} }).then(r => { toast(`اتعملت النسخة ${r.name}`); void load(); }, e => toast(arabic(e)))}>نسخة احتياطية دلوقتي</button></div>
+      {i.backups.length > 0 && <ul className="muted">{i.backups.slice(0, 10).map(b => <li key={b.name}><span className="code">{b.name}</span> - {(b.bytes / 1048576).toFixed(1)} MB</li>)}</ul>}</div>}
+  </div>);
 }
