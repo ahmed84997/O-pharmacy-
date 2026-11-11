@@ -1,0 +1,52 @@
+name: Deploy demo to Hostinger
+# Merging a change under demo/ to main builds the demo and uploads it to the demo subdomain.
+# The SSH key is restricted on the server to one command (extract an archive into the demo folder), so it cannot do anything else.
+on:
+  push:
+    branches: [main]
+    paths: ['demo/**', '.github/workflows/deploy-demo.yml']
+  workflow_dispatch:
+jobs:
+  deploy:
+    name: Build and upload the demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: demo-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: demo/package-lock.json
+      - name: Tests and build
+        working-directory: demo
+        run: |
+          npm ci
+          npm test
+          npm run build
+          ls -la dist
+      - name: Upload to the demo subdomain (restricted SSH key)
+        env:
+          DEMO_SSH_KEY: ${{ secrets.DEMO_SSH_KEY }}
+          DEMO_TARGET: ${{ secrets.DEMO_TARGET }}
+        run: |
+          if [ -z "$DEMO_SSH_KEY" ] || [ -z "$DEMO_TARGET" ]; then
+            echo "::notice::DEMO_SSH_KEY / DEMO_TARGET are not set yet - upload skipped."
+            exit 0
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEMO_SSH_KEY" > ~/.ssh/demo_key
+          chmod 600 ~/.ssh/demo_key
+          HOST="${DEMO_TARGET#*@}"
+          ssh-keyscan -p 65002 -t ed25519,ecdsa,rsa "$HOST" > ~/.ssh/known_hosts 2>/dev/null
+          for attempt in 1 2 3; do
+            rc=0
+            tar -czf - -C demo/dist . | ssh -i ~/.ssh/demo_key -p 65002 -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=45 "$DEMO_TARGET" demo-upload || rc=$?
+            [ "$rc" -ne 255 ] && exit "$rc"
+            echo "::warning::The server did not answer (attempt $attempt)."
+            [ "$attempt" -lt 3 ] && sleep 30
+          done
+          exit 255
