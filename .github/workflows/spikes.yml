@@ -1,4 +1,4 @@
-name: Phase 0 spikes (S1-S4) on Windows, macOS, Linux
+name: Phase 0 spikes (S1-S6) on Windows, macOS, Linux
 on:
   pull_request:
     paths: ['spikes/**', '.github/workflows/spikes.yml']
@@ -81,3 +81,12 @@ jobs:
           Write-Host "S1-AUTOSTART-RESULT started_by_scheduler=$ok"
           Get-Process hub-health -ErrorAction SilentlyContinue | Stop-Process -Force
           schtasks /delete /tn OPHub /f
+      - name: S6 tenant isolation (embedded PostgreSQL, row-level security, 13 tests)
+        if: runner.os != 'Windows'
+        working-directory: spikes/s6-tenancy
+        run: |
+          npm ci
+          rc=0; node --no-warnings --test isolation.test.mjs > s6.log 2>&1 || rc=$?
+          grep -E "^(# (tests|pass|fail)|not ok|ok)|PostgreSQL" s6.log || true
+          if [ "$rc" != "0" ]; then echo "S6 exit code $rc"; head -c 4000 s6.log; grep -A30 S6-STARTUP s6.log | head -50; fi
+          exit $rc
