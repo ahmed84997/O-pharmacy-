@@ -3,3 +3,4 @@ Header set X-Robots-Tag "noindex, nofollow"
 Header set Cache-Control "no-cache"
 </IfModule>
 Options -Indexes
+DirectoryIndex index.html
