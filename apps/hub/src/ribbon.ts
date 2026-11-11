@@ -27,13 +27,13 @@ export const RIBBON: RibbonTab[] = [
     { label: 'الطلبيات', items: [C('stages', 'مراحل الطلبيات', 'clip', 'KeyS', ['purchase_order.create', 'receiving.verify'])] },
     { label: 'الفريق', items: [C('tasks', 'المهام', 'check', 'KeyT', ['staff_tasks.my', 'staff_tasks.manage']), C('attendance', 'الحضور والإجازات', 'cal', 'KeyA', ['attendance.record_own', 'attendance.approve']), C('alerts', 'التنبيهات', 'bell', 'KeyI', ['notification.view'])] } ] },
   { id: 'acc', label: 'الحسابات', key: 'KeyA', groups: [
-    { label: 'الخزن والبنوك', items: [C('ledger', 'دفتر الخزن والبنوك', 'wallet', 'KeyL', ['ledger.view'], { sprint: '7.5' }), C('cheques', 'الشيكات', 'file', 'KeyC', ['bank_cheque.manage'], { sprint: '7.5' })] },
-    { label: 'العامة', items: [C('books', 'القيود والقوائم المالية', 'chart', 'KeyF', ['statements.view'], { sprint: '7.5' })] },
-    { label: 'التأمين', items: [C('contracts', 'العقود والمطالبات', 'shield', 'KeyI', ['contract.view'], { sprint: '7.5' })] } ] },
+    { label: 'الخزن والبنوك', items: [C('ledger', 'دفتر الخزن والبنوك', 'wallet', 'KeyL', ['ledger.view'], { primary: true }), C('cheques', 'الشيكات', 'file', 'KeyC', ['bank_cheque.manage'])] },
+    { label: 'العامة', items: [C('books', 'القيود والقوائم المالية', 'chart', 'KeyF', ['statements.view'])] },
+    { label: 'التأمين', items: [C('contracts', 'العقود والمطالبات', 'shield', 'KeyI', ['contract.view'])] } ] },
   { id: 'hr', label: 'شئون العاملين', key: 'KeyW', groups: [
-    { label: 'المرتبات', items: [C('payroll', 'المرتبات', 'wallet', 'KeyP', ['payroll.view'], { sprint: '7.5' })] } ] },
+    { label: 'المرتبات', items: [C('payroll', 'المرتبات', 'wallet', 'KeyP', ['payroll.view'])] } ] },
   { id: 'rep', label: 'التقارير', key: 'KeyR', groups: [
-    { label: 'مركز التقارير', items: [C('reports', 'مركز التقارير', 'chart', 'KeyC', ['report.view'], { primary: true, sprint: '7.5' })] } ] },
+    { label: 'مركز التقارير', items: [C('reports', 'مركز التقارير', 'chart', 'KeyC', ['report.view'], { primary: true })] } ] },
   { id: 'adm', label: 'الإدارة', key: 'KeyM', groups: [
     { label: 'الأمان', items: [C('people', 'المستخدمون والصلاحيات', 'users', 'KeyU', ['user.view']), C('devices', 'الأجهزة', 'shield', 'KeyD', ['device.approve']), C('deleted', 'المحذوفات والموقوف', 'trash', 'KeyR', ['deleted_items.view'])] },
     { label: 'النظام', items: [C('settings', 'الإعدادات', 'gear', 'KeyS', ['settings.branch', 'settings.security']), C('about', 'عن البرنامج', 'file', 'KeyB', ['user.view', 'licence.view'])] } ] },

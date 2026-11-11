@@ -42,6 +42,11 @@ export function seedTestData(app: App, owner: Person, o: { staffSecret?: string 
   let staff = 0; if (o.staffSecret) for (const [username, displayName, role] of [['manager', 'مدير الفرع (تجريبي)', 'M'], ['pharmacist', 'صيدلي (تجريبي)', 'P'], ['cashier', 'كاشير (تجريبي)', 'C'], ['storekeeper', 'أمين مخزن (تجريبي)', 'S'], ['accountant', 'محاسب (تجريبي)', 'X']] as const) {
     if (app.hub.db.prepare('SELECT 1 FROM people WHERE username_key=?').get(username)) continue; app.access.create(owner, { username, displayName, secret: o.staffSecret, roles: [role] }); staff++;
   }
+  // money accounts, ledger categories and the chart, an insurance contract on a customer account, pay profiles for the test staff
+  app.money.seedDefaults(owner); app.books.seedChart(owner); app.money.createAccount(owner, { name: 'الخزنة', kind: 'cash', openingMinor: 500000, openingDate: today }); app.money.createAccount(owner, { name: 'البنك', kind: 'bank', openingMinor: 2000000, openingDate: today });
+  const payer = app.customers.create(owner, { name: 'شركة التأمين الطبي (تجريبي)', kind: 'company' }); app.customers.setCreditLimit(owner, payer.id, 5000000, 'حساب شركة التأمين');
+  const ct = app.contracts.create(owner, { name: 'تأمين تجريبي', payerType: 'insurance', customerId: payer.id, validFrom: today, terms: { coveragePercent: 80, approvalAboveMinor: 100000, claimDays: 45 } }); app.contracts.addMember(owner, ct.id, { memberNo: 'M-1001', name: 'عضو تأمين تجريبي' });
+  for (const pr of app.hub.db.prepare("SELECT id FROM people WHERE active=1 AND roles_json NOT LIKE '%\"O\"%'").all()) app.payroll.setProfile(owner, { personId: String(pr.id), baseSalaryMinor: 600000, hoursPerDay: 8, effectiveFrom: endOfMonth(today, -2).slice(0, 8) + '01' });
   app.access.setSetting('test.seeded_at', app.hub.now(), owner.id);
   return { items: items.length, batches: batchCount, suppliers: suppliers.length, customers, invoices, staff };
 }
