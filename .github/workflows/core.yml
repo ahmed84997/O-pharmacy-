@@ -1,4 +1,4 @@
-name: Packages core, hub, cloud (Phase 2)
+name: Packages core, hub, inventory, cloud
 on:
   pull_request:
     paths: ['packages/**', '.github/workflows/core.yml']
@@ -27,6 +27,12 @@ jobs:
           npm test
       - name: hub (node:sqlite ledger, outbox, audit)
         working-directory: packages/hub
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+      - name: inventory (items, units, barcodes, ETA codes)
+        working-directory: packages/inventory
         run: |
           npm ci
           npm run typecheck

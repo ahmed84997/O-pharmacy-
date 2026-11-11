@@ -1,6 +1,6 @@
 import { AuditLog, GENESIS, uuidv7, type AuditEntry } from '@o-pharmacy/core';
 import { DB } from './db';
-import { migrate } from './migrations';
+import { MIGRATIONS, migrate, type Migration } from './migrations';
 
 export interface MovementCmd {
   /** Idempotency key: a device retry or duplicate delivery returns the stored result and writes nothing. */
@@ -20,12 +20,14 @@ export interface OutboxRow { seq: number; id: string; type: string; branchId: st
 export class Hub {
   readonly db: DB;
   private constructor(readonly branchId: string, db: DB, private clock: () => Date) { this.db = db; }
-  static open(branchId: string, path = ':memory:', clock: () => Date = () => new Date()): Hub { const db = new DB(path); migrate(db); return new Hub(branchId, db, clock); }
+  /** `extra` lets a module add the migrations of the tables it owns (they run after the Hub's own, additive and checksum-guarded). */
+  static open(branchId: string, path = ':memory:', clock: () => Date = () => new Date(), extra: Migration[] = []): Hub { const db = new DB(path); migrate(db, [...MIGRATIONS, ...extra]); return new Hub(branchId, db, clock); }
   close(): void { this.db.close(); }
-  private now() { return this.clock().toISOString(); }
+  now(): string { return this.clock().toISOString(); }
 
   // ---- audit (persisted hash chain) ----
-  private audit(actor: string, action: string, entity: string, entityId: string, data: unknown): AuditEntry {
+  /** Modules write business events through these two, inside their own hub.db.tx(...) so data, outbox and audit commit together. */
+  audit(actor: string, action: string, entity: string, entityId: string, data: unknown): AuditEntry {
     const last = this.db.prepare('SELECT * FROM audit ORDER BY seq DESC LIMIT 1').get();
     const log = AuditLog.from(last ? [rowToAudit(last)] : []);
     // AuditLog.from with one entry continues numbering and chain from it
@@ -44,7 +46,7 @@ export class Hub {
   }
 
   // ---- outbox ----
-  private emit(type: string, payload: unknown): void {
+  emit(type: string, payload: unknown): void {
     this.db.prepare('INSERT INTO outbox(id,type,branch_id,payload,created_at) VALUES(?,?,?,?,?)').run(uuidv7(), type, this.branchId, JSON.stringify(payload), this.now());
   }
   outboxPending(limit = 50): OutboxRow[] {

@@ -26,6 +26,7 @@ export const CONFIG_SCHEMA = {
   'sale.allowNegativeStock': { type: 'boolean', default: false, scopes: ['tenant', 'branch'], description: 'Sell with no recorded stock' },
   'security.separationOfDuties': { type: 'boolean', default: true, scopes: ['tenant'], description: 'Maker and approver must differ' },
   'security.hideCostFromPharmacist': { type: 'boolean', default: true, scopes: ['tenant'], description: 'Cost and profit hidden from the Pharmacist role' },
+  'items.etaCodeRequired': { type: 'boolean', default: false, scopes: ['tenant'], description: 'Items need an ETA item code before they can be sold (turn on when e-receipt starts)' },
   'stock.expiryWarningDays': { type: 'integer', default: 90, min: 1, max: 730, scopes: ['tenant', 'branch'], description: 'Near-expiry window' },
   'device.printer.paperWidthMm': { type: 'enum', default: '80', options: ['58', '80'], scopes: ['device'], description: 'Receipt paper width' },
   'sync.intervalSeconds': { type: 'integer', default: 30, min: 5, max: 3600, scopes: ['tenant', 'device'], description: 'Hub to Cloud sync interval' },
