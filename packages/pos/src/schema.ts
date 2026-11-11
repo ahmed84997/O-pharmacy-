@@ -68,4 +68,23 @@ CREATE TABLE sale_deliveries (
 CREATE TRIGGER sale_deliveries_no_delete BEFORE DELETE ON sale_deliveries BEGIN SELECT RAISE(ABORT, 'deliveries are never deleted'); END;
 CREATE TRIGGER sale_deliveries_final BEFORE UPDATE ON sale_deliveries WHEN OLD.status IN ('delivered','failed') BEGIN SELECT RAISE(ABORT, 'a finished delivery cannot change'); END;
 CREATE TRIGGER sale_deliveries_facts BEFORE UPDATE ON sale_deliveries WHEN NEW.sale_id <> OLD.sale_id OR NEW.name <> OLD.name OR NEW.phone <> OLD.phone OR NEW.address <> OLD.address BEGIN SELECT RAISE(ABORT, 'delivery details never change'); END;` },
+  { id: 'pos_0003_returns_swaps', sql: `
+ALTER TABLE sales ADD COLUMN swap_credit_minor INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE sale_returns (
+  id TEXT PRIMARY KEY, return_no TEXT NOT NULL UNIQUE, req_key TEXT NOT NULL UNIQUE, sale_id TEXT NOT NULL REFERENCES sales(id), session_id TEXT NOT NULL REFERENCES cashier_sessions(id),
+  kind TEXT NOT NULL CHECK (kind IN ('return','swap')), reason_code TEXT NOT NULL CHECK (reason_code IN ('wrong_item','changed_mind','damaged','doctor_changed','other')), note TEXT,
+  total_minor INTEGER NOT NULL CHECK (total_minor >= 0), cash_minor INTEGER NOT NULL DEFAULT 0, card_minor INTEGER NOT NULL DEFAULT 0, credit_minor INTEGER NOT NULL DEFAULT 0, card_ref TEXT,
+  swap_sale_no TEXT, by TEXT NOT NULL, at TEXT NOT NULL, CHECK (cash_minor + card_minor + credit_minor = total_minor)
+);
+CREATE INDEX sale_returns_by_sale ON sale_returns(sale_id);
+CREATE INDEX sale_returns_by_session ON sale_returns(session_id);
+CREATE TRIGGER sale_returns_no_update BEFORE UPDATE ON sale_returns BEGIN SELECT RAISE(ABORT, 'returns are append-only'); END;
+CREATE TRIGGER sale_returns_no_delete BEFORE DELETE ON sale_returns BEGIN SELECT RAISE(ABORT, 'returns are append-only'); END;
+CREATE TABLE sale_return_lines (
+  id TEXT PRIMARY KEY, return_id TEXT NOT NULL REFERENCES sale_returns(id), sale_line_id TEXT NOT NULL REFERENCES sale_lines(id), item_id TEXT NOT NULL REFERENCES items(id), batch_id TEXT,
+  qty_base INTEGER NOT NULL CHECK (qty_base > 0), refund_minor INTEGER NOT NULL CHECK (refund_minor >= 0), store_id TEXT, condition TEXT NOT NULL CHECK (condition IN ('resellable','damaged'))
+);
+CREATE INDEX sale_return_lines_by_line ON sale_return_lines(sale_line_id);
+CREATE TRIGGER sale_return_lines_no_update BEFORE UPDATE ON sale_return_lines BEGIN SELECT RAISE(ABORT, 'returns are append-only'); END;
+CREATE TRIGGER sale_return_lines_no_delete BEFORE DELETE ON sale_return_lines BEGIN SELECT RAISE(ABORT, 'returns are append-only'); END;` },
 ];

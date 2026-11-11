@@ -16,7 +16,7 @@ export interface SaleInput {
   /** Home delivery: what is not paid now is cash on delivery, collected later with collectDelivery. */
   delivery?: DeliveryInput; fromHold?: string;
 }
-export interface SaleResult { id: string; saleNo: string; totalMinor: number; tenderedMinor: number; changeMinor: number; discountMinor: number; codMinor: number; lines: number; replay: boolean }
+export interface SaleResult { creditMinor?: number; id: string; saleNo: string; totalMinor: number; tenderedMinor: number; changeMinor: number; discountMinor: number; codMinor: number; lines: number; replay: boolean }
 export interface CloseResult { closed: true; expectedMinor?: number; countedMinor?: number; diffMinor?: number }
 
 const div = (n: number, d: number) => Math.floor((2 * n + d) / (2 * d));
@@ -26,7 +26,7 @@ export class SaleService {
   constructor(private hub: Hub, private items: ItemService, private batches: BatchService, private o: { allowNegative?: () => boolean; maxDiscountPct?: () => number } = {}) {}
   private get db() { return this.hub.db; }
   private need(a: Person, perm: string): void { if (!can(a, perm, this.hub.branchId)) throw new PosError('forbidden', `missing permission ${perm}`); }
-  private next(k: string, prefix: string): string {
+  /** @internal */ next(k: string, prefix: string): string {
     const n = Number(this.db.prepare('SELECT v FROM pos_counters WHERE k=?').get(k)?.v ?? 0) + 1;
     this.db.prepare('INSERT INTO pos_counters(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v').run(k, n); return `${prefix}-${String(n).padStart(6, '0')}`;
   }
@@ -46,9 +46,9 @@ export class SaleService {
       return { id, sessionNo: no, replay: false };
     });
   }
-  private session(id: string) { const r = this.db.prepare('SELECT * FROM cashier_sessions WHERE id=?').get(id); if (!r) throw new PosError('not-found', `session ${id}`); return r; }
+  /** @internal */ session(id: string) { const r = this.db.prepare('SELECT * FROM cashier_sessions WHERE id=?').get(id); if (!r) throw new PosError('not-found', `session ${id}`); return r; }
   /** Cash that should be in the drawer: the float plus the cash payments of posted sales (change already given back is not counted). Card and cash-on-delivery are not in the drawer. */
-  private expected(id: string, float: number): number { return float + Number(this.db.prepare("SELECT COALESCE(SUM(p.amount_minor),0) t FROM sale_payments p JOIN sales s ON s.id = p.sale_id WHERE p.session_id=? AND p.method='cash' AND s.status='posted'").get(id)!.t); }
+  private expected(id: string, float: number): number { return float + Number(this.db.prepare("SELECT COALESCE(SUM(p.amount_minor),0) t FROM sale_payments p JOIN sales s ON s.id = p.sale_id WHERE p.session_id=? AND p.method='cash' AND s.status='posted'").get(id)!.t) - Number(this.db.prepare("SELECT COALESCE(SUM(cash_minor),0) t FROM sale_returns WHERE session_id=?").get(id)!.t); }
   /** The cashier counts the drawer without seeing the expected amount; only reviewers (`drawer.close.review`) get expected and difference back. A difference needs a note. */
   closeSession(actor: Person, id: string, c: { countedCashMinor: number; note?: string }): CloseResult {
     this.need(actor, 'cashier_session.close'); if (!Number.isInteger(c.countedCashMinor) || c.countedCashMinor < 0) throw new PosError('invalid', 'counted cash must be whole piasters, zero or more');
@@ -73,7 +73,9 @@ export class SaleService {
 
   // ---------- sale ----------
   /** One sale in ONE transaction: stock leaves the nearest-expiry batches first (each at its own price), discounts and money are whole piasters (rounded half up once per batch pick), payments (cash, card, or cash on delivery) add up to the total, the ledger and the sale agree or nothing is written. */
-  createSale(actor: Person, s: SaleInput): SaleResult {
+  createSale(actor: Person, s: SaleInput): SaleResult { return this.createSaleCore(actor, s, 0); }
+  /** @internal swap credit (the refund value of the returned goods) can only come from ReturnService.swap. */
+  createSaleCore(actor: Person, s: SaleInput, swapCreditMax: number): SaleResult & { creditMinor: number } {
     this.need(actor, 'sale.create'); if (!s.lines?.length) throw new PosError('invalid', 'a sale needs at least one line');
     const pays: PaymentInput[] = s.payments ?? (s.cashMinor !== undefined ? [{ method: 'cash', amountMinor: s.cashMinor }] : []);
     for (const p of pays) { if (!Number.isInteger(p.amountMinor) || p.amountMinor < 0) throw new PosError('invalid', 'payments must be whole piasters'); if (p.method === 'card' && !p.ref?.trim()) throw new PosError('invalid', 'a card payment needs its approval reference'); }
@@ -83,7 +85,7 @@ export class SaleService {
     const maxBp = (this.o.maxDiscountPct?.() ?? 5) * 100;
     return this.db.tx(() => {
       const prior = this.db.prepare('SELECT * FROM sales WHERE req_key=?').get(s.key);
-      if (prior) { const cod = this.db.prepare("SELECT COALESCE(SUM(amount_minor),0) c FROM sale_payments WHERE sale_id=? AND method='cod'").get(String(prior.id))!; return { id: String(prior.id), saleNo: String(prior.sale_no), totalMinor: Number(prior.total_minor), tenderedMinor: Number(prior.tendered_minor), changeMinor: Number(prior.change_minor), discountMinor: Number(prior.discount_minor), codMinor: Number(cod.c), lines: Number(this.db.prepare('SELECT COUNT(DISTINCT line_no) c FROM sale_lines WHERE sale_id=?').get(String(prior.id))!.c), replay: true }; }
+      if (prior) { const cod = this.db.prepare("SELECT COALESCE(SUM(amount_minor),0) c FROM sale_payments WHERE sale_id=? AND method='cod'").get(String(prior.id))!; return { creditMinor: Number(prior.swap_credit_minor), id: String(prior.id), saleNo: String(prior.sale_no), totalMinor: Number(prior.total_minor), tenderedMinor: Number(prior.tendered_minor), changeMinor: Number(prior.change_minor), discountMinor: Number(prior.discount_minor), codMinor: Number(cod.c), lines: Number(this.db.prepare('SELECT COUNT(DISTINCT line_no) c FROM sale_lines WHERE sale_id=?').get(String(prior.id))!.c), replay: true }; }
       const sess = this.session(s.sessionId); if (sess.status !== 'open') throw new PosError('session', 'the session is closed'); if (String(sess.user_id) !== actor.id) throw new PosError('session', 'this session belongs to another cashier');
       if (s.fromHold) { const h = this.db.prepare('SELECT * FROM held_bills WHERE id=?').get(s.fromHold); if (!h) throw new PosError('not-found', 'held bill'); if (h.status !== 'open') throw new PosError('state', 'that held bill is already closed'); if (String(h.session_id) !== s.sessionId) throw new PosError('session', 'the held bill belongs to another session'); this.need(actor, 'sale.resume'); }
       const id = uuidv7(), no = this.next('sale', 'S'); const rows: unknown[][] = []; let gross = 0, discount = 0; const short: { line: number; itemId: string; missingBase: number }[] = [];
@@ -119,17 +121,17 @@ export class SaleService {
         });
       });
       if (short.length) throw new PosError('insufficient', 'not enough stock to sell', { short });
-      const total = gross - discount + fee; const card = pays.filter(p => p.method === 'card').reduce((a, p) => a + p.amountMinor, 0); const cashIn = pays.filter(p => p.method === 'cash').reduce((a, p) => a + p.amountMinor, 0);
-      if (card > total) throw new PosError('invalid', 'the card payment is more than the total', { totalMinor: total }); const due = total - card; const cashApplied = Math.min(cashIn, due); const change = cashIn - cashApplied; const cod = due - cashApplied;
+      const total = gross - discount + fee; const credit = Math.min(swapCreditMax, total); const card = pays.filter(p => p.method === 'card').reduce((a, p) => a + p.amountMinor, 0); const cashIn = pays.filter(p => p.method === 'cash').reduce((a, p) => a + p.amountMinor, 0);
+      if (card > total - credit) throw new PosError('invalid', 'the card payment is more than the total', { totalMinor: total - credit }); const due = total - credit - card; const cashApplied = Math.min(cashIn, due); const change = cashIn - cashApplied; const cod = due - cashApplied;
       if (cod > 0 && !s.delivery) throw new PosError('underpaid', 'the payments are less than the total', { totalMinor: total });
-      const now = this.hub.now(); this.db.prepare('INSERT INTO sales(id,sale_no,req_key,session_id,total_minor,tendered_minor,change_minor,created_by,created_at,gross_minor,discount_minor,delivery_fee_minor,channel) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, no, s.key, s.sessionId, total, cashIn, change, actor.id, now, gross, discount, fee, s.delivery ? 'home_delivery' : 'counter');
+      const now = this.hub.now(); this.db.prepare('INSERT INTO sales(id,sale_no,req_key,session_id,total_minor,tendered_minor,change_minor,created_by,created_at,gross_minor,discount_minor,delivery_fee_minor,channel,swap_credit_minor) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, no, s.key, s.sessionId, total, cashIn, change, actor.id, now, gross, discount, fee, s.delivery ? 'home_delivery' : 'counter', credit);
       for (const r of rows) this.db.prepare('INSERT INTO sale_lines(id,sale_id,line_no,pick_no,item_id,batch_id,req_qty,req_unit,qty_base,price_unit_factor,unit_price_minor,amount_minor,cost_amount_minor,movement_id,discount_minor) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(...r);
       const pay = (method: string, sessionId: string | null, amount: number, tendered: number, chg: number, ref: string | null) => this.db.prepare('INSERT INTO sale_payments(id,sale_id,session_id,method,amount_minor,tendered_minor,change_minor,ref,by,at) VALUES(?,?,?,?,?,?,?,?,?,?)').run(uuidv7(), id, sessionId, method, amount, tendered, chg, ref, actor.id, now);
       if (cashApplied > 0) pay('cash', s.sessionId, cashApplied, cashIn, change, null); if (card > 0) pay('card', s.sessionId, card, 0, 0, pays.flatMap(p => (p.method === 'card' ? [p.ref.trim()] : []))[0] ?? null); if (cod > 0) pay('cod', null, cod, 0, 0, null);
       if (s.delivery) this.db.prepare('INSERT INTO sale_deliveries(sale_id,name,phone,address,note,status_at,status_by) VALUES(?,?,?,?,?,?,?)').run(id, s.delivery.name.trim(), s.delivery.phone.trim(), s.delivery.address.trim(), s.delivery.note ?? null, now, actor.id);
       if (s.fromHold) this.db.prepare("UPDATE held_bills SET status='used', closed_at=?, sale_no=? WHERE id=?").run(now, no, s.fromHold);
       this.hub.audit(actor.id, 'sale.posted', 'sale', no, { sessionId: s.sessionId, totalMinor: total, discountMinor: discount, lines: s.lines.length, channel: s.delivery ? 'home_delivery' : 'counter', cod }); this.hub.emit('sale.posted', { saleNo: no, sessionNo: String(sess.session_no), totalMinor: total, discountMinor: discount, cardMinor: card, codMinor: cod, lines: s.lines.length });
-      return { id, saleNo: no, totalMinor: total, tenderedMinor: cashIn, changeMinor: change, discountMinor: discount, codMinor: cod, lines: s.lines.length, replay: false };
+      return { id, saleNo: no, totalMinor: total, tenderedMinor: cashIn, changeMinor: change, discountMinor: discount, codMinor: cod, lines: s.lines.length, replay: false, creditMinor: credit };
     });
   }
   /** Which sellable stores give this batch's quantity (main store first); a batch spread over several stores is drawn from each. */
@@ -146,6 +148,7 @@ export class SaleService {
       const sale = this.db.prepare('SELECT * FROM sales WHERE sale_no=?').get(saleNo); if (!sale) throw new PosError('not-found', saleNo); if (sale.status !== 'posted') throw new PosError('state', 'already void');
       if (this.session(String(sale.session_id)).status !== 'open') throw new PosError('state', 'the cashier session is closed: use a return instead');
       if (this.db.prepare("SELECT 1 FROM sale_payments p JOIN cashier_sessions c ON c.id = p.session_id WHERE p.sale_id=? AND c.status='closed'").get(String(sale.id))) throw new PosError('state', 'money for this sale is already in a closed session: use a return instead');
+      if (this.db.prepare('SELECT 1 FROM sale_returns WHERE sale_id=?').get(String(sale.id))) throw new PosError('state', 'part of this sale was returned: it cannot be voided');
       const dv = this.db.prepare('SELECT status FROM sale_deliveries WHERE sale_id=?').get(String(sale.id)); if (dv && dv.status === 'delivered') throw new PosError('state', 'the order was delivered: use a return instead');
       for (const mv of this.db.prepare("SELECT id FROM movements WHERE ref=? AND kind='sale' ORDER BY rowid").all(saleNo)) { const m = this.hub.reverse(`VOID:${saleNo}:${String(mv.id)}`, String(mv.id), actor.id, `void ${saleNo}: ${reason.trim()}`); if (!m.ok) throw new PosError('state', `cannot reverse a movement (${m.reason})`); }
       this.db.prepare("UPDATE sales SET status='void', void_by=?, void_at=?, void_reason=? WHERE id=?").run(actor.id, this.hub.now(), reason.trim(), String(sale.id));
@@ -216,8 +219,8 @@ export class SaleService {
     if (!all && String(h.created_by) !== actor.id) throw new PosError('forbidden', 'you may only see your own sales'); const cost = can(actor, 'stock.cost.view', this.hub.branchId);
     const lines = this.db.prepare('SELECT l.*, i.name_ar, b.lot, b.expiry FROM sale_lines l JOIN items i ON i.id=l.item_id LEFT JOIN batches b ON b.id=l.batch_id WHERE l.sale_id=? ORDER BY l.line_no, l.pick_no').all(String(h.id)).map(l => ({ lineNo: Number(l.line_no), pickNo: Number(l.pick_no), itemId: String(l.item_id), itemName: String(l.name_ar), batchId: (l.batch_id as string) ?? null, lot: (l.lot as string) ?? null, expiry: (l.expiry as string) ?? null, reqQty: Number(l.req_qty), reqUnit: String(l.req_unit), qtyBase: Number(l.qty_base), unitPriceMinor: Number(l.unit_price_minor), priceUnitFactor: Number(l.price_unit_factor), amountMinor: Number(l.amount_minor), discountMinor: Number(l.discount_minor), costMinor: cost ? Number(l.cost_amount_minor) : null }));
     const payments = this.db.prepare('SELECT method, amount_minor, ref, session_id FROM sale_payments WHERE sale_id=? ORDER BY rowid').all(String(h.id)).map(p => ({ method: String(p.method), amountMinor: Number(p.amount_minor), ref: (p.ref as string) ?? null }));
-    const dl = this.db.prepare('SELECT * FROM sale_deliveries WHERE sale_id=?').get(String(h.id));
-    return { saleNo, status: String(h.status), channel: String(h.channel), grossMinor: Number(h.gross_minor), discountMinor: Number(h.discount_minor), deliveryFeeMinor: Number(h.delivery_fee_minor), payments, delivery: dl ? { name: String(dl.name), phone: String(dl.phone), address: String(dl.address), status: String(dl.status), agent: (dl.agent as string) ?? null } : null, sessionId: String(h.session_id), totalMinor: Number(h.total_minor), tenderedMinor: Number(h.tendered_minor), changeMinor: Number(h.change_minor), createdBy: String(h.created_by), createdAt: String(h.created_at), voidReason: (h.void_reason as string) ?? null, lines, profitMinor: cost && h.status === 'posted' ? Number(h.total_minor) - Number(h.delivery_fee_minor) - lines.reduce((s, l) => s + (l.costMinor ?? 0), 0) : null };
+    const dl = this.db.prepare('SELECT * FROM sale_deliveries WHERE sale_id=?').get(String(h.id)); const returned = Number(this.db.prepare('SELECT COALESCE(SUM(total_minor),0) t FROM sale_returns WHERE sale_id=?').get(String(h.id))!.t);
+    return { saleNo, returnedMinor: returned, swapCreditMinor: Number(h.swap_credit_minor), status: String(h.status), channel: String(h.channel), grossMinor: Number(h.gross_minor), discountMinor: Number(h.discount_minor), deliveryFeeMinor: Number(h.delivery_fee_minor), payments, delivery: dl ? { name: String(dl.name), phone: String(dl.phone), address: String(dl.address), status: String(dl.status), agent: (dl.agent as string) ?? null } : null, sessionId: String(h.session_id), totalMinor: Number(h.total_minor), tenderedMinor: Number(h.tendered_minor), changeMinor: Number(h.change_minor), createdBy: String(h.created_by), createdAt: String(h.created_at), voidReason: (h.void_reason as string) ?? null, lines, profitMinor: cost && h.status === 'posted' ? Number(h.total_minor) - Number(h.delivery_fee_minor) - lines.reduce((s, l) => s + (l.costMinor ?? 0), 0) : null };
   }
   sales(actor: Person, o: { sessionId?: string; status?: 'posted' | 'void' } = {}) {
     const all = can(actor, 'sale.view_all', this.hub.branchId); if (!all) this.need(actor, 'sale.view_own'); const w: string[] = []; const a: unknown[] = []; if (!all) { w.push('created_by=?'); a.push(actor.id); } if (o.sessionId) { w.push('session_id=?'); a.push(o.sessionId); } if (o.status) { w.push('status=?'); a.push(o.status); }
