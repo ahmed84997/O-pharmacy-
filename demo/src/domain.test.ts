@@ -252,3 +252,74 @@ describe('shortage to purchase draft (Sprint 1.2)', () => {
   });
   it('unknown item gives no draft', () => { expect(draftLineFor(base(), 'nope')).toBeNull(); });
 });
+
+import { restoreSale, restoreItem, requestTransfer, advanceTransfer, salesReport, expiryReport, shortagesReport, toCsv } from './domain';
+
+describe('restore (Sprint 1.3)', () => {
+  const db0 = base(); const para = byName(db0, 'باراسيتامول 500');
+  const sold = saveSale(db0, { wants: [w(para.id, 2)], type: 'cash', customerId: 'c0', role: 'cashier', now: NOW }); if (!sold.ok) throw new Error('setup');
+  const voided = voidSale(sold.db, sold.invoice.id, 'خطأ', 'manager', NOW); if (!voided.ok) throw new Error('setup');
+  it('management restores a voided invoice and stock goes out again; history stays', () => {
+    const r = restoreSale(voided.db, sold.invoice.id, 'owner', NOW); if (!r.ok) throw new Error(r.error);
+    expect(total(r.db)).toBe(total(sold.db));
+    expect(r.db.invoices.find(i => i.id === sold.invoice.id)).toMatchObject({ status: 'saved', restoredBy: 'owner', voidReason: 'خطأ' });
+  });
+  it('refuses for staff, for a non-void invoice, and when the stock is gone', () => {
+    expect(restoreSale(voided.db, sold.invoice.id, 'pharmacist', NOW)).toMatchObject({ ok: false, error: 'forbidden' });
+    expect(restoreSale(sold.db, sold.invoice.id, 'owner', NOW)).toMatchObject({ ok: false, error: 'not-void' });
+    const gone = { ...voided.db, batches: voided.db.batches.map(b => ({ ...b, qty: 0 })) };
+    expect(restoreSale(gone, sold.invoice.id, 'owner', NOW)).toMatchObject({ ok: false, error: 'insufficient-stock' });
+  });
+  it('a restored credit invoice puts the balance back', () => {
+    const c = db0.customers.find(x => x.kind === 'credit' && !x.suspended && x.limit - x.balance > 500)!;
+    const s = saveSale(db0, { wants: [w(para.id, 1)], type: 'credit', customerId: c.id, role: 'pharmacist', now: NOW }); if (!s.ok) throw new Error('x');
+    const v = voidSale(s.db, s.invoice.id, 'r', 'owner', NOW); if (!v.ok) throw new Error('x');
+    const r = restoreSale(v.db, s.invoice.id, 'owner', NOW); if (!r.ok) throw new Error(r.error);
+    expect(r.db.customers.find(x => x.id === c.id)!.balance).toBeCloseTo(c.balance + s.invoice.net, 2);
+  });
+  it('an archived item is restored by management only', () => {
+    const s = db0.items.find(i => i.suspended)!;
+    expect(restoreItem(db0, s.id, 'cashier')).toMatchObject({ ok: false, error: 'forbidden' });
+    const r = restoreItem(db0, s.id, 'manager'); if (!r.ok) throw new Error(r.error);
+    expect(r.db.items.find(i => i.id === s.id)!.suspended).toBe(false);
+  });
+});
+
+describe('branch transfer request (Sprint 1.3)', () => {
+  const db0 = base(); const item = db0.items.find(i => i.otherBranchQty >= 3)!;
+  it('requests only what the other branch has, then moves through the chain; stock arrives only when received', () => {
+    expect(requestTransfer(db0, { itemId: item.id, qtyPack: item.otherBranchQty + 1, role: 'manager', now: NOW })).toMatchObject({ ok: false, error: 'other-branch-short' });
+    expect(requestTransfer(db0, { itemId: item.id, qtyPack: 0, role: 'manager', now: NOW })).toMatchObject({ ok: false, error: 'bad-line' });
+    let r = requestTransfer(db0, { itemId: item.id, qtyPack: 3, role: 'manager', now: NOW }); if (!r.ok) throw new Error(r.error);
+    let db = r.db; const id = r.transfer.id; const before = stockOf(db, item.id);
+    for (const st of ['accepted', 'dispatched'] as const) { const a = advanceTransfer(db, id, 'manager', NOW); if (!a.ok) throw new Error(a.error); db = a.db; expect(db.transfers[0].status).toBe(st); }
+    expect(db.items.find(i => i.id === item.id)!.otherBranchQty).toBe(item.otherBranchQty - 3); expect(stockOf(db, item.id)).toBe(before);
+    const rec = advanceTransfer(db, id, 'manager', NOW); if (!rec.ok) throw new Error(rec.error); db = rec.db;
+    expect(stockOf(db, item.id)).toBe(before + 3 * item.perPack); expect(db.transfers[0].log.map(l => l.status)).toEqual(['requested', 'accepted', 'dispatched', 'received']);
+    expect(advanceTransfer(db, id, 'manager', NOW)).toMatchObject({ ok: false, error: 'already-done' });
+  });
+});
+
+describe('report centre (Sprint 1.3)', () => {
+  const db = base();
+  it('sales by day groups, sums and ignores void unless asked', () => {
+    const rows = salesReport(db, { from: '2000-01-01', to: '2100-01-01', group: 'day' });
+    expect(rows.reduce((s, r) => s + r.count, 0)).toBe(150); expect(rows[0].key >= rows.at(-1)!.key).toBe(true);
+    const total = rows.reduce((s, r) => s + r.net, 0); expect(total).toBeCloseTo(db.invoices.reduce((s, i) => s + i.net, 0), 1);
+    const para = byName(db, 'باراسيتامول 500'); const s = saveSale(db, { wants: [w(para.id, 1)], type: 'cash', customerId: 'c0', role: 'cashier', now: TODAY + 'T12:30:00.000Z' }); if (!s.ok) throw new Error('x');
+    const v = voidSale(s.db, s.invoice.id, 'r', 'owner', NOW); if (!v.ok) throw new Error('x');
+    const f = { from: TODAY, to: TODAY, group: 'type' as const };
+    const cnt = (d: Db, extra = {}) => salesReport(d, { ...f, ...extra }).reduce((a, r) => a + r.count, 0);
+    expect(cnt(v.db)).toBe(cnt(db)); expect(cnt(v.db, { includeVoid: true })).toBe(cnt(db) + 1); expect(cnt(s.db)).toBe(cnt(db) + 1);
+  });
+  it('profit is net minus cost per group', () => { for (const r of salesReport(db, { from: '2000-01-01', to: '2100-01-01', group: 'type' })) expect(r.profit).toBeCloseTo(r.net - r.cost, 2); });
+  it('expiry report lists expired and near-expiry batches, soonest first', () => {
+    const rows = expiryReport(db, 90); expect(rows.length).toBeGreaterThan(0); expect(rows.every(r => r.days <= 90 && r.qty > 0)).toBe(true);
+    expect(rows.some(r => r.days < 0)).toBe(true); for (let i = 1; i < rows.length; i++) expect(rows[i].days).toBeGreaterThanOrEqual(rows[i - 1].days);
+  });
+  it('shortages report filters by status and CSV escapes commas and quotes', () => {
+    const d = addShortage(db, db.items[0].id, 'manual', 'owner', NOW);
+    expect(shortagesReport(d, 'open')).toHaveLength(1); expect(shortagesReport(d, 'ordered')).toHaveLength(0);
+    expect(toCsv(['a', 'b'], [['x,y', 'say "hi"'], [1, 2]])).toBe('a,b\n"x,y","say ""hi"""\n1,2');
+  });
+});

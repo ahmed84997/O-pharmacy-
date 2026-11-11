@@ -15,7 +15,7 @@ export const TABS: Tab[] = [
     { label: 'الفاتورة', items: [B('sale', 'فاتورة بيع', 'cart', 'KeyS', { primary: true, screen: 'sale' }), B('hold', 'تعليق الفاتورة', 'pause', 'KeyH', { cmd: 'hold' }), B('last', 'آخر الفواتير', 'history', 'KeyR', { screen: 'invoices' })] },
     { label: 'الأسطر', stack: true, items: [B('addline', 'بحث وإضافة صنف', 'plus', 'KeyA', { cmd: 'focus', screen: 'sale' }), B('delline', 'حذف آخر سطر', 'minus', 'KeyD', { cmd: 'delline', screen: 'sale' }), B('find', 'قائمة الأصناف', 'search', 'KeyF', { screen: 'items' })] },
     { label: 'الصندوق', items: [B('drawer', 'فتح الدرج', 'wallet', 'KeyO', { cmd: 'drawer' }), B('print', 'طباعة الوصل', 'print', 'KeyP', { cmd: 'print' })] },
-    { label: 'تنبيهات', items: [B('short', 'كشكول النواقص', 'clip', 'KeyN', { screen: 'short' }), B('exp', 'قرب الانتهاء', 'cal', 'KeyE', { screen: 'soon' })] } ] },
+    { label: 'تنبيهات', items: [B('short', 'كشكول النواقص', 'clip', 'KeyN', { screen: 'short' }), B('exp', 'قرب الانتهاء', 'cal', 'KeyE', { screen: 'reports', cmd: 'report-expiry' })] } ] },
   { id: 'sales', label: 'المبيعات', key: 'KeyS', roles: ALL, groups: [
     { label: 'الفواتير', items: [B('sale2', 'فاتورة بيع', 'cart', 'KeyS', { screen: 'sale' }), B('ret', 'مرتجع بيع', 'undo', 'KeyR', { screen: 'soon' }), B('inv', 'سجل الفواتير', 'file', 'KeyC', { screen: 'invoices' })] },
     { label: 'التوصيل', items: [B('deliv', 'توصيل منزلي', 'truck', 'KeyD', { screen: 'soon' })] },
@@ -23,7 +23,7 @@ export const TABS: Tab[] = [
   { id: 'inv', label: 'المخزون', key: 'KeyI', roles: NOCASH, groups: [
     { label: 'الأصناف', items: [B('items', 'قائمة الأصناف', 'box', 'KeyL', { screen: 'items' }), B('newitem', 'إضافة صنف', 'plus', 'KeyA', { screen: 'items', cmd: 'newitem' }), B('batches', 'الباتشات والصلاحية', 'cal', 'KeyB', { screen: 'soon' })] },
     { label: 'الجرد', items: [B('stocktake', 'جرد', 'clip', 'KeyJ', { screen: 'soon' }), B('adjust', 'تسوية مخزون', 'gear', 'KeyT', { roles: MGMT, screen: 'soon' })] },
-    { label: 'المخازن', items: [B('transfer', 'تحويل بين المخازن', 'truck', 'KeyN', { screen: 'soon' }), B('otherbr', 'المتاح في فروع أخرى', 'store', 'KeyO', { screen: 'soon' })] } ] },
+    { label: 'المخازن', items: [B('transfer', 'تحويل بين المخازن', 'truck', 'KeyN', { screen: 'soon' }), B('otherbr', 'المتاح في فروع أخرى', 'store', 'KeyO', { screen: 'branches' })] } ] },
   { id: 'buy', label: 'المشتريات', key: 'KeyP', roles: NOCASH, groups: [
     { label: 'الشراء', items: [B('pinv', 'فاتورة مشتريات', 'file', 'KeyP', { primary: true, screen: 'purchase' }), B('po', 'أمر شراء', 'clip', 'KeyO', { screen: 'soon' }), B('pret', 'مرتجع مشتريات', 'undo', 'KeyR', { screen: 'soon' })] },
     { label: 'الموردون', items: [B('sup', 'الموردون', 'users', 'KeyS', { screen: 'soon' }), B('cmp', 'مقارنة الأسعار', 'tag', 'KeyC', { screen: 'soon' })] },
@@ -35,7 +35,7 @@ export const TABS: Tab[] = [
     { label: 'اليومية', items: [B('safe', 'الخزينة', 'wallet', 'KeyS', { screen: 'soon' }), B('bank', 'البنوك', 'store', 'KeyB', { screen: 'soon' })] },
     { label: 'العامة', items: [B('fin', 'القوائم المالية', 'chart', 'KeyF', { screen: 'soon' })] } ] },
   { id: 'rep', label: 'التقارير', key: 'KeyR', roles: NOCASH, groups: [
-    { label: 'مركز التقارير', items: [B('rc', 'مركز التقارير', 'chart', 'KeyC', { primary: true, screen: 'soon' })] } ] },
+    { label: 'مركز التقارير', items: [B('rc', 'مركز التقارير', 'chart', 'KeyC', { primary: true, screen: 'reports' })] } ] },
   { id: 'adm', label: 'الإدارة', key: 'KeyM', roles: MGMT, groups: [
     { label: 'الأمان', items: [B('del', 'المحذوفات والملغي', 'trash', 'KeyD', { screen: 'del' }), B('usr', 'المستخدمون والصلاحيات', 'users', 'KeyU', { screen: 'soon' })] },
     { label: 'النظام', items: [B('set', 'الإعدادات', 'gear', 'KeyS', { screen: 'soon' })] } ] },

@@ -166,3 +166,12 @@ td small.muted { font-size: 11px; }
 .itemcard .row { margin-bottom: 8px; }
 
 @media (max-width: 760px) { .cards td.idx { display: none; } .cards td.x { position: absolute; inset-block-start: 6px; inset-inline-end: 6px; } .cards tr { position: relative; } .cards input.num { width: 100%; } .cards td.nm { padding-inline-end: 40px; } }
+
+/* Sprint 1.3 */
+.chk { display: flex; align-items: center; gap: 6px; min-height: 36px; font-size: 14px; }
+tr.sum td { background: var(--ribbon); border-top: 2px solid var(--line); }
+.fb-btn { position: fixed; inset-inline-start: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 40px); z-index: 25; background: var(--orange); color: #fff; border-radius: 99px; padding: 8px 14px; font-size: 13px; display: flex; gap: 6px; align-items: center; box-shadow: 0 6px 18px rgba(0,0,0,.3); }
+.fb-panel { position: fixed; inset-inline-start: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 84px); z-index: 26; width: min(380px, calc(100vw - 24px)); max-height: 70vh; overflow: auto; box-shadow: 0 12px 30px rgba(0,0,0,.4); }
+.fb-list { padding-inline-start: 18px; margin: 0 0 10px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+textarea.txt { resize: vertical; }
+@media (max-width: 760px) { .fb-btn { bottom: calc(env(safe-area-inset-bottom, 0px) + 112px); } .fb-panel { bottom: calc(env(safe-area-inset-bottom, 0px) + 156px); } }

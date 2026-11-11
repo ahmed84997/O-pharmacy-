@@ -17,7 +17,7 @@ export interface SaleLine {
 }
 export interface Invoice {
   id: string; no: string; type: SaleType; customerId: string; lines: SaleLine[]; gross: number; discount: number; net: number; cost: number;
-  at: string; by: Role; status: 'saved' | 'void'; voidReason?: string; voidBy?: Role; voidAt?: string;
+  at: string; by: Role; status: 'saved' | 'void'; voidReason?: string; voidBy?: Role; voidAt?: string; restoredBy?: Role; restoredAt?: string;
 }
 export interface PurchaseLine { itemId: string; batchId: string; expiry: string; qtyPack: number; bonusPack: number; costPack: number; pricePack: number }
 export interface Purchase { id: string; no: string; supplierId: string; lines: PurchaseLine[]; total: number; paid: number; at: string; by: Role }
@@ -25,13 +25,14 @@ export interface Movement { id: string; at: string; kind: 'sale' | 'void-return'
 export interface Shortage { id: string; itemId: string; source: 'no-stock' | 'manual'; at: string; by: Role; status: 'open' | 'ordered' }
 export interface Want { key: string; itemId: string; unit: 'pack' | 'sub'; qty: number; discountPct: number; batchId?: string }
 export interface Receipt { id: string; no: string; customerId: string; amount: number; method: 'cash' | 'card'; at: string; by: Role; balanceAfter: number }
+export interface Transfer { id: string; no: string; itemId: string; qtyPack: number; from: 'B2'; to: 'B1'; status: 'requested' | 'accepted' | 'dispatched' | 'received'; log: { status: Transfer['status']; at: string; by: Role }[] }
 export interface Held { id: string; type: SaleType; customerId: string; wants: Want[]; at: string }
 
 export interface Db {
   today: string;
   items: Item[]; batches: Batch[]; customers: Customer[]; suppliers: Supplier[];
-  invoices: Invoice[]; purchases: Purchase[]; movements: Movement[]; shortages: Shortage[]; held: Held[]; receipts: Receipt[];
-  counters: { sale: number; purchase: number; receipt: number; id: number };
+  invoices: Invoice[]; purchases: Purchase[]; movements: Movement[]; shortages: Shortage[]; held: Held[]; receipts: Receipt[]; transfers: Transfer[];
+  counters: { sale: number; purchase: number; receipt: number; transfer: number; id: number };
 }
 
 export const BRANCH = 'B1';
@@ -282,3 +283,83 @@ export const customerStatement = (db: Db, customerId: string) => ({
   invoices: db.invoices.filter(i => i.customerId === customerId && i.type === 'credit' && i.status === 'saved'),
   receipts: db.receipts.filter(r => r.customerId === customerId),
 });
+
+/* ---------- Sprint 1.3: restore, branch transfer request, report centre ---------- */
+
+/** Restore a voided invoice (management only): sells again from current stock, so it fails if the stock is gone. Nothing is rewritten: the invoice keeps its void history. */
+export function restoreSale(db: Db, invoiceId: string, role: Role, now: string): Ok<{}> | Err {
+  if (!canVoid(role)) return { ok: false, error: 'forbidden' };
+  const inv = db.invoices.find(i => i.id === invoiceId);
+  if (!inv) return { ok: false, error: 'not-found' };
+  if (inv.status !== 'void') return { ok: false, error: 'not-void' };
+  const need = new Map<string, number>();
+  for (const l of inv.lines) need.set(l.batchId, (need.get(l.batchId) ?? 0) + l.qtyBase);
+  for (const [bid, q] of need) { const b = db.batches.find(x => x.id === bid); if (!b || b.qty < q) return { ok: false, error: 'insufficient-stock' }; }
+  const mv: Movement[] = inv.lines.map((l, i) => ({ id: `m${db.counters.id + i + 1}`, at: now, kind: 'sale', batchId: l.batchId, qtyBase: -l.qtyBase, ref: inv.no }));
+  return {
+    ok: true,
+    db: {
+      ...db,
+      batches: db.batches.map(b => need.has(b.id) ? { ...b, qty: b.qty - need.get(b.id)! } : b),
+      customers: inv.type === 'credit' ? db.customers.map(c => c.id === inv.customerId ? { ...c, balance: round2(c.balance + inv.net) } : c) : db.customers,
+      invoices: db.invoices.map(i => i.id === invoiceId ? { ...i, status: 'saved', restoredBy: role, restoredAt: now } : i),
+      movements: [...mv, ...db.movements], counters: { ...db.counters, id: db.counters.id + mv.length },
+    },
+  };
+}
+
+/** Archived (suspended) item back to work. */
+export function restoreItem(db: Db, itemId: string, role: Role): Ok<{}> | Err {
+  if (!canVoid(role)) return { ok: false, error: 'forbidden' };
+  const it = itemById(db, itemId); if (!it) return { ok: false, error: 'not-found' };
+  return { ok: true, db: { ...db, items: db.items.map(i => i.id === itemId ? { ...i, suspended: false } : i) } };
+}
+
+const NEXT: Record<Transfer['status'], Transfer['status'] | null> = { requested: 'accepted', accepted: 'dispatched', dispatched: 'received', received: null };
+export function requestTransfer(db: Db, a: { itemId: string; qtyPack: number; role: Role; now: string }): Ok<{ transfer: Transfer }> | Err {
+  const it = itemById(db, a.itemId); if (!it) return { ok: false, error: 'no-item' };
+  if (!(a.qtyPack >= 1) || !Number.isInteger(a.qtyPack)) return { ok: false, error: 'bad-line' };
+  if (a.qtyPack > it.otherBranchQty) return { ok: false, error: 'other-branch-short' };
+  const n = db.counters.transfer + 1;
+  const t: Transfer = { id: `t${n}`, no: `T-${String(n).padStart(5, '0')}`, itemId: a.itemId, qtyPack: a.qtyPack, from: 'B2', to: 'B1', status: 'requested', log: [{ status: 'requested', at: a.now, by: a.role }] };
+  return { ok: true, transfer: t, db: { ...db, transfers: [t, ...db.transfers], counters: { ...db.counters, transfer: n } } };
+}
+/** Demo of the Phase 8 event chain: requested, accepted, dispatched, received. Stock moves only when received. */
+export function advanceTransfer(db: Db, id: string, role: Role, now: string): Ok<{}> | Err {
+  const t = db.transfers.find(x => x.id === id); if (!t) return { ok: false, error: 'not-found' };
+  const next = NEXT[t.status]; if (!next) return { ok: false, error: 'already-done' };
+  const upd: Transfer = { ...t, status: next, log: [...t.log, { status: next, at: now, by: role }] };
+  let out: Db = { ...db, transfers: db.transfers.map(x => x.id === id ? upd : x) };
+  if (next === 'dispatched') out = { ...out, items: out.items.map(i => i.id === t.itemId ? { ...i, otherBranchQty: Math.max(0, i.otherBranchQty - t.qtyPack) } : i) };
+  if (next === 'received') {
+    const it = itemById(out, t.itemId)!; const d = new Date(out.today + 'T00:00:00Z');
+    const b: Batch = { id: `b${out.counters.id + 1}`, itemId: t.itemId, expiry: new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 13, 0)).toISOString().slice(0, 10), qty: t.qtyPack * it.perPack, costPack: round2(it.publicPrice * 0.8), pricePack: it.publicPrice, receivedOn: now.slice(0, 10) };
+    out = { ...out, batches: [...out.batches, b], movements: [{ id: `m${out.counters.id + 2}`, at: now, kind: 'purchase', batchId: b.id, qtyBase: b.qty, ref: t.no }, ...out.movements], counters: { ...out.counters, id: out.counters.id + 2 } };
+  }
+  return { ok: true, db: out };
+}
+
+export type SalesGroup = 'day' | 'type' | 'by';
+export interface SalesRow { key: string; count: number; net: number; cost: number; profit: number }
+export function salesReport(db: Db, a: { from: string; to: string; group: SalesGroup; includeVoid?: boolean }): SalesRow[] {
+  const m = new Map<string, SalesRow>();
+  for (const i of db.invoices) {
+    const day = i.at.slice(0, 10);
+    if (day < a.from || day > a.to) continue;
+    if (i.status === 'void' && !a.includeVoid) continue;
+    const key = a.group === 'day' ? day : a.group === 'type' ? i.type : i.by;
+    const r = m.get(key) ?? { key, count: 0, net: 0, cost: 0, profit: 0 };
+    r.count++; r.net = round2(r.net + i.net); r.cost = round2(r.cost + i.cost); r.profit = round2(r.net - r.cost); m.set(key, r);
+  }
+  return [...m.values()].sort((x, y) => (a.group === 'day' ? y.key.localeCompare(x.key) : y.net - x.net));
+}
+export interface ExpiryRow { batchId: string; itemId: string; expiry: string; days: number; qty: number; valueCost: number }
+export function expiryReport(db: Db, withinDays: number): ExpiryRow[] {
+  return db.batches.filter(b => b.qty > 0 && daysTo(b.expiry, db.today) <= withinDays).map(b => {
+    const it = itemById(db, b.itemId)!;
+    return { batchId: b.id, itemId: b.itemId, expiry: b.expiry, days: daysTo(b.expiry, db.today), qty: b.qty, valueCost: round2(b.costPack / it.perPack * b.qty) };
+  }).sort((x, y) => x.days - y.days);
+}
+export const shortagesReport = (db: Db, status: 'all' | 'open' | 'ordered') => db.shortages.filter(s => status === 'all' || s.status === status);
+
+export const toCsv = (head: string[], rows: (string | number)[][]) => [head, ...rows].map(r => r.map(c => { const t = String(c); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; }).join(',')).join('\n');

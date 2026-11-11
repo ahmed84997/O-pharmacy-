@@ -127,5 +127,5 @@ export function buildSeed(todayIso: string): Db {
   }
   invoices.sort((a, b) => b.at.localeCompare(a.at));
 
-  return { today: todayIso, items, batches, customers, suppliers, invoices, purchases: [], movements: [], shortages: [], held: [], receipts: [], counters: { sale: 150, purchase: 0, receipt: 0, id: 1000 } };
+  return { today: todayIso, items, batches, customers, suppliers, invoices, purchases: [], movements: [], shortages: [], held: [], receipts: [], transfers: [], counters: { sale: 150, purchase: 0, receipt: 0, transfer: 0, id: 1000 } };
 }

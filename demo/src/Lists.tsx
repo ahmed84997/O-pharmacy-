@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ItemInput, addShortage, canEditItem, canSeeCost, canVoid, customerById, isExpired, itemById, openShortageIds, saveItem, stockOf, voidSale, daysTo } from './domain';
-import { ERR, Icon, TYPE_LABEL, dmy, dmyHm, money, useApp } from './ui';
+import { ItemInput, addShortage, restoreItem, restoreSale, canEditItem, canSeeCost, canVoid, customerById, isExpired, itemById, openShortageIds, saveItem, stockOf, voidSale, daysTo } from './domain';
+import { ERR, Icon, ROLE_LABEL, TYPE_LABEL, dmy, dmyHm, money, useApp } from './ui';
 
 export function Items() {
   const { db, setDb, role, toast, now } = useApp(); const [q, setQ] = useState(''); const cost = canSeeCost(role); const can = canEditItem(role);
@@ -102,14 +102,23 @@ export function Invoices() {
 }
 
 export function Deleted() {
-  const { db } = useApp(); const rows = db.invoices.filter(i => i.status === 'void');
+  const { db, setDb, role, toast, now } = useApp(); const rows = db.invoices.filter(i => i.status === 'void'); const arch = db.items.filter(i => i.suspended);
+  const rest = (id: string) => { const r = restoreSale(db, id, role, now()); if (!r.ok) { toast(ERR[r.error] ?? r.error); return; } setDb(r.db); toast('اتستعادت الفاتورة وخرج الرصيد تاني'); };
+  const restI = (id: string) => { const r = restoreItem(db, id, role); if (!r.ok) { toast(ERR[r.error] ?? r.error); return; } setDb(r.db); toast('الصنف رجع شغال'); };
   return (
     <div><h2><Icon n="trash" />المحذوفات والملغي</h2>
-      <div className="tablewrap"><table><thead><tr><th>الفاتورة</th><th className="n">الصافي</th><th>اتلغت بواسطة</th><th>التاريخ</th><th>السبب</th></tr></thead><tbody>
-        {rows.length === 0 && <tr><td colSpan={5} className="hint" style={{ padding: 18 }}>مفيش حاجة ملغاة لسه. الغي فاتورة من سجل الفواتير وهتظهر هنا.</td></tr>}
-        {rows.map(i => <tr key={i.id}><td>{i.no}</td><td className="n">{money(i.net)}</td><td>{i.voidBy}</td><td>{i.voidAt ? dmyHm(i.voidAt) : ''}</td><td>{i.voidReason}</td></tr>)}
+      <strong>فواتير ملغاة</strong>
+      <div className="tablewrap" style={{ marginTop: 8 }}><table className="cards"><thead><tr><th>الفاتورة</th><th className="n">الصافي</th><th>اتلغت بواسطة</th><th>التاريخ</th><th>السبب</th><th /></tr></thead><tbody>
+        {rows.length === 0 && <tr><td colSpan={6} className="hint" style={{ padding: 18 }}>مفيش حاجة ملغاة لسه. الغي فاتورة من سجل الفواتير وهتظهر هنا.</td></tr>}
+        {rows.map(i => <tr key={i.id}><td className="nm" data-label="الفاتورة">{i.no}</td><td className="n" data-label="الصافي">{money(i.net)}</td><td data-label="اتلغت بواسطة">{ROLE_LABEL[i.voidBy!]}</td><td data-label="التاريخ">{i.voidAt ? dmyHm(i.voidAt) : ''}</td><td data-label="السبب">{i.voidReason}</td><td className="bt"><button className="btn ghost" onClick={() => rest(i.id)}>استعادة</button></td></tr>)}
       </tbody></table></div>
-      <p className="hint">الشاشة دي للمالك والمدير فقط. الاستعادة (Restore) في Sprint 1.3.</p></div>
+      <p className="hint">الاستعادة بتخرج الرصيد من المخزون تاني، ولو الرصيد خلص مش بتتم. تاريخ الالغاء بيفضل محفوظ.</p>
+      <strong>اصناف موقوفة</strong>
+      <div className="tablewrap" style={{ marginTop: 8 }}><table className="cards"><thead><tr><th>الصنف</th><th /></tr></thead><tbody>
+        {arch.length === 0 && <tr><td colSpan={2} className="hint" style={{ padding: 18 }}>مفيش اصناف موقوفة.</td></tr>}
+        {arch.map(i => <tr key={i.id}><td className="nm" data-label="الصنف">{i.name}</td><td className="bt"><button className="btn ghost" onClick={() => restI(i.id)}>رجّعه شغال</button></td></tr>)}
+      </tbody></table></div>
+      <p className="hint">الشاشة دي للمالك والمدير فقط.</p></div>
   );
 }
 
