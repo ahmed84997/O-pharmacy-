@@ -1,0 +1,24 @@
+name: Phase 1 demo (tests and build)
+on:
+  pull_request:
+    paths: ['demo/**', '.github/workflows/demo.yml']
+  workflow_dispatch:
+jobs:
+  demo:
+    name: demo tests and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: demo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: demo/package-lock.json
+      - run: npm ci
+      - name: Business-logic tests (FEFO, sale, void, hold, purchase)
+        run: npm test
+      - name: Type check and single-file build
+        run: npm run build

@@ -2,7 +2,7 @@
 
 Integrated pharmacy package for Egypt (commercial): **System** (sales/ERP), **Operations** (built from the YK base), white-label **Customer App** and **Customer Website**. Editions: Single pharmacy and Chain. Offline-first: a Hub in each branch + cloud.
 
-Status: **Phase 0 in progress - v1.0 documents approved (PR #2 merged, owner "go" 10 Nov 2026); Sprints 0.1-0.4 merged, Sprint 0.5 (documents v1.1, D30-D31) in review.** No application code yet.
+Status: **Phase 0 in progress - v1.0 documents approved (PR #2 merged, owner "go" 10 Nov 2026); Sprints 0.1-0.4 merged, Sprint 0.5 merged, Phase 1 Sprint 1.1 (demo code in `demo/`) in review.** The demo (`demo/`) is throwaway-quality prototype code for Phase 1, not the product.
 
 ## Documents
 - `docs/governance/ARD.md` - architecture and requirements (v1.1)
@@ -19,4 +19,5 @@ Status: **Phase 0 in progress - v1.0 documents approved (PR #2 merged, owner "go
 - `docs/research/spike-s5-s6-results.md` - Sprint 0.4 results (S6 tenant isolation, S5 Ribbon UI)
 - `docs/research/current-receipt-analysis.md` - the pharmacy receipt today and what to keep or improve
 - `docs/governance/owner-actions.md` - open items waiting for the owner
+- `demo/` - Phase 1 clickable demo (React, no backend); live copy is a private artifact
 - `spikes/` - throwaway Phase 0 prototypes, never shipped

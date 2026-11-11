@@ -38,7 +38,7 @@ Not in the demo: stocktake, sales return screen, contracts/insurance, drawer clo
 7. A day-end summary card (sales, returns, voids, cash difference) at the top of the sales tab.
 
 ## 5. Seed data
-- **About 300 items**, mixed drug and non-drug, each with 1-3 batches (different expiries, some within 90 days, some expired), units (box/strip), barcodes, a few with alternatives. Names are **generic active-ingredient names plus strength** (no brand marketing claims) so we do not misuse trade names; prices are plausible and fictional.
+- **About 250 items** (the generator produced 250; more can be added on request), mixed drug and non-drug, each with 1-3 batches (different expiries, some within 90 days, some expired), units (box/strip), barcodes, a few with alternatives. Names are **generic active-ingredient names plus strength** (no brand marketing claims) so we do not misuse trade names; prices are plausible and fictional.
 - 40 customers (cash, credit with balances and limits, one contract customer), 15 suppliers, 2 branches, 2 internal stores.
 - About 150 past invoices over 30 days, enough for the sample reports and the shortage average-sales column.
 - A few deliberate traps: an item with zero stock, an expired batch, a customer over the credit limit, an item suspended.
