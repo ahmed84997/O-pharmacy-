@@ -42,3 +42,12 @@ Decisions taken in this sprint: default unit for a barcode with no unit named = 
 - **Returns to supplier** (`purchase_return.create`): chosen batches, reason required, valued at batch cost, never below zero, idempotent by key; written as a `return` movement tagged `PR-000001`.
 - **Price comparison** (`supplier_price.view`): last effective cost per supplier for an item, cheapest first, void invoices ignored.
 - Not here yet (Accounts phase): supplier payments and balances, invoice-level discount and tax.
+
+## Import from eStock (Sprint 3.6, `import.ts`, migration `inv_0006_import`)
+- **Files:** CSV (comma, semicolon or tab; save an Excel sheet as CSV). Three kinds: `items`, `stock` (opening balances), `suppliers`. `template(kind)` gives the header line. Headers may be the English names or the usual eStock Arabic ones (كود الصنف, اسم الصنف, الشركة المنتجة, الشكل الصيدلي, مجموعة الصنف, الوحدة الصغرى / الكبرى, معامل التحويل, رقم التشغيلة, تاريخ الصلاحية, الكمية, التكلفة, سعر الجمهور ...). Unknown columns are reported and ignored.
+- **Safe by design:** `preview()` is a dry run and writes nothing. `apply()` is `all_or_nothing` by default (one bad row = nothing written) or `valid_only` (good rows written, bad rows reported with their file line number). The same file again returns the same import (hash) and adds nothing. Records are append-only.
+- **Items:** existing codes are skipped (or refused with `onExisting: 'error'`); eStock codes are kept as references (`itemByCode`) so the stock file can name items by eStock code, our code, barcode or exact name. Drug prices in the file are ignored (D14).
+- **Opening stock:** one batch plus an `opening` movement per row; the state public price is required for drugs; unit comes from the column or the `defaultUnit` option (never guessed); expired lots go to an expired store (created if missing) and are never sold; needs `item.import`.
+- **Money:** whole piasters from text (`45`, `45.5`, `1,234.50`, Arabic digits), no floating point; more than two decimals is an error.
+- **Speed (SQLite):** 3,000 items in 1.2 s, 3,000 batches in 1.9 s.
+- **To confirm:** real eStock export headers (owner sends one sample of each file).

@@ -20,6 +20,7 @@ Updated 11 Nov 2026 (end of Sprint 0.5). Items stay here until done; each says w
 | 8 | S5 choices: Ribbon tab order and names, Alt key tips as standard, phone layout (bottom bar now in prototype v2) | spike-s5-s6-results.md (S5) |
 | 9 | Approve ARD, Roadmap, Masterplan v1.1 (D30 name "O Pharmacy" in English, D31 desktop first with an effective phone version) | PR for Sprint 0.5 |
 | 10 | Re-render the kit's sample receipt in the structure of the pharmacy's current receipt (not started, needs "go") | current-receipt-analysis.md section 4 |
+| 11 | Send one real eStock export of each: items list, stock by expiry report, suppliers list (CSV or Excel saved as CSV, 20-30 rows, no customer data) so the import headers can be confirmed. The import already understands the usual Arabic headers (Sprint 3.6) | ROADMAP.md Sprint 3.6 |
 
 ## Still to send (when convenient)
 Missing eStock screens: add-item form, stocktake, sales return, contracts, drawer closing, settings.
