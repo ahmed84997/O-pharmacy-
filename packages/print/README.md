@@ -8,6 +8,7 @@ Printing is separate from selling: a sale is complete before anything prints, an
 - **Transports** (`PrintTransport`): `TcpTransport` (network printer, port 9100), `WindowsSpoolerTransport` (printer installed in Windows, RAW through the spooler, same C# helper as the printer kit), `FileTransport`, `MemoryTransport`.
 - **`PrintService`** (migration `print_0001_jobs`, append-only log):
   - `printReceipt`: the first print of a copy kind is the original and opens the drawer when the sale took cash; later prints are marked "نسخة مكررة رقم N" and need a reason; never opens the drawer. A failed print is logged and returned (`ok: false`), it never throws and never touches the sale; the retry is still the original. Reading a sale follows the sale permissions (own sale or `sale.view_all`).
+  - `printSessionReport`: the drawer-closing report (reviewer copy with expected, counted and difference; the cashier's copy is blind); same original / copy rules.
   - `openDrawer` (no sale): `sale.void` (management) and a reason, always logged.
   - `printLabel`: `item.view`, 1 to 200 copies, TSPL or ZPL per printer.
   - `jobs`: the print log (`sale.view_all`).

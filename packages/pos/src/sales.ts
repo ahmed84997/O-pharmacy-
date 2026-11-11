@@ -2,7 +2,7 @@ import { can, uuidv7, type Person } from '@o-pharmacy/core';
 import type { Hub } from '@o-pharmacy/hub';
 import { BatchError, type BatchService, type ItemService } from '@o-pharmacy/inventory';
 
-export type PosErrorCode = 'forbidden' | 'invalid' | 'not-found' | 'state' | 'insufficient' | 'underpaid' | 'no-price' | 'session' | 'discount-limit' | 'credit-limit';
+export type PosErrorCode = 'forbidden' | 'invalid' | 'not-found' | 'state' | 'insufficient' | 'underpaid' | 'no-price' | 'session' | 'discount-limit' | 'credit-limit' | 'day-closed';
 export class PosError extends Error { constructor(public code: PosErrorCode, m: string, public detail?: unknown) { super(m); } }
 export interface SaleLineInput { itemId: string; qty: number; unitName?: string; batchId?: string; priceKind?: 'public' | 'pharmacist'; /** discount in basis points (500 = 5%) */ discountBp?: number }
 export type PaymentInput = { method: 'cash'; amountMinor: number } | { method: 'card'; amountMinor: number; ref: string };
@@ -25,7 +25,7 @@ const div = (n: number, d: number) => Math.floor((2 * n + d) / (2 * d));
 
 /** Cashier sessions and the sale core: cash sales from the nearest-expiry batches (FEFO, each batch at its own price), void while the session is open. */
 export class SaleService {
-  constructor(private hub: Hub, private items: ItemService, private batches: BatchService, private o: { allowNegative?: () => boolean; maxDiscountPct?: () => number } = {}) {}
+  constructor(private hub: Hub, private items: ItemService, private batches: BatchService, private o: { allowNegative?: () => boolean; maxDiscountPct?: () => number; timeZone?: string } = {}) {}
   private get db() { return this.hub.db; }
   private need(a: Person, perm: string): void { if (!can(a, perm, this.hub.branchId)) throw new PosError('forbidden', `missing permission ${perm}`); }
   /** @internal */ next(k: string, prefix: string): string {
@@ -40,6 +40,7 @@ export class SaleService {
     if (!Number.isInteger(s.openingFloatMinor) || s.openingFloatMinor < 0) throw new PosError('invalid', 'opening float must be whole piasters, zero or more');
     return this.db.tx(() => {
       const prior = this.db.prepare('SELECT id, session_no FROM cashier_sessions WHERE req_key=?').get(s.key); if (prior) return { id: String(prior.id), sessionNo: String(prior.session_no), replay: true };
+      if (this.db.prepare('SELECT 1 FROM day_closings WHERE business_date=?').get(this.businessDate(this.hub.now()))) throw new PosError('day-closed', 'today is already closed: no new session');
       const t = this.db.prepare("SELECT user_id FROM cashier_sessions WHERE terminal=? AND status='open'").get(terminal); if (t) throw new PosError('state', `terminal ${terminal} already has an open session`);
       if (this.db.prepare("SELECT 1 FROM cashier_sessions WHERE user_id=? AND status='open'").get(actor.id)) throw new PosError('state', 'you already have an open session: close it first');
       const id = uuidv7(), no = this.next('session', 'CS');
@@ -48,6 +49,9 @@ export class SaleService {
       return { id, sessionNo: no, replay: false };
     });
   }
+  /** The pharmacy's calendar date (YYYY-MM-DD) of a timestamp, in its time zone (default Africa/Cairo). */
+  businessDate(iso: string): string { const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: this.o.timeZone ?? 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(iso)).map(x => [x.type, x.value])); return `${p.year}-${p.month}-${p.day}`; }
+  /** @internal */ expectedCash(id: string): number { return this.expected(id, Number(this.session(id).opening_float_minor)); }
   customerBalance(customerId: string): number { return Number(this.db.prepare('SELECT COALESCE(SUM(amount_minor),0) b FROM customer_ledger WHERE customer_id=?').get(customerId)!.b); }
   /** @internal */ session(id: string) { const r = this.db.prepare('SELECT * FROM cashier_sessions WHERE id=?').get(id); if (!r) throw new PosError('not-found', `session ${id}`); return r; }
   /** Cash that should be in the drawer: the float plus the cash payments of posted sales (change already given back is not counted). Card and cash-on-delivery are not in the drawer. */

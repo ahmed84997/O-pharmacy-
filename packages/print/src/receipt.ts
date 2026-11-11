@@ -1,4 +1,4 @@
-import type { SaleService } from '@o-pharmacy/pos';
+import type { ClosingService, SaleService } from '@o-pharmacy/pos';
 
 export type SaleView = ReturnType<SaleService['sale']>;
 export type Digits = 'western' | 'arabic';
@@ -69,5 +69,29 @@ export function buildReceipt(sale: SaleView, ctx: ReceiptContext): ReceiptLine[]
   if (st.reserveQr) L.push({ qr: true });
   if (st.footer) L.push({ t: st.footer, size: 24, align: 'center' });
   if (st.returnPolicy) L.push({ t: st.returnPolicy, size: 18, align: 'center' });
+  return L;
+}
+
+export type SessionReportView = ReturnType<ClosingService['report']>;
+/** The drawer-closing report of one session. The drawer part (expected, counted, difference) prints only when the report has it, i.e. for reviewers: the cashier's own copy stays blind. */
+export function buildSessionReport(rep: SessionReportView, ctx: { pharmacy: PharmacyInfo; style?: ReceiptStyle; cashierName: string; copyNo?: number }): ReceiptLine[] {
+  const st = ctx.style ?? {}; const dg = st.digits ?? 'western'; const n = (v: string | number) => num(v, dg); const m = (v: number) => money(v, dg); const row = (a: string, v: number, bold = false): ReceiptLine => ({ cols: [a, m(v)], size: bold ? 26 : 22, bold }); const L: ReceiptLine[] = [];
+  if ((ctx.copyNo ?? 1) > 1) L.push({ t: `نسخة مكررة رقم ${n(ctx.copyNo!)} - ليست أصلًا`, size: 24, bold: true, align: 'center' });
+  L.push({ t: ctx.pharmacy.name, size: 30, bold: true, align: 'center' }); L.push({ t: 'تقرير قفل الدرج', size: 28, bold: true, align: 'center' }); L.push({ rule: true });
+  L.push({ cols: [`الوردية ${n(rep.sessionNo)}`, `الجهاز ${n(rep.terminal)}`], size: 22 }); L.push({ t: `الكاشير: ${ctx.cashierName}`, size: 22, align: 'right' });
+  L.push({ cols: ['الفتح', n(dateText(rep.openedAt, st.timeZone))], size: 22 }); if (rep.closedAt) L.push({ cols: ['القفل', n(dateText(rep.closedAt, st.timeZone))], size: 22 }); L.push({ rule: true });
+  L.push({ cols: ['عدد الفواتير', n(rep.sales.count)], size: 22 }); L.push(row('إجمالي المبيعات', rep.sales.totalMinor, true));
+  if (rep.sales.discountMinor) L.push(row('منها خصومات', rep.sales.discountMinor)); L.push(row('نقدًا', rep.sales.cashMinor)); L.push(row('بطاقة', rep.sales.cardMinor));
+  if (rep.sales.onAccountMinor) L.push(row('آجل على حسابات العملاء', rep.sales.onAccountMinor)); if (rep.sales.codOwedMinor) L.push(row('توصيل (يُحصَّل عند التسليم)', rep.sales.codOwedMinor));
+  if (rep.returns.count) { L.push({ cols: ['عدد المرتجعات', n(rep.returns.count)], size: 22 }); L.push(row('قيمة المرتجعات', rep.returns.totalMinor)); }
+  if (rep.voids.count) { L.push({ cols: ['فواتير ملغاة', n(rep.voids.count)], size: 22 }); L.push(row('قيمتها', rep.voids.totalMinor)); }
+  if (rep.customerPayments.cashMinor || rep.customerPayments.cardMinor) L.push(row('سداد عملاء', rep.customerPayments.cashMinor + rep.customerPayments.cardMinor));
+  if (rep.drawer) {
+    const d = rep.drawer; L.push({ rule: true }); L.push(row('رصيد بداية الدرج', d.openingFloatMinor)); L.push(row('المتوقع في الدرج', d.expectedCashMinor));
+    if (d.countedCashMinor !== null) { L.push(row('المعدود', d.countedCashMinor)); const diff = d.diffMinor ?? 0; L.push(diff === 0 ? { t: 'مطابق', size: 26, bold: true, align: 'center' } : { cols: [diff > 0 ? 'زيادة' : 'عجز', m(Math.abs(diff))], size: 28, bold: true }); }
+    if (d.closeNote) L.push({ t: `ملاحظة: ${d.closeNote}`, size: 20, align: 'right' });
+    if (d.review) L.push({ t: `المراجعة: ${d.review.decision === 'accepted' ? 'تم القبول' : 'محوّل للإدارة'}${d.review.note ? ' - ' + d.review.note : ''}`, size: 20, align: 'right' });
+  }
+  L.push({ rule: true }); L.push({ cols: ['توقيع الكاشير', 'توقيع المراجع'], size: 20 }); L.push({ t: ' ', size: 40 });
   return L;
 }

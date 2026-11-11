@@ -1,9 +1,9 @@
 import { can, uuidv7, type Person } from '@o-pharmacy/core';
 import type { Hub, Migration } from '@o-pharmacy/hub';
-import type { SaleService } from '@o-pharmacy/pos';
+import type { ClosingService, SaleService } from '@o-pharmacy/pos';
 import { receiptBytes, drawerBytes } from './escpos';
 import { ean13Of, tspl, zpl } from './label';
-import { buildReceipt, type PharmacyInfo, type ReceiptStyle } from './receipt';
+import { buildReceipt, buildSessionReport, type PharmacyInfo, type ReceiptStyle } from './receipt';
 import type { Rasterizer } from './render';
 import type { PrintTransport } from './transport';
 
@@ -25,7 +25,7 @@ export interface PrintResult { ok: boolean; jobId: string; copyNo?: number; draw
 
 /** Printing is separate from selling: a sale is complete before anything prints, and a printer that is off never undoes a sale. A failed print is logged and can be repeated (it is still the original, with the drawer). A reprint is marked as a copy and needs a reason. */
 export class PrintService {
-  constructor(private hub: Hub, private sales: SaleService, private raster: Rasterizer, private printers: Record<string, PrinterSetup>, private env: () => PrintEnv) {}
+  constructor(private hub: Hub, private sales: SaleService, private raster: Rasterizer, private printers: Record<string, PrinterSetup>, private env: () => PrintEnv, private closing?: ClosingService) {}
   private get db() { return this.hub.db; }
   private need(a: Person, perm: string): void { if (!can(a, perm, this.hub.branchId)) throw new PrintError('forbidden', `missing permission ${perm}`); }
   private printer(name: string, kind: PrinterSetup['kind']): PrinterSetup { const p = this.printers[name]; if (!p) throw new PrintError('not-found', `printer ${name}`); if (p.kind !== kind) throw new PrintError('invalid', `printer ${name} is not a ${kind} printer`); return p; }
@@ -45,6 +45,14 @@ export class PrintService {
     const drawer = copyNo === 1 && copy === 'counter' && (p.drawerOnCash ?? true) && cash && sale.status === 'posted'; const bytes = receiptBytes(img, { drawer }); const error = await this.deliver(p, bytes);
     const jobId = this.log(actor, { kind: 'receipt', ref: r.saleNo, copyKind: copy, copyNo, printer: r.printer, ok: !error, error: error ?? undefined, drawer, bytes: bytes.length, reason: r.reason?.trim() });
     return error ? { ok: false, jobId, error, bytes: bytes.length } : { ok: true, jobId, copyNo, drawer, bytes: bytes.length };
+  }
+  /** Print the drawer-closing report of a session (needs the closing service). The first print is the original; later ones are copies and need a reason. */
+  async printSessionReport(actor: Person, r: { sessionId: string; printer: string; reason?: string }): Promise<PrintResult> {
+    if (!this.closing) throw new PrintError('invalid', 'closing reports are not set up'); const p = this.printer(r.printer, 'receipt'); const rep = this.closing.report(actor, r.sessionId);
+    const done = Number(this.db.prepare("SELECT COUNT(*) c FROM print_jobs WHERE kind='receipt' AND status='sent' AND ref=? AND copy_kind='report'").get(rep.sessionNo)!.c); const copyNo = done + 1; if (copyNo > 1 && !r.reason?.trim()) throw new PrintError('invalid', 'a reprint needs a reason');
+    const env = this.env(); const img = this.raster.receipt(buildSessionReport(rep, { pharmacy: env.pharmacy, style: env.style, cashierName: env.nameOf(rep.userId), copyNo }), (p.paperWidthMm ?? 80) === 58 ? 384 : 576); const bytes = receiptBytes(img, { drawer: false }); const error = await this.deliver(p, bytes);
+    const jobId = this.log(actor, { kind: 'receipt', ref: rep.sessionNo, copyKind: 'report', copyNo, printer: r.printer, ok: !error, error: error ?? undefined, bytes: bytes.length, reason: r.reason?.trim() });
+    return error ? { ok: false, jobId, error, bytes: bytes.length } : { ok: true, jobId, copyNo, drawer: false, bytes: bytes.length };
   }
   /** Open the drawer with no sale: management only (`sale.void`), reason required, always logged. */
   async openDrawer(actor: Person, r: { printer: string; reason: string }): Promise<PrintResult> {
