@@ -170,4 +170,63 @@ CREATE TABLE stocktake_lines (
 );
 CREATE TRIGGER stocktake_lines_no_delete BEFORE DELETE ON stocktake_lines BEGIN SELECT RAISE(ABORT, 'stocktake lines are never deleted'); END;
 CREATE TRIGGER stocktake_lines_closed BEFORE UPDATE ON stocktake_lines WHEN (SELECT status FROM stocktakes WHERE id = OLD.stocktake_id) IN ('applied','cancelled') BEGIN SELECT RAISE(ABORT, 'a closed stocktake cannot change'); END;` },
+  { id: 'inv_0005_purchasing', sql: `
+CREATE TABLE suppliers (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL UNIQUE,
+  phone TEXT, address TEXT, tax_no TEXT, notes TEXT,
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+  created_at TEXT NOT NULL
+);
+CREATE TRIGGER suppliers_no_delete BEFORE DELETE ON suppliers BEGIN SELECT RAISE(ABORT, 'suppliers are never deleted: deactivate'); END;
+CREATE TABLE purchase_orders (
+  id TEXT PRIMARY KEY, po_no TEXT NOT NULL UNIQUE, req_key TEXT NOT NULL UNIQUE,
+  supplier_id TEXT NOT NULL REFERENCES suppliers(id),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','sent','partly_received','received','cancelled')),
+  note TEXT, created_by TEXT NOT NULL, created_at TEXT NOT NULL, cancel_reason TEXT
+);
+CREATE TRIGGER purchase_orders_no_delete BEFORE DELETE ON purchase_orders BEGIN SELECT RAISE(ABORT, 'orders are never deleted: cancel'); END;
+CREATE TRIGGER purchase_orders_cancelled BEFORE UPDATE ON purchase_orders WHEN OLD.status = 'cancelled' BEGIN SELECT RAISE(ABORT, 'a cancelled order cannot change'); END;
+CREATE TABLE purchase_order_lines (
+  id TEXT PRIMARY KEY, po_id TEXT NOT NULL REFERENCES purchase_orders(id), item_id TEXT NOT NULL REFERENCES items(id),
+  qty_base INTEGER NOT NULL CHECK (qty_base > 0), UNIQUE (po_id, item_id)
+);
+CREATE TRIGGER purchase_order_lines_no_update BEFORE UPDATE ON purchase_order_lines BEGIN SELECT RAISE(ABORT, 'order lines are fixed: cancel and create a new order'); END;
+CREATE TRIGGER purchase_order_lines_no_delete BEFORE DELETE ON purchase_order_lines BEGIN SELECT RAISE(ABORT, 'order lines are never deleted'); END;
+CREATE TABLE purchase_invoices (
+  id TEXT PRIMARY KEY, pi_no TEXT NOT NULL UNIQUE, req_key TEXT NOT NULL UNIQUE,
+  supplier_id TEXT NOT NULL REFERENCES suppliers(id), supplier_ref TEXT, po_id TEXT REFERENCES purchase_orders(id),
+  store_id TEXT NOT NULL REFERENCES stores(id),
+  status TEXT NOT NULL DEFAULT 'posted' CHECK (status IN ('posted','void')),
+  total_minor INTEGER NOT NULL CHECK (total_minor >= 0),
+  created_by TEXT NOT NULL, created_at TEXT NOT NULL, void_by TEXT, void_at TEXT, void_reason TEXT, flagged INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX purchase_invoices_supplier_ref ON purchase_invoices(supplier_id, supplier_ref) WHERE supplier_ref IS NOT NULL;
+CREATE TRIGGER purchase_invoices_no_delete BEFORE DELETE ON purchase_invoices BEGIN SELECT RAISE(ABORT, 'invoices are never deleted: void'); END;
+CREATE TRIGGER purchase_invoices_voided BEFORE UPDATE ON purchase_invoices WHEN OLD.status = 'void' BEGIN SELECT RAISE(ABORT, 'a void invoice cannot change'); END;
+CREATE TRIGGER purchase_invoices_facts BEFORE UPDATE ON purchase_invoices WHEN NEW.total_minor <> OLD.total_minor OR NEW.supplier_id <> OLD.supplier_id OR NEW.store_id <> OLD.store_id BEGIN SELECT RAISE(ABORT, 'invoice facts never change: void and re-enter'); END;
+CREATE TABLE purchase_invoice_lines (
+  id TEXT PRIMARY KEY, invoice_id TEXT NOT NULL REFERENCES purchase_invoices(id), line_no INTEGER NOT NULL,
+  item_id TEXT NOT NULL REFERENCES items(id), batch_id TEXT NOT NULL REFERENCES batches(id), movement_id TEXT NOT NULL,
+  paid_base INTEGER NOT NULL CHECK (paid_base > 0), bonus_base INTEGER NOT NULL DEFAULT 0 CHECK (bonus_base >= 0),
+  cost_minor INTEGER NOT NULL CHECK (cost_minor >= 0), eff_cost_minor INTEGER NOT NULL CHECK (eff_cost_minor >= 0),
+  line_total_minor INTEGER NOT NULL CHECK (line_total_minor >= 0), UNIQUE (invoice_id, line_no)
+);
+CREATE INDEX purchase_invoice_lines_item ON purchase_invoice_lines(item_id);
+CREATE TRIGGER purchase_invoice_lines_no_update BEFORE UPDATE ON purchase_invoice_lines BEGIN SELECT RAISE(ABORT, 'invoice lines never change'); END;
+CREATE TRIGGER purchase_invoice_lines_no_delete BEFORE DELETE ON purchase_invoice_lines BEGIN SELECT RAISE(ABORT, 'invoice lines are never deleted'); END;
+CREATE TABLE purchase_returns (
+  id TEXT PRIMARY KEY, pr_no TEXT NOT NULL UNIQUE, req_key TEXT NOT NULL UNIQUE,
+  supplier_id TEXT NOT NULL REFERENCES suppliers(id), invoice_id TEXT REFERENCES purchase_invoices(id), store_id TEXT NOT NULL REFERENCES stores(id),
+  reason TEXT NOT NULL CHECK (length(trim(reason)) > 0), total_minor INTEGER NOT NULL CHECK (total_minor >= 0), by TEXT NOT NULL, at TEXT NOT NULL
+);
+CREATE TRIGGER purchase_returns_no_update BEFORE UPDATE ON purchase_returns BEGIN SELECT RAISE(ABORT, 'returns are append-only'); END;
+CREATE TRIGGER purchase_returns_no_delete BEFORE DELETE ON purchase_returns BEGIN SELECT RAISE(ABORT, 'returns are append-only'); END;
+CREATE TABLE purchase_return_lines (
+  id TEXT PRIMARY KEY, return_id TEXT NOT NULL REFERENCES purchase_returns(id), item_id TEXT NOT NULL REFERENCES items(id), batch_id TEXT NOT NULL REFERENCES batches(id),
+  qty_base INTEGER NOT NULL CHECK (qty_base > 0), value_minor INTEGER NOT NULL CHECK (value_minor >= 0)
+);
+CREATE TRIGGER purchase_return_lines_no_update BEFORE UPDATE ON purchase_return_lines BEGIN SELECT RAISE(ABORT, 'returns are append-only'); END;
+CREATE TRIGGER purchase_return_lines_no_delete BEFORE DELETE ON purchase_return_lines BEGIN SELECT RAISE(ABORT, 'returns are append-only'); END;` },
 ];
