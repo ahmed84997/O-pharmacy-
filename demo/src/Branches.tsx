@@ -22,7 +22,7 @@ export default function Branches() {
   return (
     <div>
       <h2><Icon n="store" />الفروع (معاينة نسخة Chain)</h2>
-      <div className="card warnbox" role="note">معاينة لنسخة الـ Chain (Phase 8): فرعين تجريبيين. الكميات من الفرع التاني بتظهر كارقام فقط ومعاها عمر البيانات، والتحويل بيعدي بسلسلة احداث: طلب ثم موافقة ثم شحن ثم استلام.</div>
+      <div className="card warnbox" role="note">معاينة لنسخة الـ Chain (Phase 9): فرعين تجريبيين. الكميات من الفرع التاني بتظهر كارقام فقط ومعاها عمر البيانات، والتحويل بيعدي بسلسلة احداث: طلب ثم موافقة ثم شحن ثم استلام.</div>
       <div className="searchbox" style={{ marginTop: 12 }}>
         <input className="search big" value={q} placeholder="ابحث عن صنف وشوف المتاح في الفرعين" aria-label="صنف" autoComplete="off" onChange={e => { setQ(e.target.value); setSel(null); }} />
         {results.length > 0 && <ul className="dd">{results.map(i => <li key={i.id}><button onClick={() => { setSel(i.id); setQ(i.name); setQty(1); }}><span className="nm">{i.name}</span></button></li>)}</ul>}
@@ -51,7 +51,7 @@ export default function Branches() {
             <td className="bt">{t.status !== 'received' && <button className="btn ghost" onClick={() => step(t.id)}>{NEXT_LABEL[t.status]}</button>}</td></tr>
         ))}
       </tbody></table></div>
-      <p className="hint">المخزون بيزيد في فرعنا لما الحالة تبقى «اتسلم» بس. ده شكل الـ Phase 8 بشكل مبسط.</p>
+      <p className="hint">المخزون بيزيد في فرعنا لما الحالة تبقى «اتسلم» بس. ده شكل الـ Phase 9 بشكل مبسط.</p>
     </div>
   );
 }

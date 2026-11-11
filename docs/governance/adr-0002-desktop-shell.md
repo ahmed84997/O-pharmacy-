@@ -1,6 +1,6 @@
-# ADR-0002 - Desktop window shell: Electron (provisional, owner may veto)
+# ADR-0002 - Desktop window shell: Electron (accepted)
 
-Date: 11 Nov 2026 (Sprint 2.6). Status: **provisional decision**, reversible at low cost (see Consequences). Needs no action from the owner unless he objects.
+Date: 11 Nov 2026 (Sprint 2.6). Status: **accepted by the owner on 11 Nov 2026 (ARD D35)**; still reversible at low cost (see Consequences).
 
 ## Context
 D27 requires Windows, macOS and Linux. ARD section 7: the Hub runs as a background service (database, sync, print service); the user opens "O Pharmacy" from a desktop icon in its own window. The window only shows the React Ribbon UI served by the local Hub.

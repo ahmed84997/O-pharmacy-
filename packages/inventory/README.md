@@ -18,7 +18,7 @@ Item master for the Hub. The module owns its tables (`inv_0001_items`, plugged i
 - **Facts never change:** price, cost, lot, expiry (database triggers). A mistake is a new batch plus a stock adjustment, so every past sale stays explainable.
 - **FEFO (D21):** `allocate(item, qtyBase)` takes nearest expiry first (ties: received first); expired and quarantined batches are never used; each pick keeps its own price; a chosen batch is allowed but never an expired, held or empty one; a shortage is reported (`missingBase`), never invented. Stock per batch is read from the ledger, so there is no second copy.
 - **Expiry report** (`expiry.alerts.view`): within N days, nearest first, only batches with stock; value at cost only for those who may see cost (matrix rule 1).
-- **Quarantine / release** (`recall.manage`): reason required, logged; the Phase 10 recall process builds on it.
+- **Quarantine / release** (`recall.manage`): reason required, logged; the Phase 11 recall process builds on it.
 - Expiry written as month/year means the last day of the month.
 
 Decisions taken in this sprint: default unit for a barcode with no unit named = the largest unit (the retail pack); item kind never changes after creation (archive and create a new item); prices are integer piasters.

@@ -1,8 +1,8 @@
 # O Pharmacy - Architecture and Requirements Document (ARD)
 
-Version 1.1 - 11 Nov 2026. Owner: Dr. Ahmed. Status: **approved baseline (v1.0, PR #2) plus Phase 0 results and owner decisions D30-D31**; changes only through a versioned PR. **[DECIDED]** = owner decision (section 2); **[PHASE 0]** = settled by a Phase 0 spike or research; **[LATER]** = decided in a later phase.
+Version 1.2 - 11 Nov 2026. Owner: Dr. Ahmed. Status: **approved baseline (v1.0, PR #2) plus Phase 0 results and owner decisions D30-D31**; changes only through a versioned PR. **[DECIDED]** = owner decision (section 2); **[PHASE 0]** = settled by a Phase 0 spike or research; **[LATER]** = decided in a later phase.
 
-Change log: v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory - v0.3 (10 Nov) adds No-Delete UX (D13) and the chain decisions D14-D22, roles D23, the code name D24, cloud tenancy D25 and e-receipt D26 - v1.0 candidate (10 Nov): review for consistency, open items split into Phase 0 vs later, glossary added; D27 desktop platforms; D28 code signing; D29 customer app publishing. v1.1 (11 Nov): Phase 0 spike results folded in (sections 8-10, 15); D24 superseded by D30 (the product name is "O Pharmacy"); D31 desktop-first with an effective phone version.
+Change log: v1.2 (11 Nov) adds D32-D35 (Phase 7 "The program", test path, staff mobile apps, Electron accepted) - v0.1 (10 Nov) first draft - v0.2 (10 Nov) adds the deployment topology (Cloud + Branch Hub), installer, the 4-product package, the technology choice, editions, Ribbon UI, white-label app, and the eStock inventory - v0.3 (10 Nov) adds No-Delete UX (D13) and the chain decisions D14-D22, roles D23, the code name D24, cloud tenancy D25 and e-receipt D26 - v1.0 candidate (10 Nov): review for consistency, open items split into Phase 0 vs later, glossary added; D27 desktop platforms; D28 code signing; D29 customer app publishing. v1.1 (11 Nov): Phase 0 spike results folded in (sections 8-10, 15); D24 superseded by D30 (the product name is "O Pharmacy"); D31 desktop-first with an effective phone version.
 
 ## 1. Purpose
 Define what the integrated pharmacy system must do and the architecture rules it is built on, before any code. The Roadmap and Masterplan refer to this document.
@@ -41,6 +41,10 @@ Define what the integrated pharmacy system must do and the architecture rules it
 | D29 | **Customer app:** we build one white-label base; for each pharmacy that wants an app we prepare a build with its name and identity, and it is **published on the pharmacy's own App Store / Google Play accounts**, not ours. Comes with the commercial launch | 10 Nov 2026 |
 | D30 | **The product name is "O Pharmacy", always written in English (Latin letters), even inside Arabic screens, documents, receipts and the customer app.** No Arabic spelling of the name. Logo and visual identity are still to be designed (near launch). Repository and file names keep the hyphenated form `O-pharmacy` | 11 Nov 2026 |
 | D31 | **Desktop first, phone must be good and effective.** The staff system is designed for desktop (mouse and keyboard, cashier speed is the yardstick); the phone version is a real product built from the same code and API, designed for the phone (bottom bar, drawer, camera barcode, touch targets), not a shrunk desktop. Full cashier operation stays on the desktop and the Hub; any screen judged unsuitable for the phone is listed and needs the owner's approval before it is left out. Every demo screen is tested on both | 11 Nov 2026 |
+| D32 | **Phase 7 "The program" before the pilot:** Phases 2-6 delivered tested packages without screens; Phase 7 assembles them into one Hub application with a local API and real screens. From Phase 7 a sprint is done only when the owner can install or open something and try it | 11 Nov 2026 |
+| D33 | **Test path:** the Windows installer on the pharmacy PC plus a free test server on Oracle Cloud Always Free behind Cloudflare Tunnel (no open ports), updated after each merge, seed data only. **No paid hosting or plan upgrade before the launch**; the Phase 1 demo stays on Hostinger Premium as a showcase | 11 Nov 2026 |
+| D34 | **Staff mobile app:** native Android and iOS apps (Capacitor, the same React code) on the stores under our company account, plus a PWA; **deferred until the desktop is fully mature** (Phase 10). Mobile is a paid add-on: the licence counts all approved devices (desktop and phone), the Hub refuses devices above the licence and the Cloud checks the subscription for remote access; desktop work and data are never locked | 11 Nov 2026 |
+| D35 | **Desktop window shell: Electron** (ADR-0002 accepted by the owner) | 11 Nov 2026 |
 
 ## 3. Vision
 A pharmacy runs its whole business in one Arabic-first system: sell, stock, buy, close the day, keep accounts, serve customers (including out-of-stock requests and orders from its own app), manage staff, and stay compliant - offline-safe, with AI help where it saves time.
@@ -154,6 +158,7 @@ Egypt: ETA e-receipt (adapter: direct or approved provider, D26), EDA track and 
 
 ## 15. Remaining decisions
 **Settled in Phase 0 (spikes and research):** Hub local database and packaging on the three platforms; cloud database; sync engine; backend framework; cashier performance targets; ETA e-receipt requirements, numbering and approved-supplier route; EDA track-and-trace duties for pharmacies; detailed permission matrix.
+**Withdrawn:** D-P7 (pilot after Phase 4), see D32.
 **Later:** edition packaging and pricing (after competitor demos); logo and visual identity (near launch; the name is fixed by D30).
 No owner decision blocks the start of Phase 0.
 
