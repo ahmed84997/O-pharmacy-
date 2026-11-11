@@ -7,8 +7,12 @@ import Sale from './Sale';
 import Purchase from './Purchase';
 import { Deleted, Invoices, Items, Shortages, Soon } from './Lists';
 import { Customers, CashReceipt } from './Customers';
+import Reports from './Reports';
+import Branches from './Branches';
+import Feedback from './Feedback';
 
 type Tips = null | 'tabs' | 'items';
+const SCREEN_NAME: Record<string, string> = { sale: 'فاتورة بيع', purchase: 'فاتورة مشتريات', items: 'الاصناف', short: 'النواقص', invoices: 'سجل الفواتير', del: 'المحذوفات', customers: 'العملاء', receipt: 'توريد نقدية', reports: 'مركز التقارير', branches: 'الفروع' };
 const BOTTOM: [Screen, string, string][] = [['sale', 'فاتورة بيع', 'cart'], ['items', 'الأصناف', 'box'], ['customers', 'العملاء', 'users'], ['short', 'النواقص', 'bell']];
 
 export default function App() {
@@ -77,6 +81,8 @@ export default function App() {
       case 'invoices': return <Invoices />;
       case 'customers': return <Customers />;
       case 'receipt': return <CashReceipt />;
+      case 'reports': return <Reports />;
+      case 'branches': return <Branches />;
       case 'del': return canSeeDeleted(role) ? <Deleted /> : <Soon label="غير مسموح" />;
       default: return <Soon label={soonLabel} />;
     }
@@ -119,6 +125,7 @@ export default function App() {
           )}
         </div>
         <main id="work">{body}</main>
+        <Feedback screen={SCREEN_NAME[screen] ?? soonLabel} />
         <nav className="bbar" aria-label="تنقل سريع">
           {BOTTOM.map(([s, l, ic]) => <button key={s} className={screen === s ? 'on' : ''} onClick={() => go(s)}><Icon n={ic} /><span>{l}</span></button>)}
           <button onClick={() => setDrawer(true)}><Icon n="menu" /><span>القائمة</span></button>

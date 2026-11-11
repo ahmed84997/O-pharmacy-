@@ -11,5 +11,8 @@ Ribbon shell (tabs, collapse, Quick Access, Alt key tips on the Arabic keyboard,
 ## Sprint 1.2 scope (done)
 Customers (add, edit, limit and suspend by management, statement), cash receipt, item card (drug price locked, alternatives, batches), shortages to a prefilled purchase draft, card layout on phone for tables.
 
-## Not yet (Sprint 1.3)
-Report-centre sample, branch switcher (Chain preview), restore from the deleted view, owner test round.
+## Sprint 1.3 scope (in PR)
+Report-centre sample (sales by day / type / user, expiry window, shortages; filters, in-memory saved views, CSV copy as mock export; cost and profit for owner and manager only), Chain preview (other-branch availability with data age, transfer request: requested - accepted - dispatched - received, stock arrives only on received), restore from the deleted view (voided invoices and suspended items, management only), and an in-demo feedback panel (screen auto-captured, text, priority, copy all as a markdown table).
+
+## Not in the demo
+Returns, delivery, drawer close, stocktake, suppliers screen, price comparison, accounts: they open a "soon" page. They belong to later phases.
