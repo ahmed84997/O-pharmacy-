@@ -1,0 +1,81 @@
+name: O Pharmacy app (Hub, screens, Windows installer)
+on:
+  pull_request:
+    paths: ['apps/**', 'packages/**', '.github/workflows/app.yml']
+  push:
+    branches: [main]
+    paths: ['apps/**', 'packages/**', '.github/workflows/app.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  app:
+    name: app ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: hub application (API, people, devices, Ribbon)
+        working-directory: apps/hub
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+      - name: screens (web)
+        working-directory: apps/web
+        run: |
+          npm ci
+          npm run build
+  installer:
+    name: Windows installer
+    needs: app
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: build Hub and screens
+        run: |
+          (cd apps/hub && npm ci && npm run build)
+          (cd apps/web && npm ci && npm run build)
+          mkdir -p apps/desktop/res/hub apps/desktop/res/web apps/desktop/res/node
+          cp apps/hub/dist/hub.mjs apps/desktop/res/hub/
+          cp -r apps/web/dist/. apps/desktop/res/web/
+          cp "$(node -p process.execPath)" apps/desktop/res/node/node.exe
+          node -p "'bundled Node ' + process.version"
+      - name: installer (unsigned until the launch, D28)
+        working-directory: apps/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm ci
+          npx electron-builder --win --publish never
+          ls -la release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: O-Pharmacy-Setup
+          path: apps/desktop/release/O-Pharmacy-Setup-*.exe
+          retention-days: 30
+      - name: publish the test build (main only)
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          f=$(ls apps/desktop/release/O-Pharmacy-Setup-*.exe)
+          gh release view test-build >/dev/null 2>&1 || gh release create test-build --prerelease --title "Test build (latest main)" --notes "Unsigned test build of the latest main. Not for real data yet."
+          gh release upload test-build "$f" --clobber
+          gh release edit test-build --notes "Unsigned test build of main at ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d)). Not for real data yet."

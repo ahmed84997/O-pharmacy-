@@ -1,0 +1,15 @@
+{
+  "name": "@o-pharmacy/hub-app",
+  "private": true,
+  "version": "0.7.1",
+  "type": "module",
+  "main": "src/main.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "node build.mjs",
+    "start": "node dist/hub.mjs"
+  },
+  "dependencies": { "fastify": "5.1.0" },
+  "devDependencies": { "@types/node": "22.9.0", "esbuild": "0.24.0", "typescript": "5.6.3", "vitest": "2.1.8" }
+}

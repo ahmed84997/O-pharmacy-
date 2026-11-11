@@ -1,0 +1,23 @@
+{
+  "name": "o-pharmacy-desktop",
+  "private": true,
+  "version": "0.7.1",
+  "description": "O Pharmacy desktop window (Electron, ADR-0002) over the local Hub",
+  "author": "O Pharmacy",
+  "main": "main.cjs",
+  "scripts": { "start": "electron .", "dist:win": "electron-builder --win --publish never" },
+  "devDependencies": { "electron": "33.2.1", "electron-builder": "25.1.8" },
+  "build": {
+    "appId": "com.opharmacy.desktop",
+    "productName": "O Pharmacy",
+    "files": ["main.cjs", "splash.html"],
+    "extraResources": [
+      { "from": "res/hub", "to": "hub" },
+      { "from": "res/web", "to": "web" },
+      { "from": "res/node", "to": "node" }
+    ],
+    "win": { "target": "nsis", "artifactName": "O-Pharmacy-Setup-${version}.exe" },
+    "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": false, "createDesktopShortcut": true, "shortcutName": "O Pharmacy", "deleteAppDataOnUninstall": false },
+    "directories": { "output": "release" }
+  }
+}
