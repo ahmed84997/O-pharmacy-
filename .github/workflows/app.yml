@@ -49,7 +49,9 @@ jobs:
     env:
       UPDATE_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
       LICENCE_KEY: ${{ secrets.LICENCE_SIGNING_KEY }}
-      UPDATE_BASE_URL: ${{ vars.UPDATE_BASE_URL }}
+      RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+      RELEASES_REPO: ${{ github.repository_owner }}/O-pharmacy-releases
+      UPDATE_BASE_URL: ${{ vars.UPDATE_BASE_URL || format('https://github.com/{0}/O-pharmacy-releases/releases/latest/download', github.repository_owner) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -70,9 +72,10 @@ jobs:
         run: |
           (cd apps/hub && npx esbuild ../../packages/core/src/update.ts --bundle --platform=node --format=cjs --outfile=../desktop/res/extra/update.cjs --log-level=warning)
           node -e "require('fs').writeFileSync('apps/desktop/res/extra/update.json', JSON.stringify({ baseUrl: process.env.UPDATE_BASE_URL || '' }))"
-          pub='const c=require("crypto");process.stdout.write(c.createPublicKey(c.createPrivateKey(process.env.K)).export({type:"spki",format:"pem"}))'
-          if [ -n "$UPDATE_KEY" ]; then K="$UPDATE_KEY" node -e "$pub" > apps/desktop/res/extra/update-public.pem; echo "update key: yes"; else echo "::notice::UPDATE_SIGNING_KEY not set: this build cannot update itself"; fi
-          if [ -n "$LICENCE_KEY" ]; then K="$LICENCE_KEY" node -e "$pub" > apps/desktop/res/hub/licence-public.pem; echo "licence key: yes"; else echo "::notice::LICENCE_SIGNING_KEY not set: licences cannot be activated in this build"; fi
+          # the secrets may be pasted with or without their BEGIN / END lines: pem.cjs rebuilds the PEM outside the workspace (never printed)
+          pub='const c=require("crypto"),fs=require("fs");process.stdout.write(c.createPublicKey(fs.readFileSync(process.env.F)).export({type:"spki",format:"pem"}))'
+          if [ -n "$UPDATE_KEY" ]; then node .github/scripts/pem.cjs UPDATE_KEY "$RUNNER_TEMP/update.pem"; F="$RUNNER_TEMP/update.pem" node -e "$pub" > apps/desktop/res/extra/update-public.pem; echo "update key: yes, updates from $UPDATE_BASE_URL"; else echo "::notice::UPDATE_SIGNING_KEY not set: this build cannot update itself"; fi
+          if [ -n "$LICENCE_KEY" ]; then node .github/scripts/pem.cjs LICENCE_KEY "$RUNNER_TEMP/licence.pem"; F="$RUNNER_TEMP/licence.pem" node -e "$pub" > apps/desktop/res/hub/licence-public.pem; echo "licence key: yes"; else echo "::notice::LICENCE_SIGNING_KEY not set: licences cannot be activated in this build"; fi
       - name: installer (unsigned until the launch, D28)
         working-directory: apps/desktop
         env:
@@ -97,19 +100,27 @@ jobs:
           gh release edit test-build --notes "Unsigned test build of main at ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d)), version $v. Not for real data yet."
           gh release view "v$v" >/dev/null 2>&1 || gh release create "v$v" --prerelease --title "O Pharmacy $v (test)" --notes "Phase 7 test build $v. Unsigned (D28). Install guide: docs/guides/getting-started.md"
           gh release upload "v$v" "$f" --clobber
-      - name: publish the signed update (main only, when the update secrets exist)
+      - name: publish the signed update to the public releases repository (main only, when the update secrets exist)
         if: github.event_name == 'push'
-        env:
-          SSH_KEY: ${{ secrets.DEMO_SSH_KEY }}
-          TARGET: ${{ secrets.DEMO_TARGET }}
         run: |
-          if [ -z "$UPDATE_KEY" ] || [ -z "$UPDATE_BASE_URL" ] || [ -z "$SSH_KEY" ] || [ -z "$TARGET" ]; then echo "::notice::update channel not set up (UPDATE_SIGNING_KEY, UPDATE_BASE_URL, DEMO_SSH_KEY, DEMO_TARGET): skipped"; exit 0; fi
+          if [ -z "$UPDATE_KEY" ] || [ -z "$RELEASES_TOKEN" ]; then echo "::notice::update channel not set up (UPDATE_SIGNING_KEY, RELEASES_TOKEN): skipped"; exit 0; fi
+          v=$(node -p "require('./apps/desktop/package.json').version")
           mkdir -p out/updates && cp apps/desktop/release/O-Pharmacy-Setup-*.exe out/updates/O-Pharmacy-Setup.exe
-          node -e "
+          K="$RUNNER_TEMP/update.pem" node -e "
           const c=require('crypto'),fs=require('fs'); const b=fs.readFileSync('out/updates/O-Pharmacy-Setup.exe'); const v=require('./apps/desktop/package.json').version;
           const m={v:1,version:v,channel:'stable',minSupportedVersion:'0.7.0',publishedAt:new Date().toISOString(),rolloutPercent:100,notes:'',artifacts:[{platform:'win32',arch:'x64',url:'O-Pharmacy-Setup.exe',sha256:c.createHash('sha256').update(b).digest('hex'),size:b.length}]};
-          const body=Buffer.from(JSON.stringify(m)); const sig=c.sign(null,body,c.createPrivateKey(process.env.UPDATE_KEY));
+          const body=Buffer.from(JSON.stringify(m)); const sig=c.sign(null,body,c.createPrivateKey(fs.readFileSync(process.env.K)));
           fs.writeFileSync('out/updates/manifest.txt', body.toString('base64url')+'.'+sig.toString('base64url')); console.log('manifest for',v);"
-          mkdir -p ~/.ssh && printf '%s\n' "$SSH_KEY" > ~/.ssh/demo_key && chmod 600 ~/.ssh/demo_key
-          tar -czf - -C out updates | ssh -i ~/.ssh/demo_key -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$(echo "$TARGET" | tr -d '[:space:]')"
-          echo "published updates/ for $(node -p "require('./apps/desktop/package.json').version")"
+          export GH_TOKEN="$RELEASES_TOKEN"
+          if ! gh api "repos/$RELEASES_REPO" >/dev/null 2>&1; then echo "::error::cannot reach $RELEASES_REPO with RELEASES_TOKEN (does the repository exist, and does the token have Contents read and write on it?)"; exit 1; fi
+          # a new, empty repository has no commit to hang a release on: add a README once
+          if ! gh api "repos/$RELEASES_REPO/commits?per_page=1" >/dev/null 2>&1; then
+            readme=$(node -e "process.stdout.write(Buffer.from('# O Pharmacy releases\n\nSigned Windows installers and update manifests only. No source code.\n').toString('base64'))")
+            gh api -X PUT "repos/$RELEASES_REPO/contents/README.md" -f message="O Pharmacy releases" -f content="$readme" >/dev/null
+          fi
+          if gh release view "v$v" -R "$RELEASES_REPO" >/dev/null 2>&1; then
+            gh release upload "v$v" -R "$RELEASES_REPO" out/updates/O-Pharmacy-Setup.exe out/updates/manifest.txt --clobber
+          else
+            gh release create "v$v" -R "$RELEASES_REPO" --title "O Pharmacy $v" --notes "Signed update $v. Installed copies pick it up from 'latest'." --latest out/updates/O-Pharmacy-Setup.exe out/updates/manifest.txt
+          fi
+          echo "published v$v to $RELEASES_REPO (latest)"

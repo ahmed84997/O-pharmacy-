@@ -1,17 +1,21 @@
 # Releases, updates and licences (Sprint 7.6)
 
 ## Where builds go
-- Every merge to `main` builds the Windows installer (`app.yml`) and uploads it to two GitHub releases: `test-build` (always the latest) and `v<version>` (one per version). Unsigned until the launch (D28).
-- With the update channel set up, the same merge also publishes a **signed** update to `<UPDATE_BASE_URL>/manifest.txt` and `O-Pharmacy-Setup.exe` (through the existing restricted demo upload key). Installed copies check it every 6 hours.
+- Every merge to `main` builds the Windows installer (`app.yml`) and uploads it to two releases of this (private) repository: `test-build` (always the latest) and `v<version>`. Unsigned until the launch (D28).
+- With the update channel set up, the same merge also publishes a **signed** update to the public repository `O-pharmacy-releases` (installers and manifests only, no source code): release `v<version>`, marked latest, with `O-Pharmacy-Setup.exe` and `manifest.txt`. Installed copies read `https://github.com/<owner>/O-pharmacy-releases/releases/latest/download/manifest.txt` every 6 hours and from the "البحث عن تحديث" button (About screen, or the tray icon). No web hosting is involved.
+- A copy updates only to a **higher version**, so every change meant to reach the pharmacy bumps the version (desktop, web and Hub `package.json`, and `VERSION` in `apps/hub/src/server.ts`).
 
-## One-time setup by the owner (about 10 minutes, Termius + GitHub app)
+## One-time setup by the owner (done 12 Nov 2026)
 Never paste any of these keys in the chat.
-1. In Termius (any Linux/macOS shell): `openssl genpkey -algorithm ed25519 -out update.key && cat update.key` -> copy all lines into the GitHub secret **UPDATE_SIGNING_KEY** -> `rm update.key`.
-2. Same for licences: `openssl genpkey -algorithm ed25519 -out licence.key && cat licence.key` -> secret **LICENCE_SIGNING_KEY** -> `rm licence.key`.
-3. GitHub > Settings > Secrets and variables > Actions > **Variables** > `UPDATE_BASE_URL` = the demo address followed by `/updates` (for example `https://demo.example.com/updates`).
-4. Run "O Pharmacy app" once (Actions > Run workflow) or merge anything: the next installer carries the public keys and the update address. Install that build once by hand; after that it updates itself.
+1. Create the public, empty repository `O-pharmacy-releases`.
+2. In Termius (any Linux shell, for example the Hostinger session; nothing is stored there): `openssl genpkey -algorithm ed25519 -out update.key && cat update.key` -> copy the output into the secret **UPDATE_SIGNING_KEY** of this repository -> `rm update.key`. The key may be pasted with or without its BEGIN / END lines (`.github/scripts/pem.cjs` rebuilds the PEM; a wrong key fails the build with a clear message).
+3. A fine-grained personal access token limited to `O-pharmacy-releases` with Contents: Read and write, saved as the secret **RELEASES_TOKEN**. It expires after a year: make a new one the same way and replace the secret.
+4. Install the first build made after these secrets by hand once (`test-build`); after that it updates itself.
+5. Licences: the same as step 2 with `licence.key` -> secret **LICENCE_SIGNING_KEY**.
 
-The public halves are derived from the secrets at build time; nothing secret is shipped. If a signing key is ever lost or leaked: make a new one (step 1 or 2), install the next build by hand once, and the old key stops working.
+Optional: the variable `UPDATE_BASE_URL` overrides where installed copies look for updates.
+
+The public halves are derived from the secrets at build time; nothing secret is shipped. If a signing key is ever lost or leaked: make a new one, install the next build by hand once, and the old key stops working.
 
 ## Licences
 - Test builds run without a licence. The pilot build sets `O_REQUIRE_LICENCE=1`.

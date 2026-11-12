@@ -1,7 +1,7 @@
 // O Pharmacy desktop (ADR-0002, D35): a thin Electron window over the local Hub.
 // Sprint 7.6: the Hub keeps running when the window closes (tray), starts with Windows, can open to the shop network,
 // keeps daily backups (in the Hub) with restore here, and updates itself from a signed manifest (core update logic).
-const { app, BrowserWindow, Menu, Tray, shell, dialog, nativeImage, net } = require('electron');
+const { app, BrowserWindow, Menu, Tray, shell, dialog, nativeImage, net, ipcMain } = require('electron');
 const { spawn } = require('node:child_process');
 const { join } = require('node:path');
 const fs = require('node:fs');
@@ -44,7 +44,7 @@ async function restartHub() { restarting = true; try { await stopHub(); await st
 function showWindow() { if (!win) return createWindow(); if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
 async function createWindow() {
   win = new BrowserWindow({ width: 1366, height: 820, minWidth: 900, minHeight: 600, title: 'O Pharmacy', backgroundColor: '#0B1120', autoHideMenuBar: true, icon: join(__dirname, 'build', 'icon.png'),
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } });
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, preload: join(__dirname, 'preload.cjs') } });
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(URL_()) && !url.startsWith('file:')) e.preventDefault(); });
   win.webContents.on('before-input-event', (_e, input) => { if (input.type === 'keyDown' && input.key === 'F11') win.setFullScreen(!win.isFullScreen()); });
@@ -95,11 +95,11 @@ const deviceId = () => { const f = userFile('device-id'); try { return fs.readFi
 const state = () => readJson(userFile('update-state.json'), {}); const setState = (p) => writeJson(userFile('update-state.json'), { ...state(), ...p });
 function recordHealthy() { const s = state(); if (s.pendingVersion === app.getVersion()) setState({ pendingVersion: null, failedStarts: 0 }); }
 function recordFailedStart() { const s = state(); if (s.pendingVersion !== app.getVersion()) return; const failedStarts = (s.failedStarts || 0) + 1; setState({ failedStarts }); if (core && core.shouldRollback({ failedStarts, healthy: false }) && s.previousInstaller && fs.existsSync(s.previousInstaller)) { setState({ pendingVersion: null, failedStarts: 0, rolledBackFrom: app.getVersion() }); spawn(s.previousInstaller, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref(); quitting = true; app.quit(); } }
-const fetchBuf = (url) => new Promise((ok, bad) => { const r = net.request(url); const chunks = []; r.on('response', res2 => { if (res2.statusCode !== 200) { bad(new Error(`HTTP ${res2.statusCode}`)); return; } res2.on('data', d => chunks.push(d)); res2.on('end', () => ok(Buffer.concat(chunks))); res2.on('error', bad); }); r.on('error', bad); r.end(); });
+const fetchBuf = (url) => new Promise((ok, bad) => { const r = net.request({ url, redirect: 'follow' }); r.setHeader('Cache-Control', 'no-cache'); const chunks = []; r.on('response', res2 => { if (res2.statusCode !== 200) { bad(new Error(`HTTP ${res2.statusCode}`)); return; } res2.on('data', d => chunks.push(d)); res2.on('end', () => ok(Buffer.concat(chunks))); res2.on('error', bad); }); r.on('error', bad); r.end(); });
 async function checkForUpdate(manual) {
   if (!UPDATE.baseUrl || !updatePub || !core) { if (manual) dialog.showMessageBox({ message: 'التحديث التلقائي مش متظبط في النسخة دي.' }); return; }
   try {
-    const token = (await fetchBuf(`${UPDATE.baseUrl.replace(/\/$/, '')}/manifest.txt?t=${Date.now()}`)).toString().trim(); const m = core.verifyManifest(token, updatePub); if (!m) throw new Error('bad signature');
+    const token = (await fetchBuf(`${UPDATE.baseUrl.replace(/\/$/, '')}/manifest.txt`)).toString().trim(); const m = core.verifyManifest(token, updatePub); if (!m) throw new Error('bad signature');
     const h = new Date().getHours(); const d = core.decideUpdate(m, { current: app.getVersion(), platform: process.platform, arch: process.arch === 'arm64' ? 'arm64' : 'x64', channel: 'stable', deviceId: deviceId(), businessHours: !manual && h >= 9 && h < 23 });
     if (d.action === 'none') { if (manual) dialog.showMessageBox({ message: `معاك آخر إصدار (${app.getVersion()}).` }); return; }
     if (d.action === 'install-later') return; // during working hours the automatic check waits; "البحث عن تحديث" installs any time
@@ -113,6 +113,9 @@ async function checkForUpdate(manual) {
     spawn(file, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref(); quitting = true; app.quit();
   } catch (e) { if (manual) dialog.showMessageBox({ type: 'warning', message: `مقدرتش أشوف التحديث: ${e.message}` }); }
 }
+
+// the About screen's button (only from the Hub page this window shows)
+ipcMain.handle('o:check-update', (e) => { if (!String(e.senderFrame?.url ?? '').startsWith(URL_())) return false; void checkForUpdate(true); return true; });
 
 // ---------------- start ----------------
 app.whenReady().then(async () => {
