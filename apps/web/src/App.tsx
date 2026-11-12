@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, arabic, device, token } from './api';
 import type { Me } from './ui';
 import Shell from './Shell';
+import { Logo } from './icons';
 
 type State = { setUp: boolean; pharmacyName: string | null; version: string; testMode: boolean; readOnly?: boolean };
 type Gate = 'loading' | 'offline' | 'setup' | 'pending' | 'revoked' | 'login' | 'change' | 'in';
@@ -27,7 +28,7 @@ export default function App() {
   if (gate === 'in' && me) return <Shell me={me} reloadMe={loadMe} logout={logout} />;
   return (
     <div className="gate"><div className="card">
-      <span className="brand" dir="ltr">O <b>Pharmacy</b></span>
+      <Logo size={40} />
       {st?.pharmacyName && <div className="muted">{st.pharmacyName}{st.testMode && <> <span className="tests">نسخة تجربة</span></>}</div>}
       {gate === 'loading' && <p>بيحمّل...</p>}
       {gate === 'offline' && <><p className="err">{err}</p><button className="btn primary" onClick={() => void boot()}>جرّب تاني</button></>}

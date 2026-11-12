@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import { ICONS } from './icons';
+import type { Glance } from './chrome';
 
 export function Icon({ n }: { n: string }) {
   return (<svg className="i" viewBox="0 0 24 24" aria-hidden="true">{(ICONS[n] ?? ICONS.file!).split('|').map((p, i) => { if (/^c[\d.]+,/.test(p)) { const [cx, cy, r] = p.slice(1).split(','); return <circle key={i} cx={cx} cy={cy} r={r} />; } return <path key={i} d={p} />; })}</svg>);
@@ -11,7 +12,7 @@ export const dmyHm = (iso: string | null) => { if (!iso) return '-'; const d = n
 export interface RibbonCmd { id: string; label: string; icon: string; key: string; screen: string; primary?: boolean; sprint?: string }
 export interface RibbonTab { id: string; label: string; key: string; groups: { label: string; items: RibbonCmd[] }[] }
 export interface Me { person: { id: string; username: string; displayName: string; roles: string[]; roleNames: string[]; mustChangeSecret: boolean }; permissions: string[]; ribbon: RibbonTab[]; pharmacyName: string | null; branchId: string; version: string; testMode: boolean }
-export interface Ctx { me: Me; can: (k: string) => boolean; toast: (m: string) => void; go: (screen: string, cmd?: RibbonCmd) => void; reloadMe: () => Promise<void>; ask: (label: string, o?: { secret?: boolean }) => Promise<string | null> }
+export interface Ctx { me: Me; can: (k: string) => boolean; toast: (m: string) => void; go: (screen: string, cmd?: RibbonCmd) => void; reloadMe: () => Promise<void>; ask: (label: string, o?: { secret?: boolean }) => Promise<string | null>; glance: Glance | null; refreshGlance: () => void }
 export const AppCtx = createContext<Ctx>(null as unknown as Ctx);
 export const useApp = () => useContext(AppCtx);
 export const ROLE_AR: Record<string, string> = { O: 'المالك', A: 'أدمن الفرع', M: 'مدير الفرع', P: 'صيدلي', C: 'كاشير', S: 'أمين مخزن', E: 'موظف', X: 'محاسب', D: 'مندوب توصيل' };

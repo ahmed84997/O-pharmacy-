@@ -10,7 +10,7 @@ export const ICONS: Record<string, string> = {
   print: 'M7 9V3h10v6|M6 17H4v-6h16v6h-2|M7 14h10v7H7z', file: 'M6 3h8l4 4v14H6z|M14 3v4h4', bell: 'M6 17V11a6 6 0 0 1 12 0v6l2 2H4z|M10 21h4',
   tag: 'M3 12V4h8l10 10-8 8z|c7.5,8.5,1.2', cal: 'M4 6h16v14H4z|M4 10h16|M8 3v4|M16 3v4', trash: 'M4 7h16|M9 7V4h6v3|M6 7l1 13h10l1-13',
   check: 'M5 12l5 5 9-10', clip: 'M8 4h8v3H8z|M6 5h2|M16 5h2|M6 5v16h12V5', store: 'M3 9l2-5h14l2 5|M3 9v11h18V9|M9 20v-6h6v6', pct: 'M6 18L18 6|c7.5,8.5,1.5|c16.5,16.5,1.5',
-  menu: 'M4 7h16|M4 12h16|M4 17h16', up: 'M6 15l6-6 6 6', down: 'M6 9l6 6 6-6', kbd: 'M3 7h18v10H3z|M7 11h.01|M11 11h.01|M15 11h.01|M7 14h10', x: 'M6 6l12 12|M18 6L6 18',
+  menu: 'M4 7h16|M4 12h16|M4 17h16', home: 'M3 11l9-7 9 7|M5 10v10h14V10', list: 'M5 4h11l3 3v13H5z|M9 10h6|M9 14h6|M9 18h3', clock: 'c12,12,9|M12 7v5l3 2', alert: 'M12 3L2 20h20z|M12 10v4|M12 17h.01', side: 'M4 4h16v16H4z|M9 4v16', barcode: 'M3 5v14|M6 5v14|M10 5v14|M13 5v14|M17 5v14|M21 5v14', up: 'M6 15l6-6 6 6', down: 'M6 9l6 6 6-6', kbd: 'M3 7h18v10H3z|M7 11h.01|M11 11h.01|M15 11h.01|M7 14h10', x: 'M6 6l12 12|M18 6L6 18',
 };
 export function Icon({ n }: { n: string }) {
   return (
@@ -23,3 +23,16 @@ export function Icon({ n }: { n: string }) {
   );
 }
 
+
+/** The O Pharmacy mark (owner's choice, 12 Nov 2026): an orange O holding a capsule. Same drawing as the app and tray icons. */
+export function Mark({ size = 30 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 70 70" aria-hidden="true" style={{ flex: 'none' }}>
+      <circle cx="35" cy="35" r="35" fill="#F85A0A" />
+      <g transform="rotate(-40 35 35)"><rect x="17" y="27" width="36" height="16" rx="8" fill="#FFFFFF" /><rect x="35" y="27" width="18" height="16" rx="8" fill="#FFD9C4" /><rect x="35" y="27" width="6" height="16" fill="#FFD9C4" /></g>
+    </svg>
+  );
+}
+export function Logo({ size = 30 }: { size?: number }) {
+  return <span className="logo" dir="ltr" aria-label="O Pharmacy"><Mark size={size} /><b style={{ fontSize: Math.round(size * 0.72) }}>Pharmacy</b></span>;
+}

@@ -7,6 +7,8 @@ import People from './People';
 import { BooksScreen, ChequesScreen, ContractsScreen, LedgerScreen, PayrollScreen, ReportsScreen } from './acc';
 import { AlertsScreen, AttendanceScreen, CustomersScreen, HandoversScreen, NotifyScreen, RequestsScreen, StagesScreen, TasksScreen } from './ops';
 import Devices from './Devices';
+import { Logo } from './icons';
+import { SideBar, Ticker, sideNarrow, type Glance } from './chrome';
 import { ClosingScreen, DeliveriesScreen, EtaScreen, HeldScreen, InvoicesScreen, ReturnsScreen, SaleScreen, SessionScreen } from './pos';
 
 /* physical key -> Arabic letter, so Alt key tips work whichever keyboard layout is active (from the S5 prototype) */
@@ -17,13 +19,18 @@ export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () =
   const tabs = me.ribbon; const [tab, setTab] = useState(tabs[0]?.id ?? 'home'); const [screen, setScreen] = useState<{ id: string; cmd?: RibbonCmd }>({ id: 'home' });
   const [collapsed, setCollapsed] = useState(false); const [popup, setPopup] = useState(false); const [tips, setTips] = useState<Tips>(null); const [drawer, setDrawer] = useState(false);
   const [online, setOnline] = useState(true); const [readOnly, setReadOnly] = useState(false); const [askQ, setAskQ] = useState<{ label: string; secret?: boolean; done: (v: string | null) => void } | null>(null); const [askV, setAskV] = useState(''); const [msg, setMsg] = useState(''); const timer = useRef<number>();
+  const [glance, setGlance] = useState<Glance | null>(null); const [narrow, setNarrowS] = useState(sideNarrow.get()); const setNarrow = (v: boolean) => { sideNarrow.set(v); setNarrowS(v); };
+  const refreshGlance = useCallback(() => { api<Glance>('/api/glance').then(setGlance, () => undefined); }, []);
   const cur = tabs.find(t => t.id === tab) ?? tabs[0]; const perms = useMemo(() => new Set(me.permissions), [me]);
   const toast = useCallback((m: string) => { setMsg(m); window.clearTimeout(timer.current); timer.current = window.setTimeout(() => setMsg(''), 4200); }, []);
   const go = useCallback((id: string, cmd?: RibbonCmd) => { setScreen({ id: cmd?.sprint ? 'soon' : id, cmd }); setPopup(false); setDrawer(false); setTips(null); }, []);
   const run = useCallback((c: RibbonCmd) => go(c.screen, c), [go]);
   /* An in-page question instead of window.prompt (the desktop window does not show browser dialogs). */
   const ask = useCallback((label: string, o: { secret?: boolean } = {}) => new Promise<string | null>(done => { setAskV(''); setAskQ({ label, secret: o.secret, done }); }), []);
-  const ctx = useMemo(() => ({ me, can: (k: string) => perms.has(k), toast, go, reloadMe, ask }), [me, perms, toast, go, reloadMe, ask]);
+  const ctx = useMemo(() => ({ me, can: (k: string) => perms.has(k), toast, go, reloadMe, ask, glance, refreshGlance }), [me, perms, toast, go, reloadMe, ask, glance, refreshGlance]);
+  /* counts and the alert strip: on every screen change and every 2 minutes */
+  useEffect(() => { refreshGlance(); }, [screen, refreshGlance]);
+  useEffect(() => { const t = window.setInterval(refreshGlance, 120000); return () => window.clearInterval(t); }, [refreshGlance]);
 
   useEffect(() => { const ping = () => { api<{ readOnly?: boolean }>('/api/state').then(r => { setOnline(true); setReadOnly(!!r.readOnly); }, () => setOnline(false)); }; ping(); const t = window.setInterval(ping, 30000); return () => window.clearInterval(t); }, []);
   useEffect(() => {
@@ -42,7 +49,7 @@ export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () =
   const tip = (code: string) => (tips ? <span className="tip" aria-hidden="true">{AR[code] ?? code.replace('Key', '')}</span> : null);
   const expanded = !collapsed || popup;
   const body = (() => { switch (screen.id) {
-    case 'home': return <Home />; case 'items': return <ItemsScreen />; case 'expiry': return <ExpiryScreen />; case 'stocktake': return <StocktakeScreen />; case 'stores': return <StoresScreen />; case 'import': return <ImportScreen />; case 'pinv': return <PurchaseInvoiceScreen />; case 'po': return <OrdersScreen />; case 'pret': return <PurchaseReturnScreen />; case 'suppliers': return <SuppliersScreen />; case 'deleted': return <DeletedScreen />; case 'customers': return <CustomersScreen />; case 'requests': return <RequestsScreen />; case 'notify': return <NotifyScreen />; case 'handovers': return <HandoversScreen />; case 'stages': return <StagesScreen />; case 'tasks': return <TasksScreen />; case 'attendance': return <AttendanceScreen />; case 'alerts': return <AlertsScreen />; case 'ledger': return <LedgerScreen />; case 'cheques': return <ChequesScreen />; case 'books': return <BooksScreen />; case 'payroll': return <PayrollScreen />; case 'contracts': return <ContractsScreen />; case 'reports': return <ReportsScreen />; case 'people': return <People />; case 'devices': return <Devices />;
+    case 'home': return <Home />; case 'items': return <ItemsScreen />; case 'expiry': return <ExpiryScreen />; case 'stocktake': return <StocktakeScreen />; case 'stores': return <StoresScreen />; case 'import': return <ImportScreen />; case 'pinv': return <PurchaseInvoiceScreen />; case 'po': return <OrdersScreen />; case 'pret': return <PurchaseReturnScreen />; case 'suppliers': return <SuppliersScreen />; case 'deleted': return <DeletedScreen />; case 'customers': return <CustomersScreen />; case 'requests': return <RequestsScreen key={screen.cmd?.id ?? 'r'} initial={screen.cmd?.id === 'shortages' ? 'shortage' : undefined} />; case 'notify': return <NotifyScreen />; case 'handovers': return <HandoversScreen />; case 'stages': return <StagesScreen />; case 'tasks': return <TasksScreen />; case 'attendance': return <AttendanceScreen />; case 'alerts': return <AlertsScreen />; case 'ledger': return <LedgerScreen />; case 'cheques': return <ChequesScreen />; case 'books': return <BooksScreen />; case 'payroll': return <PayrollScreen />; case 'contracts': return <ContractsScreen />; case 'reports': return <ReportsScreen />; case 'people': return <People />; case 'devices': return <Devices />;
     case 'sale': return <SaleScreen />; case 'session': return <SessionScreen />; case 'held': return <HeldScreen />; case 'invoices': return <InvoicesScreen />; case 'returns': return <ReturnsScreen />; case 'deliveries': return <DeliveriesScreen />; case 'closing': return <ClosingScreen />; case 'eta': return <EtaScreen />;
     case 'settings': return <Settings />; case 'about': return <About />; default: return <Soon cmd={screen.cmd} />;
   } })();
@@ -52,7 +59,7 @@ export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () =
       <div id="app">
         <header className="title">
           <button className="qbtn menu-btn" onClick={() => setDrawer(true)} aria-label="القائمة"><Icon n="menu" /></button>
-          <span className="brand" dir="ltr">O <b>Pharmacy</b></span>
+          <Logo size={30} />
           <div className="qat" role="toolbar" aria-label="شريط الوصول السريع">
             <button className="qbtn" title="الرئيسية" onClick={() => go('home')}><Icon n="store" /></button>
             {perms.has('sale.create') && <button className="qbtn" title="فاتورة بيع" onClick={() => go('sale')}><Icon n="cart" /></button>}{perms.has('item.view') && <button className="qbtn" title="الأصناف والأرصدة" onClick={() => go('items')}><Icon n="search" /></button>}
@@ -78,7 +85,11 @@ export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () =
           )}
         </div>
         {readOnly && <div className="card warnbox" role="alert" style={{ margin: 8 }}>الترخيص انتهى: البرنامج للقراءة والتقارير بس لحد ما يتجدد. البيانات كلها موجودة. (عن البرنامج ← تفعيل الترخيص)</div>}
-        <main id="work">{body}</main>
+        <div className="bodyrow">
+          <SideBar can={k => perms.has(k)} current={screen.cmd?.id ?? screen.id} glance={glance} narrow={narrow} setNarrow={setNarrow} go={go} />
+          <main id="work">{body}</main>
+        </div>
+        <Ticker glance={glance} go={go} />
         <footer className="status">
           <span><span className={`dot${online ? '' : ' off'}`} />{online ? 'متصل بالـ Hub' : 'مش متصل بالـ Hub'}</span>
           <span>{me.person.displayName} - {me.person.roles.map(r => ROLE_AR[r] ?? r).join(' و ')}</span>
@@ -87,7 +98,7 @@ export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () =
         {drawer && (<>
           <div className="drawer-bg" onClick={() => setDrawer(false)} />
           <nav className="drawer" aria-label="القائمة">
-            <h3><span dir="ltr">O Pharmacy</span> <button className="qbtn" style={{ float: 'left' }} onClick={() => setDrawer(false)} aria-label="إغلاق"><Icon n="x" /></button></h3>
+            <h3><Logo size={24} /> <button className="qbtn" style={{ float: 'left' }} onClick={() => setDrawer(false)} aria-label="إغلاق"><Icon n="x" /></button></h3>
             {tabs.map(t => (<details key={t.id} open={t.id === cur?.id}><summary>{t.label}</summary>{t.groups.map(g => <div key={g.label}><div className="grp">{g.label}</div>{g.items.map(c => <button key={c.id} className="rb" onClick={() => run(c)}><Icon n={c.icon} />{c.label}</button>)}</div>)}</details>))}
           </nav>
         </>)}

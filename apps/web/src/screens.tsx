@@ -3,22 +3,44 @@ import { api, arabic } from './api';
 import { ChangeSecret } from './App';
 import { Icon, useApp, type RibbonCmd } from './ui';
 import Printers from './Printers';
+import { theme, type Theme, type TickerSettings } from './chrome';
 
 type Dash = { pharmacyName: string | null; items?: number; nearExpiry?: number; people?: number; pendingDevices?: number; suppliers?: number; customers?: number; empty: boolean; testMode: boolean };
 const SPRINTS: [string, string][] = [['8', 'الـ Pilot: شهر شغل حقيقي في الصيدلية جنب eStock'], ['10', 'تطبيق الموبايل للموظفين (بعد ما الديسكتوب ينضج)']];
 
+const greet = () => { const h = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hourCycle: 'h23', timeZone: 'Africa/Cairo' }).format(new Date())); return h < 12 ? 'صباح الخير' : 'مساء الخير'; };
+const longDate = () => new Intl.DateTimeFormat('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Cairo' }).format(new Date());
+const QUICK: { screen: string; label: string; icon: string; perms: string[]; main?: boolean }[] = [
+  { screen: 'sale', label: 'فاتورة بيع', icon: 'cart', perms: ['sale.create'], main: true },
+  { screen: 'requests', label: 'طلب عميل أو ناقص', icon: 'list', perms: ['customer_request.create', 'shortage.record'] },
+  { screen: 'pinv', label: 'فاتورة مشتريات', icon: 'truck', perms: ['purchase_invoice.create'] },
+  { screen: 'customers', label: 'تحصيل من عميل', icon: 'users', perms: ['customer.view'] },
+  { screen: 'closing', label: 'تقفيل الدرج واليوم', icon: 'check', perms: ['drawer.close.review'] },
+  { screen: 'reports', label: 'التقارير', icon: 'chart', perms: ['report.view'] },
+];
+
 export function Home() {
-  const { me, go, toast } = useApp(); const [d, setD] = useState<Dash | null>(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  const { me, go, toast, can, glance } = useApp(); const [d, setD] = useState<Dash | null>(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   const load = () => api<Dash>('/api/dashboard').then(setD, e => setErr(arabic(e)));
   useEffect(() => { void load(); }, []);
   const seed = async () => { setBusy(true); try { const r = await api<{ items: number; customers: number; staff: number }>('/api/test/seed', { body: {} }); toast(`اتحمّلت البيانات التجريبية: ${r.items} صنف و${r.customers} عميل${r.staff ? ` و${r.staff} موظفين` : ''}`); await load(); } catch (e) { toast(arabic(e)); } finally { setBusy(false); } };
-  const card = (label: string, v: number | undefined, screen?: string) => v === undefined ? null : <button className="card stat" key={label} onClick={() => screen && go(screen)} style={{ textAlign: 'start' }}><span className="muted">{label}</span><b>{v}</b></button>;
+  const card = (label: string, v: number | undefined, screen?: string, tone?: string) => v === undefined ? null : <button className="card stat" key={label} onClick={() => screen && go(screen)} style={{ textAlign: 'start' }}><span className="muted">{label}</span><b style={tone ? { color: `var(--${tone})` } : undefined}>{v}</b></button>;
+  const c = glance?.counts ?? {}; const months = glance?.settings.expiryMonths ?? 3;
   return (<div>
-    <h2><Icon n="store" />أهلًا {me.person.displayName}</h2>
+    <div className="hello"><div><h1>{greet()} يا {me.person.displayName}</h1><div className="muted">{longDate()}{me.pharmacyName ? ` - ${me.pharmacyName}` : ''}</div></div></div>
     {err && <p className="err">{err}</p>}
-    {d && <div className="stats">{card('أصناف نشطة', d.items, 'items')}{card('تشغيلات تنتهي خلال 90 يوم', d.nearExpiry)}{card('موردين', d.suppliers)}{card('عملاء', d.customers)}{card('مستخدمين نشطين', d.people, 'people')}{card('أجهزة مستنية موافقة', d.pendingDevices, 'devices')}</div>}
-    {d?.testMode && d.empty && me.person.roles.includes('O') && <div className="card warnbox" style={{ marginTop: 12 }}><p>دي نسخة تجربة وقاعدة البيانات فاضية. تحب تحمّل بيانات تجريبية (أصناف وتشغيلات وموردين وعملاء)؟ بتتعمل من خلال قواعد البرنامج الحقيقية.</p><button className="btn primary" disabled={busy} onClick={() => void seed()}>{busy ? 'بيحمّل...' : 'حمّل البيانات التجريبية'}</button></div>}
-    <div className="card soonbox" style={{ marginTop: 12 }}><b>اللي جاي</b>{SPRINTS.map(([s, t]) => <div key={s}><span className="pill">{s}</span> {t}</div>)}</div>
+    <div className="stats">
+      {card('طلبات جاهزة للإبلاغ', c.ready, 'requests', c.ready ? 'info' : undefined)}
+      {card('نواقص مفتوحة', c.shortages, 'requests', c.shortages ? 'warn' : undefined)}
+      {card(`تشغيلات تنتهي خلال ${months} شهور`, c.nearExpiry, 'expiry', c.nearExpiry ? 'bad' : undefined)}
+      {card('مهامي المفتوحة', c.tasks, 'tasks')}
+      {d && card('أصناف نشطة', d.items, 'items')}{d && card('عملاء', d.customers, 'customers')}{d && card('موردين', d.suppliers, 'suppliers')}
+      {d && card('أجهزة مستنية موافقة', d.pendingDevices || undefined, 'devices', 'warn')}
+    </div>
+    {QUICK.some(q => q.perms.some(can)) && <div className="card" style={{ marginTop: 16, display: 'grid', gap: 12 }}><b>اختصارات</b>
+      <div className="quick">{QUICK.filter(q => q.perms.some(can)).map(q => <button key={q.screen} className={`qa${q.main ? ' main' : ''}`} onClick={() => go(q.screen)}><Icon n={q.icon} />{q.label}</button>)}</div></div>}
+    {d?.testMode && d.empty && me.person.roles.includes('O') && <div className="card warnbox" style={{ marginTop: 16 }}><p>دي نسخة تجربة وقاعدة البيانات فاضية. تحب تحمّل بيانات تجريبية (أصناف وتشغيلات وموردين وعملاء)؟ بتتعمل من خلال قواعد البرنامج الحقيقية.</p><button className="btn primary" disabled={busy} onClick={() => void seed()}>{busy ? 'بيحمّل...' : 'حمّل البيانات التجريبية'}</button></div>}
+    <div className="card soonbox" style={{ marginTop: 16 }}><b>اللي جاي</b>{SPRINTS.map(([s, t]) => <div key={s}><span className="pill">{s}</span> {t}</div>)}</div>
   </div>);
 }
 
@@ -27,12 +49,16 @@ export function Soon({ cmd }: { cmd?: RibbonCmd }) {
 }
 
 export function Settings() {
-  const { me, can, toast, reloadMe } = useApp(); const [name, setName] = useState(me.pharmacyName ?? ''); const [err, setErr] = useState('');
+  const { me, can, toast, reloadMe } = useApp(); const [name, setName] = useState(me.pharmacyName ?? ''); const [err, setErr] = useState(''); const [mode, setMode] = useState<Theme>(theme.get());
   const save = async (e: React.FormEvent) => { e.preventDefault(); setErr(''); try { await api('/api/settings/pharmacy', { body: { name } }); toast('اتحفظ اسم الصيدلية'); await reloadMe(); } catch (x) { setErr(arabic(x)); } };
   return (<div style={{ display: 'grid', gap: 16 }}>
     <h2><Icon n="gear" />الإعدادات</h2>
     {can('settings.branch') && <form className="card formgrid" onSubmit={save}><label>اسم الصيدلية<input value={name} onChange={e => setName(e.target.value)} /></label><button className="btn primary">حفظ</button>{err && <p className="err">{err}</p>}</form>}
     {can('settings.branch') && <Printers />}
+    {can('settings.branch') && <TickerBox />}
+    <div className="card" style={{ display: 'grid', gap: 10 }}><b>الشكل على الجهاز ده</b>
+      <div className="tabs-inline" role="group" aria-label="الشكل">{(['light', 'dark'] as Theme[]).map(t => <button key={t} className={`btn${mode === t ? ' primary' : ' ghost'}`} onClick={() => { theme.set(t); setMode(t); }}>{t === 'light' ? 'فاتح' : 'غامق'}</button>)}</div>
+      <p className="hint" style={{ margin: 0 }}>الفاتح هو الأساسي. الاختيار ده للجهاز ده بس.</p></div>
     <div className="card"><b>كلمة السر بتاعتي</b><ChangeSecret done={() => toast('اتغيرت كلمة السر')} /></div>
   </div>);
 }
@@ -52,4 +78,18 @@ export function About() {
     {can('settings.security') && <div className="card" style={{ display: 'grid', gap: 6 }}><b>النسخ الاحتياطي</b><div>آخر نسخة: {i.lastBackup ? new Date(i.lastBackup).toLocaleString('en-GB', { timeZone: 'Africa/Cairo' }) : 'لسه'}</div><p className="hint">نسخة كاملة بتتعمل كل يوم لوحدها وبيتحفظ آخر 14 يوم في فولدر البيانات. الاسترجاع من أيقونة البرنامج جنب الساعة.</p><div><button className="btn primary" onClick={() => void api<{ name: string }>('/api/system/backup', { body: {} }).then(r => { toast(`اتعملت النسخة ${r.name}`); void load(); }, e => toast(arabic(e)))}>نسخة احتياطية دلوقتي</button></div>
       {i.backups.length > 0 && <ul className="muted">{i.backups.slice(0, 10).map(b => <li key={b.name}><span className="code">{b.name}</span> - {(b.bytes / 1048576).toFixed(1)} MB</li>)}</ul>}</div>}
   </div>);
+}
+
+/** The alert strip at the bottom: on or off, how many months ahead counts as "near expiry", and which kinds it shows. */
+function TickerBox() {
+  const { toast, glance, refreshGlance } = useApp(); const [t, setT] = useState<TickerSettings | null>(glance?.settings ?? null);
+  useEffect(() => { if (!t && glance) setT(glance.settings); }, [glance, t]);
+  if (!t) return null;
+  const save = async (next: Partial<TickerSettings>) => { try { setT(await api<TickerSettings>('/api/settings/ticker', { body: next })); refreshGlance(); toast('اتحفظ'); } catch (e) { toast(arabic(e)); } };
+  const box = (k: keyof TickerSettings, label: string) => <label className="chk"><input type="checkbox" checked={t[k] as boolean} onChange={e => void save({ [k]: e.target.checked })} />{label}</label>;
+  return (<div className="card" style={{ display: 'grid', gap: 10 }}><b>شريط التنبيهات</b>
+    {box('enabled', 'يظهر تحت في كل الشاشات')}
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>{box('showExpiry', 'الصلاحية القريبة')}{box('showShortages', 'النواقص')}{box('showReady', 'طلبات جاهزة للإبلاغ')}{box('showLowStock', 'تحت حد الطلب')}</div>
+    <label className="f" style={{ display: 'grid', gap: 6, maxWidth: 260 }}>الصلاحية القريبة خلال (شهور)<select value={t.expiryMonths} onChange={e => void save({ expiryMonths: Number(e.target.value) })}>{[1, 2, 3, 4, 6, 9, 12].map(m => <option key={m} value={m}>{m}</option>)}</select></label>
+    <p className="hint" style={{ margin: 0 }}>كل موظف بيشوف في الشريط اللي صلاحياته تسمح بيه بس.</p></div>);
 }
