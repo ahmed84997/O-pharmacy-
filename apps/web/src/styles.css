@@ -400,3 +400,13 @@ button.card.stat:hover { border-color: var(--teal); }
 .ifr-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; }
 .ifr-row:hover { background: var(--hover); } .ifr-row .btn { margin-inline-start: auto; min-height: 32px; padding: 4px 10px; }
 @media (max-width: 760px) { .ifr-units, .ifr-assign { grid-template-columns: 1fr; } }
+
+/* ================= Sprint 7.10: sale side bar, customer, dose ================= */
+.cust-search { display: flex; gap: 8px; align-items: center; margin: 0; }
+.cust-search .search { flex: 1; max-width: none; margin: 0; }
+.cust-chip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; border: 2px solid var(--teal); background: var(--teal-soft); border-radius: 12px; }
+.cust-chip svg.i { color: var(--teal); font-size: 20px; } .cust-chip .btn { margin-inline-start: auto; min-height: 34px; }
+.pi-act.armed { background: var(--bad-soft); color: var(--bad); }
+.dose-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 10px; align-items: center; font-size: 14px; }
+.dose-chips { display: flex; flex-wrap: wrap; gap: 6px; } .dose-chips .btn { min-height: 32px; padding: 4px 10px; font-size: 13px; }
+@media (max-width: 760px) { .dose-row { grid-template-columns: 1fr; } }

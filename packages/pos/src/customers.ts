@@ -2,8 +2,8 @@ import { can, normalizeSearch, uuidv7, type Person } from '@o-pharmacy/core';
 import type { Hub } from '@o-pharmacy/hub';
 import { PosError, type SaleService } from './sales';
 
-export interface Customer { id: string; code: string; name: string; phone: string | null; kind: 'person' | 'company'; creditLimitMinor: number; notes: string | null; active: boolean; balanceMinor: number }
-export interface CustomerInput { name: string; phone?: string; kind?: 'person' | 'company'; notes?: string }
+export interface Customer { id: string; code: string; name: string; phone: string | null; address: string | null; kind: 'person' | 'company'; creditLimitMinor: number; notes: string | null; active: boolean; balanceMinor: number }
+export interface CustomerInput { name: string; phone?: string; kind?: 'person' | 'company'; notes?: string; address?: string; /** keep an existing code (customers from eStock, D38); new customers get the next plain number */ code?: string }
 export interface StatementLine { at: string; kind: string; ref: string | null; note: string | null; debitMinor: number; creditMinor: number; balanceMinor: number }
 
 /** Customers and their account: a credit sale adds to what the customer owes, a payment or an account refund reduces it. The balance is the sum of an append-only ledger (never edited: a mistake is a correcting entry). */
@@ -11,7 +11,7 @@ export class CustomerService {
   constructor(private hub: Hub, private sales: SaleService) {}
   private get db() { return this.hub.db; }
   private need(a: Person, perm: string): void { if (!can(a, perm, this.hub.branchId)) throw new PosError('forbidden', `missing permission ${perm}`); }
-  private toCustomer(r: Record<string, unknown>): Customer { return { id: String(r.id), code: String(r.code), name: String(r.name), phone: (r.phone as string) ?? null, kind: r.kind as Customer['kind'], creditLimitMinor: Number(r.credit_limit_minor), notes: (r.notes as string) ?? null, active: Number(r.active) === 1, balanceMinor: this.sales.customerBalance(String(r.id)) }; }
+  private toCustomer(r: Record<string, unknown>): Customer { return { id: String(r.id), code: String(r.code), name: String(r.name), phone: (r.phone as string) ?? null, address: (r.address as string) ?? null, kind: r.kind as Customer['kind'], creditLimitMinor: Number(r.credit_limit_minor), notes: (r.notes as string) ?? null, active: Number(r.active) === 1, balanceMinor: this.sales.customerBalance(String(r.id)) }; }
   private row(id: string) { const r = this.db.prepare('SELECT * FROM customers WHERE id=?').get(id); if (!r) throw new PosError('not-found', `customer ${id}`); return r; }
   private phone(p?: string): string | null { const t = p?.trim().replace(/[\s-]/g, ''); if (!t) return null; const a = t.replace(/[٠-٩]/g, c => String('٠١٢٣٤٥٦٧٨٩'.indexOf(c))); if (!/^\+?\d{6,15}$/.test(a)) throw new PosError('invalid', 'unreadable phone number'); return a; }
 
@@ -19,15 +19,22 @@ export class CustomerService {
     this.need(actor, 'customer.create'); const name = c.name?.trim(); if (!name) throw new PosError('invalid', 'customer name is required'); const phone = this.phone(c.phone);
     if (phone && this.db.prepare('SELECT 1 FROM customers WHERE phone=?').get(phone)) throw new PosError('invalid', 'a customer with this phone exists');
     const id = uuidv7(); return this.db.tx(() => {
-      const n = Number(this.db.prepare("SELECT v FROM pos_counters WHERE k='customer'").get()?.v ?? 0) + 1; this.db.prepare("INSERT INTO pos_counters(k,v) VALUES('customer',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v").run(n); const code = `C-${String(n).padStart(6, '0')}`;
-      this.db.prepare('INSERT INTO customers(id,code,name,phone,kind,notes,search_text,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)').run(id, code, name, phone, c.kind ?? 'person', c.notes ?? null, normalizeSearch(`${name} ${phone ?? ''} ${code}`), actor.id, this.hub.now());
+      /* plain numbers 1, 2, 3 (D38): the next number after the counter and after any numeric code already used (imported customers keep theirs) */
+      const given = c.code?.trim(); if (given && (!/^[A-Za-z0-9-]{1,20}$/.test(given) || this.db.prepare('SELECT 1 FROM customers WHERE code=?').get(given))) throw new PosError('invalid', 'customer code is taken or unreadable');
+      const maxNum = Number(this.db.prepare("SELECT COALESCE(MAX(CAST(code AS INTEGER)),0) m FROM customers WHERE code GLOB '[0-9]*' AND code NOT GLOB '*[^0-9]*'").get()!.m);
+      const n = Math.max(Number(this.db.prepare("SELECT v FROM pos_counters WHERE k='customer'").get()?.v ?? 0), maxNum) + (given ? 0 : 1);
+      const code = given ?? String(n); const counter = given && /^\d+$/.test(given) ? Math.max(n, Number(given)) : n;
+      this.db.prepare("INSERT INTO pos_counters(k,v) VALUES('customer',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v").run(counter);
+      const address = c.address?.trim() || null; if (address && address.length > 300) throw new PosError('invalid', 'address is too long');
+      this.db.prepare('INSERT INTO customers(id,code,name,phone,kind,notes,address,search_text,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)').run(id, code, name, phone, c.kind ?? 'person', c.notes ?? null, address, normalizeSearch(`${name} ${phone ?? ''} ${code} ${address ?? ''}`), actor.id, this.hub.now());
       this.hub.audit(actor.id, 'customer.created', 'customer', id, { code, name }); this.hub.emit('customer.created', { id, code, name }); return this.toCustomer(this.row(id));
     });
   }
   update(actor: Person, id: string, p: Partial<CustomerInput>): Customer {
     this.need(actor, 'customer.update'); const cur = this.row(id); const name = p.name === undefined ? String(cur.name) : p.name.trim(); if (!name) throw new PosError('invalid', 'customer name is required'); const phone = p.phone === undefined ? ((cur.phone as string) ?? null) : this.phone(p.phone);
     if (phone && phone !== cur.phone && this.db.prepare('SELECT 1 FROM customers WHERE phone=?').get(phone)) throw new PosError('invalid', 'a customer with this phone exists');
-    return this.db.tx(() => { this.db.prepare('UPDATE customers SET name=?, phone=?, kind=?, notes=?, search_text=? WHERE id=?').run(name, phone, p.kind ?? cur.kind, p.notes ?? cur.notes ?? null, normalizeSearch(`${name} ${phone ?? ''} ${String(cur.code)}`), id); this.hub.audit(actor.id, 'customer.updated', 'customer', id, { fields: Object.keys(p) }); this.hub.emit('customer.updated', { id }); return this.toCustomer(this.row(id)); });
+    const address = p.address === undefined ? ((cur.address as string) ?? null) : p.address.trim() || null; if (address && address.length > 300) throw new PosError('invalid', 'address is too long');
+    return this.db.tx(() => { this.db.prepare('UPDATE customers SET name=?, phone=?, kind=?, notes=?, address=?, search_text=? WHERE id=?').run(name, phone, p.kind ?? cur.kind, p.notes ?? cur.notes ?? null, address, normalizeSearch(`${name} ${phone ?? ''} ${String(cur.code)} ${address ?? ''}`), id); this.hub.audit(actor.id, 'customer.updated', 'customer', id, { fields: Object.keys(p) }); this.hub.emit('customer.updated', { id }); return this.toCustomer(this.row(id)); });
   }
   /** The most this customer may owe at one time (0 = no credit). */
   setCreditLimit(actor: Person, id: string, limitMinor: number, reason: string): Customer {
@@ -41,7 +48,9 @@ export class CustomerService {
   }
   get(actor: Person, id: string): Customer { this.need(actor, 'customer.view'); return this.toCustomer(this.row(id)); }
   search(actor: Person, q: string, o: { includeInactive?: boolean; limit?: number } = {}): Customer[] {
-    this.need(actor, 'customer.view'); const n = normalizeSearch(q ?? ''); return this.db.prepare(`SELECT * FROM customers WHERE (? OR active=1) AND search_text LIKE ? ORDER BY name LIMIT ?`).all(o.includeInactive ? 1 : 0, `%${n}%`, o.limit ?? 50).map(r => this.toCustomer(r));
+    this.need(actor, 'customer.view'); const n = normalizeSearch(q ?? ''); const exact = (q ?? '').trim().replace(/[٠-٩]/g, c => String('٠١٢٣٤٥٦٧٨٩'.indexOf(c)));
+    /* a customer whose code or phone is exactly what was typed comes first (the cashier types the code for a delivery) */
+    return this.db.prepare(`SELECT * FROM customers WHERE (? OR active=1) AND search_text LIKE ? ORDER BY (code = ? OR phone = ?) DESC, name LIMIT ?`).all(o.includeInactive ? 1 : 0, `%${n}%`, exact, exact, o.limit ?? 50).map(r => this.toCustomer(r));
   }
   /** An opening balance (what the customer owed before this system): needs the credit-limit permission, only while the account is empty. */
   openingBalance(actor: Person, id: string, amountMinor: number, note: string): void {

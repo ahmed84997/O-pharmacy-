@@ -22,7 +22,7 @@ const credit = (s: ReturnType<typeof prep>, qty: number, o: Record<string, unkno
 
 describe('customers', () => {
   it('create with a code, Arabic digits in the phone become Latin; duplicate phone refused; search by name or phone; permissions; no delete', () => {
-    const s = prep(); expect(s.cust.get(owner, s.c.id)).toMatchObject({ code: 'C-000001', phone: '01001234567', creditLimitMinor: 20000, balanceMinor: 0, active: true });
+    const s = prep(); expect(s.cust.get(owner, s.c.id)).toMatchObject({ code: '1', phone: '01001234567', creditLimitMinor: 20000, balanceMinor: 0, active: true });
     expect(code(() => s.cust.create(owner, { name: 'تانى', phone: '01001234567' }))).toBe('invalid'); expect(code(() => s.cust.create(owner, { name: ' ' }))).toBe('invalid'); expect(code(() => s.cust.create({ ...cashier, denies: ['customer.create'] }, { name: 'x' }))).toBe('forbidden');
     expect(s.cust.search(owner, 'أحمد')).toHaveLength(1); expect(s.cust.search(owner, '0100123')).toHaveLength(1); expect(s.cust.search(owner, 'zzz')).toHaveLength(0);
     expect(code(() => s.cust.setCreditLimit(ph, s.c.id, 5, 'x'))).toBe('forbidden'); expect(code(() => s.cust.setCreditLimit(owner, s.c.id, 5, ' '))).toBe('invalid');
@@ -70,5 +70,17 @@ describe('payments and refunds on the account', () => {
     const s = prep(); const b = s.cust.create(owner, { name: 'ب' }); s.cust.openingBalance(owner, b.id, 9000, 'from the old books'); expect(code(() => s.cust.openingBalance(owner, b.id, 1, 'again'))).toBe('state'); credit(s, 1);
     expect(s.cust.owing(owner).map(o => [o.name, o.balanceMinor])).toEqual([['ب', 9000], ['أحمد علي', 5000]]); const st = s.cust.statement(owner, s.c.id, { fromIso: '2026-12-02T00:00:00Z' }); expect(st).toMatchObject({ opening: 5000, closing: 5000 }); expect(st.lines).toHaveLength(0);
     expect(code(() => s.cust.owing({ ...cashier, denies: ['customer.view'] }))).toBe('forbidden');
+  });
+});
+
+describe('customer codes and address (Sprint 7.10)', () => {
+  it('numbers new customers 1, 2, 3, keeps an imported code and continues after it, keeps the address, and finds the exact code first', () => {
+    const s = prep(); expect(s.c.code).toBe('1');
+    const b = s.cust.create(owner, { name: 'سارة', phone: '01111111111', address: 'شارع النصر 12' }); expect(b).toMatchObject({ code: '2', address: 'شارع النصر 12' });
+    const imp = s.cust.create(owner, { name: 'من eStock', code: '13' }); expect(imp.code).toBe('13'); expect(code(() => s.cust.create(owner, { name: 'x', code: '13' }))).toBe('invalid');
+    expect(s.cust.create(owner, { name: 'جديد' }).code).toBe('14');
+    expect(s.cust.update(owner, b.id, { address: 'المعادي' }).address).toBe('المعادي');
+    s.cust.create(owner, { name: 'عميل 21', code: '21' }); expect(s.cust.search(owner, '2')[0]!.code).toBe('2');
+    expect(s.cust.search(owner, 'المعادي').map(c => c.id)).toEqual([b.id]);
   });
 });
