@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, arabic } from './api';
 import { qtyText } from './pos';
 import { dmyHm, Icon, money, newKey, toMinor, useApp } from './ui';
+import { ItemForm } from './itemform';
 
 type Unit = { name: string; factor: number };
 export type InvItem = { id: string; code: string; nameAr: string; kind: string; status: string; units: Unit[]; listPriceMinor: number | null };
@@ -37,32 +38,26 @@ export function ItemsScreen() {
   </div>);
 }
 
-export function NewItem({ done }: { done: (id?: string) => void }) {
-  const { can } = useApp(); const [f, setF] = useState({ nameAr: '', kind: 'drug', form: 'قرص', strength: '', activeIngredient: '', manufacturer: '', reorderLevel: '', listPrice: '', barcode: '', barcodeUnit: '' }); const [units, setUnits] = useState<{ name: string; factor: string }[]>([{ name: 'قرص', factor: '1' }, { name: 'علبة', factor: '20' }]); const [err, setErr] = useState('');
-  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
-  const save = async () => { setErr(''); const us = units.filter(u => u.name.trim()).map(u => ({ name: u.name.trim(), factor: int(u.factor) })); if (us.some(u => !(u.factor >= 1))) return setErr('عدد القطع في كل وحدة لازم رقم صحيح'); if (f.kind !== 'drug' && f.listPrice && toMinor(f.listPrice) === null) return setErr('السعر مش مظبوط');
-    try { const it = await api<{ id: string }>('/api/inv/items', { body: { nameAr: f.nameAr, kind: f.kind, form: f.form || undefined, strength: f.strength || undefined, activeIngredient: f.activeIngredient || undefined, manufacturer: f.manufacturer || undefined, reorderLevel: f.reorderLevel ? int(f.reorderLevel) : undefined, listPriceMinor: f.kind !== 'drug' && f.listPrice ? toMinor(f.listPrice) : undefined, units: us, barcodes: f.barcode ? [{ barcode: f.barcode.trim(), unitName: f.barcodeUnit || us[us.length - 1]?.name }] : [] } }); done(it.id); } catch (e) { setErr(invErr(e)); } };
-  return (<div style={{ display: 'grid', gap: 12, maxWidth: 900 }}><h2><Icon n="plus" />صنف جديد</h2>
-    <div className="card formgrid"><label>الاسم بالعربي<input value={f.nameAr} onChange={set('nameAr')} /></label><label>النوع<select value={f.kind} onChange={set('kind')}><option value="drug">دواء (السعر من الدولة مع التشغيلة)</option><option value="non_drug">غير دوائي (سعر حر)</option><option value="service">خدمة (من غير مخزون)</option></select></label>
-      <label>الشكل<input value={f.form} onChange={set('form')} /></label><label>التركيز<input value={f.strength} onChange={set('strength')} /></label><label>المادة الفعالة<input value={f.activeIngredient} onChange={set('activeIngredient')} /></label><label>الشركة<input value={f.manufacturer} onChange={set('manufacturer')} /></label><label>حد إعادة الطلب (أصغر وحدة)<input className="num" value={f.reorderLevel} onChange={set('reorderLevel')} /></label>
-      {f.kind !== 'drug' && can('item.price.set') && <label>سعر البيع (لأكبر وحدة)<input className="num" value={f.listPrice} onChange={set('listPrice')} /></label>}</div>
-    <div className="card" style={{ display: 'grid', gap: 8 }}><b>الوحدات (الأصغر الأول بـ 1، والباقي بعدد القطع جواها)</b>{units.map((u, i) => <div key={i} className="formgrid"><label>الوحدة<input value={u.name} onChange={e => setUnits(units.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))} /></label><label>فيها كام من الأصغر<input className="num" value={u.factor} disabled={i === 0} onChange={e => setUnits(units.map((x, k) => (k === i ? { ...x, factor: e.target.value } : x)))} /></label>{i > 0 && <button className="btn ghost" onClick={() => setUnits(units.filter((_, k) => k !== i))}>شيل</button>}</div>)}<div><button className="btn" onClick={() => setUnits([...units, { name: '', factor: '' }])}>وحدة كمان</button></div>
-      <p className="hint">الوحدات مبتتغيرش بعد الحفظ (عشان الأرصدة القديمة تفضل صح). تقدر تزوّد وحدة جديدة بعدين.</p></div>
-    <div className="card formgrid"><label>الباركود<input dir="ltr" value={f.barcode} onChange={set('barcode')} /></label><label>الباركود ده لوحدة<select value={f.barcodeUnit} onChange={set('barcodeUnit')}><option value="">أكبر وحدة</option>{units.filter(u => u.name).map(u => <option key={u.name}>{u.name}</option>)}</select></label></div>
-    {err && <p className="err">{err}</p>}<div className="actions"><button className="btn primary" onClick={() => void save()}>حفظ</button><button className="btn ghost" onClick={() => done()}>رجوع</button></div></div>);
-}
+/** New item: the full item card form (Sprint 7.9, itemform.tsx). */
+export function NewItem({ done }: { done: (id?: string) => void }) { return <ItemForm done={done} />; }
 
 type Card = { item: InvItem & { form: string | null; strength: string | null; activeIngredient: string | null; manufacturer: string | null; reorderLevel: number }; barcodes: { barcode: string; unitName: string; kind: string; active: boolean }[]; statusLog: { from: string; to: string; byName: string; at: string; reason: string }[]; byStore?: { storeId: string; storeName: string; qtyBase: number }[]; batches?: { id: string; lot: string; expiry: string; qtyBase: number; expired: boolean; status: string; costMinor: number | null; publicPriceMinor: number | null; pharmacistPriceMinor: number | null; priceUnit: { name: string } }[]; prices?: { supplierName: string; effCostMinor: number; at: string; piNo: string }[] };
 function ItemCard({ id, back }: { id: string; back: () => void }) {
   const { can, toast, ask } = useApp(); const [c, setC] = useState<Card | null>(null); const [kardex, setKardex] = useState<{ opening: number; closing: number; lines: { at: string; kind: string; ref: string | null; actorName: string; lot: string | null; qty: number; balance: number }[] } | null>(null);
   const load = useCallback(() => api<Card>(`/api/inv/items/${id}`).then(setC, e => toast(arabic(e))), [id, toast]); useEffect(() => { void load(); }, [load]);
+  const [edit, setEdit] = useState(false);
   const act = (p: Promise<unknown>, ok: string) => p.then(() => { toast(ok); void load(); }, e => toast(invErr(e)));
+  if (edit) return <ItemForm id={id} done={() => { setEdit(false); void load(); }} />;
   if (!c) return <p>بيحمّل...</p>; const it = c.item; const units = it.units;
   return (<div style={{ display: 'grid', gap: 12 }}>
     <h2><Icon n="box" />{it.nameAr} <span className="pill">{KIND[it.kind]}</span>{it.status !== 'active' && <span className="pill warn">{STATUS[it.status]}</span>}</h2>
     <div className="card"><div className="muted">{[it.code, it.form, it.strength, it.activeIngredient, it.manufacturer].filter(Boolean).join(' - ')}</div><div>الوحدات: {units.map(u => (u.factor > 1 ? `${u.name} = ${u.factor}` : u.name)).join(' - ')} - حد الطلب {qtyText(it.reorderLevel, units)}{it.kind !== 'drug' && ` - السعر ${money(it.listPriceMinor)}`}</div>
+      {(() => { const k = (it as unknown as { card?: { description: string | null; defaultDiscountBp: number; taxBp: number; hasExpiry: boolean; printLabel: boolean; autoShortage: boolean; hideOnReceipt: boolean }; location?: string | null }); const cd = k.card; if (!cd) return null;
+        const tags = [!cd.hasExpiry && 'بدون صلاحية', cd.autoShortage && 'نواقص عامة', !cd.printLabel && 'بدون باركود', cd.hideOnReceipt && 'الاسم مش بيتطبع في الفاتورة'].filter(Boolean) as string[];
+        return <div>{k.location ? `المكان: ${k.location} - ` : ''}{cd.defaultDiscountBp ? `خصم المورد ${cd.defaultDiscountBp / 100}% - ` : ''}{cd.taxBp ? `ضريبة ${cd.taxBp / 100}% - ` : ''}{tags.map(t => <span key={t} className="pill" style={{ marginInlineEnd: 6 }}>{t}</span>)}{cd.description && <div className="muted">{cd.description}</div>}</div>; })()}
       <div>الباركود: {c.barcodes.map(b => <span key={b.barcode} className="code"> {b.barcode} ({b.unitName}) </span>)}</div>
       <div className="actions" style={{ marginTop: 8 }}>
+        {can('item.update') && <button className="btn primary" onClick={() => setEdit(true)}>تعديل كارت الصنف</button>}
         {can('item.barcode_alias.manage') && <button className="btn ghost" onClick={() => void ask('الباركود الجديد (لأكبر وحدة)').then(b => { if (b) void act(api(`/api/inv/items/${id}/barcodes`, { body: { barcode: b } }), 'اتضاف الباركود'); })}>باركود جديد</button>}
         {can('item.update') && <button className="btn ghost" onClick={() => void ask('اسم الوحدة الجديدة').then(n => { if (n) void ask(`الـ ${n} فيها كام من أصغر وحدة؟`).then(f => { if (f) void act(api(`/api/inv/items/${id}/units`, { body: { name: n, factor: int(f) } }), 'اتضافت الوحدة'); }); })}>وحدة جديدة</button>}
         {it.kind !== 'drug' && can('item.price.set') && <button className="btn ghost" onClick={() => void ask('السعر الجديد (جنيه)').then(v => { const m = v ? toMinor(v) : null; if (m !== null) void act(api(`/api/inv/items/${id}`, { method: 'PATCH', body: { listPriceMinor: m } }), 'اتغيّر السعر'); })}>تغيير السعر</button>}

@@ -377,3 +377,26 @@ button.card.stat:hover { border-color: var(--teal); }
   .print-area th, .print-area td { border: 1px solid #555; padding: 3px 5px; background: #fff !important; color: #000 !important; }
 }
 @media (max-width: 760px) { .pi { flex-direction: column; } .pi-side { position: static; width: 100%; flex-direction: row; flex-wrap: wrap; } .pi-act { flex: 1 1 140px; } }
+
+/* ================= Sprint 7.9: item card form and lists ================= */
+.ifr { display: grid; gap: 12px; max-width: 1100px; }
+.ifr-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ifr-sec { display: grid; gap: 12px; }
+.ifr-sec > b:first-child { font-size: 17px; color: var(--teal-ink); }
+.ifr-lbl { font-size: 13px; font-weight: 700; }
+.ifr-pick { display: flex; gap: 6px; align-items: stretch; }
+.ifr-pick select { flex: 1; min-width: 0; }
+.ifr-pick .btn { min-width: 42px; padding: 0 10px; font-size: 18px; }
+.ifr-codes { display: grid; gap: 8px; }
+.ifr-code { display: flex; gap: 8px; flex-wrap: wrap; }
+.ifr-code input { flex: 2; min-width: 200px; } .ifr-code select { flex: 1; min-width: 150px; }
+.ifr-sw { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 16px; }
+.ifr-sw .chk { font-weight: 600; font-size: 15px; }
+.ifr-units { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ifr-unit { display: grid; gap: 8px; align-content: start; background: var(--ribbon); border: 2px solid var(--line); border-radius: 12px; padding: 12px; }
+.ifr-unit label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.ifr-assign { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.ifr-list { display: grid; gap: 2px; max-height: 340px; overflow: auto; border: 2px solid var(--line); border-radius: 10px; padding: 6px; }
+.ifr-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; }
+.ifr-row:hover { background: var(--hover); } .ifr-row .btn { margin-inline-start: auto; min-height: 32px; padding: 4px 10px; }
+@media (max-width: 760px) { .ifr-units, .ifr-assign { grid-template-columns: 1fr; } }

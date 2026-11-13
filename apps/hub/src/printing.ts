@@ -28,7 +28,7 @@ function setup(c: PrinterConfig): PrinterSetup {
   return { transport, kind: c.kind, paperWidthMm: c.paperWidthMm ?? 80, drawerOnCash: c.drawerOnCash ?? true };
 }
 function env(app: App): PrintEnv {
-  const db = app.hub.db; return { pharmacy: { name: app.access.setting('pharmacy.name') ?? 'O Pharmacy', branch: app.hub.branchId, phones: (app.access.setting('pharmacy.phones') ?? '').split(',').map(s => s.trim()).filter(Boolean) }, style: receiptStyle(app),
+  const db = app.hub.db; const hidden = db.prepare('SELECT hide_on_receipt h FROM items WHERE id=?'); return { hideName: id => Number(hidden.get(id)?.h ?? 0) === 1, pharmacy: { name: app.access.setting('pharmacy.name') ?? 'O Pharmacy', branch: app.hub.branchId, phones: (app.access.setting('pharmacy.phones') ?? '').split(',').map(s => s.trim()).filter(Boolean) }, style: receiptStyle(app),
     nameOf: id => String(db.prepare('SELECT display_name FROM people WHERE id=?').get(id)?.display_name ?? id), customerNameOf: id => (db.prepare('SELECT name FROM customers WHERE id=?').get(id)?.name as string) ?? null };
 }
 /** A print service with the printers as configured right now. */
@@ -36,7 +36,7 @@ export function printService(app: App): PrintService { const map: Record<string,
 
 /** The receipt as a picture (PNG), exactly as it would print: for the screen and the test server. Nothing is logged: it is not a print. */
 export function receiptPng(app: App, actor: Person, saleNo: string, widthMm: 58 | 80 = 80): Buffer {
-  const sale = app.sales.sale(actor, saleNo); const e = env(app);
+  const s0 = app.sales.sale(actor, saleNo); const e = env(app); const sale = { ...s0, lines: s0.lines.map(l => (e.hideName?.(l.itemId) ? { ...l, itemName: 'صنف' } : l)) };
   const img = raster.receipt(buildReceipt(sale, { pharmacy: e.pharmacy, style: e.style, cashierName: e.nameOf(sale.createdBy), customerName: sale.customerId ? e.customerNameOf?.(sale.customerId) ?? null : null, copy: 'counter', copyNo: 1, qrText: null }), widthMm === 58 ? 384 : 576);
   return png(img);
 }

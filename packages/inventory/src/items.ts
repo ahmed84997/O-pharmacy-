@@ -15,13 +15,17 @@ export interface ItemInput {
   eta?: { type: EtaCodeType; code: string; tax?: 'taxable' | 'exempt' };
   /** Base unit first (factor 1, e.g. tablet), then larger ones (strip 10, box 30). */
   units: UnitInput[]; barcodes?: BarcodeInput[];
+  /** Sprint 7.9 item card (D38). Prices are per the largest unit. */
+  card?: CardInput;
 }
-export type ItemPatch = Partial<Omit<ItemInput, 'kind' | 'units' | 'barcodes' | 'code' | 'eta' | 'listPriceMinor'>> & { eta?: ItemInput['eta'] | null; listPriceMinor?: number | null };
+export interface CardInput { description?: string | null; defaultPriceMinor?: number | null; defaultCostMinor?: number | null; defaultDiscountBp?: number; taxBp?: number; hasExpiry?: boolean; printLabel?: boolean; autoShortage?: boolean; hideOnReceipt?: boolean }
+export interface ItemCard { description: string | null; defaultPriceMinor: number | null; defaultCostMinor: number | null; defaultDiscountBp: number; taxBp: number; hasExpiry: boolean; printLabel: boolean; autoShortage: boolean; hideOnReceipt: boolean }
+export type ItemPatch = Partial<Omit<ItemInput, 'kind' | 'units' | 'barcodes' | 'code' | 'eta' | 'listPriceMinor' | 'card'>> & { card?: CardInput; eta?: ItemInput['eta'] | null; listPriceMinor?: number | null };
 export interface Unit { id: string; itemId: string; name: string; factor: number; isBase: boolean; sellable: boolean; purchasable: boolean }
 export interface Item {
   id: string; code: string; nameAr: string; nameEn: string | null; kind: ItemKind; form: string | null; strength: string | null; activeIngredient: string | null; manufacturer: string | null;
   groupId: string | null; location: string | null; reorderLevel: number; listPriceMinor: number | null; eta: { type: EtaCodeType; code: string; tax: 'taxable' | 'exempt' } | { type: null; code: null; tax: 'taxable' | 'exempt' };
-  status: ItemStatus; createdAt: string; updatedAt: string; units: Unit[];
+  status: ItemStatus; createdAt: string; updatedAt: string; units: Unit[]; card: ItemCard;
 }
 export type ItemErrorCode = 'forbidden' | 'invalid' | 'duplicate-barcode' | 'duplicate-code' | 'not-found' | 'reason-required' | 'same-status' | 'price-rule';
 export class ItemError extends Error { constructor(public code: ItemErrorCode, m: string, public detail?: unknown) { super(m); } }
@@ -43,7 +47,8 @@ export class ItemService {
     return { id: String(r.id), code: String(r.code), nameAr: String(r.name_ar), nameEn: (r.name_en as string | null) ?? null, kind: r.kind as ItemKind, form: (r.form as string | null) ?? null, strength: (r.strength as string | null) ?? null,
       activeIngredient: (r.active_ingredient as string | null) ?? null, manufacturer: (r.manufacturer as string | null) ?? null, groupId: (r.group_id as string | null) ?? null, location: (r.location as string | null) ?? null,
       reorderLevel: Number(r.reorder_level), listPriceMinor: r.list_price_minor === null ? null : Number(r.list_price_minor),
-      eta: type ? { type, code: String(r.eta_code), tax } : { type: null, code: null, tax }, status: r.status as ItemStatus, createdAt: String(r.created_at), updatedAt: String(r.updated_at), units: this.unitsOf(String(r.id)) };
+      eta: type ? { type, code: String(r.eta_code), tax } : { type: null, code: null, tax }, status: r.status as ItemStatus, createdAt: String(r.created_at), updatedAt: String(r.updated_at), units: this.unitsOf(String(r.id)),
+      card: { description: (r.description as string | null) ?? null, defaultPriceMinor: r.default_price_minor == null ? null : Number(r.default_price_minor), defaultCostMinor: r.default_cost_minor == null ? null : Number(r.default_cost_minor), defaultDiscountBp: Number(r.default_discount_bp ?? 0), taxBp: Number(r.tax_bp ?? 0), hasExpiry: r.has_expiry == null ? true : bool(r.has_expiry), printLabel: r.print_label == null ? true : bool(r.print_label), autoShortage: bool(r.auto_shortage), hideOnReceipt: bool(r.hide_on_receipt) } };
   }
   get(id: string): Item | null { const r = this.db.prepare('SELECT * FROM items WHERE id=?').get(id); return r ? this.toItem(r) : null; }
   getByCode(code: string): Item | null { const r = this.db.prepare('SELECT * FROM items WHERE code=?').get(code); return r ? this.toItem(r) : null; }
@@ -92,6 +97,32 @@ export class ItemService {
   }
   groups(): { id: string; name: string }[] { return this.db.prepare('SELECT id, name FROM item_groups ORDER BY name').all().map(r => ({ id: String(r.id), name: String(r.name) })); }
 
+  // ---------- lists the item card picks from (Sprint 7.9): unit names and storage places; never deleted, switched off ----------
+  private listTable(t: 'unit_names' | 'item_locations', all: boolean) { return this.db.prepare(`SELECT id, name, active FROM ${t} ${all ? '' : 'WHERE active=1 '}ORDER BY name`).all().map(r => ({ id: String(r.id), name: String(r.name), active: bool(r.active) })); }
+  private addToTable(actor: Person, t: 'unit_names' | 'item_locations', name: string, what: string) {
+    this.need(actor, 'item.update'); const n = name.trim(); if (!n) throw new ItemError('invalid', `${what} name is required`); const id = uuidv7();
+    try { this.db.tx(() => { this.db.prepare(`INSERT INTO ${t}(id,name,created_by,created_at) VALUES(?,?,?,?)`).run(id, n, actor.id, this.hub.now()); this.hub.audit(actor.id, `${t}.created`, t, id, { name: n }); }); }
+    catch (e) { if (e instanceof Error && /UNIQUE/.test(e.message)) throw new ItemError('invalid', `${what} already exists`); throw e; }
+    return { id, name: n, active: true };
+  }
+  private switchInTable(actor: Person, t: 'unit_names' | 'item_locations', id: string, active: boolean) {
+    this.need(actor, 'item.update'); const r = this.db.prepare(`SELECT name FROM ${t} WHERE id=?`).get(id); if (!r) throw new ItemError('not-found', id);
+    this.db.tx(() => { this.db.prepare(`UPDATE ${t} SET active=? WHERE id=?`).run(active ? 1 : 0, id); this.hub.audit(actor.id, `${t}.active`, t, id, { name: String(r.name), active }); });
+  }
+  unitNames(all = false) { return this.listTable('unit_names', all); }
+  addUnitName(actor: Person, name: string) { return this.addToTable(actor, 'unit_names', name, 'unit'); }
+  setUnitNameActive(actor: Person, id: string, active: boolean) { this.switchInTable(actor, 'unit_names', id, active); }
+  locations(all = false) { return this.listTable('item_locations', all).map(l => ({ ...l, items: Number(this.db.prepare("SELECT COUNT(*) n FROM items WHERE location=? AND status <> 'archived'").get(l.name)!.n) })); }
+  addLocation(actor: Person, name: string) { return this.addToTable(actor, 'item_locations', name, 'location'); }
+  setLocationActive(actor: Person, id: string, active: boolean) { this.switchInTable(actor, 'item_locations', id, active); }
+  /** Puts several items on one shelf at once ("تحديد أماكن الأصناف"); null takes them off any shelf. */
+  assignLocation(actor: Person, itemIds: string[], location: string | null): number {
+    this.need(actor, 'item.update'); if (!Array.isArray(itemIds) || !itemIds.length || itemIds.length > 500) throw new ItemError('invalid', '1 to 500 items');
+    const loc = location?.trim() || null; if (loc && !this.db.prepare('SELECT 1 FROM item_locations WHERE name=? AND active=1').get(loc)) throw new ItemError('invalid', 'unknown location');
+    return this.db.tx(() => { let n = 0; for (const id of itemIds) { const r = this.db.prepare('UPDATE items SET location=?, updated_at=? WHERE id=?').run(loc, this.hub.now(), id); n += Number(r.changes); }
+      this.hub.audit(actor.id, 'item.location_assigned', 'item', loc ?? '-', { items: n, location: loc }); return n; });
+  }
+
   /** Quantity in a unit to base units (the ledger always counts in base units). */
   toBase(item: Item, unitName: string, qty: number): number {
     const u = item.units.find(x => x.name === unitName); if (!u) throw new ItemError('invalid', `unknown unit ${unitName}`);
@@ -119,11 +150,30 @@ export class ItemService {
     this.need(actor, 'item.price.set');
   }
 
+  /** Writes the item card fields (Sprint 7.9). The suggested consumer price needs item.price.set; the rest item.update (or item.create on a new item). */
+  private checkCard(c: CardInput, actor: Person): void {
+    const money = (v: number | null | undefined, n: string) => { if (v != null && (!Number.isInteger(v) || v < 0)) throw new ItemError('invalid', `${n} must be whole piasters`); };
+    const bp = (v: number | undefined, n: string) => { if (v !== undefined && (!Number.isInteger(v) || v < 0 || v > 10000)) throw new ItemError('invalid', `${n} must be 0 to 100%`); };
+    money(c.defaultPriceMinor, 'consumer price'); money(c.defaultCostMinor, 'cost'); bp(c.defaultDiscountBp, 'discount'); bp(c.taxBp, 'tax');
+    if (c.defaultPriceMinor != null) this.need(actor, 'item.price.set');
+    if (c.description != null && c.description.length > 2000) throw new ItemError('invalid', 'description is too long');
+  }
+  private writeCard(id: string, c: CardInput): void {
+    const sets: string[] = []; const args: unknown[] = []; const put = (col: string, v: unknown) => { sets.push(`${col}=?`); args.push(v); };
+    if (c.description !== undefined) put('description', c.description?.trim() || null);
+    if (c.defaultPriceMinor !== undefined) put('default_price_minor', c.defaultPriceMinor);
+    if (c.defaultCostMinor !== undefined) put('default_cost_minor', c.defaultCostMinor);
+    if (c.defaultDiscountBp !== undefined) put('default_discount_bp', c.defaultDiscountBp);
+    if (c.taxBp !== undefined) put('tax_bp', c.taxBp);
+    for (const [k, col] of [['hasExpiry', 'has_expiry'], ['printLabel', 'print_label'], ['autoShortage', 'auto_shortage'], ['hideOnReceipt', 'hide_on_receipt']] as const) if (c[k] !== undefined) put(col, c[k] ? 1 : 0);
+    if (sets.length) this.db.prepare(`UPDATE items SET ${sets.join(', ')} WHERE id=?`).run(...args, id);
+  }
+
   create(actor: Person, input: ItemInput): Item {
     this.need(actor, 'item.create');
     if (!input.nameAr?.trim()) throw new ItemError('invalid', 'Arabic name is required');
     if (input.reorderLevel !== undefined && (!Number.isInteger(input.reorderLevel) || input.reorderLevel < 0)) throw new ItemError('invalid', 'reorder level must be a whole number');
-    this.checkPrice(input.kind, input.listPriceMinor, actor); this.checkEta(input.eta);
+    this.checkPrice(input.kind, input.listPriceMinor, actor); this.checkEta(input.eta); if (input.card) this.checkCard(input.card, actor);
     if (this.cfg.etaCodeRequired?.() && !input.eta && input.kind !== 'service') throw new ItemError('invalid', 'ETA item code is required');
     const units = input.units ?? []; const base = units[0];
     if (!base || base.factor !== 1) throw new ItemError('invalid', 'the first unit must be the base unit with factor 1');
@@ -137,6 +187,7 @@ export class ItemService {
             this.searchText({ ...input, nameAr: input.nameAr.trim(), code }), now, actor.id, now);
         for (const [i, u] of units.entries()) this.db.prepare('INSERT INTO item_units(id,item_id,name,factor,is_base,sellable,purchasable) VALUES(?,?,?,?,?,?,?)').run(uuidv7(), id, u.name.trim(), u.factor, i === 0 ? 1 : 0, u.sellable === false ? 0 : 1, u.purchasable === false ? 0 : 1);
         for (const b of input.barcodes ?? []) this.insertBarcode(actor.id, id, b);
+        if (input.card) this.writeCard(id, input.card);
         const item = this.get(id)!;
         this.hub.audit(actor.id, 'item.created', 'item', id, { code, kind: input.kind }); this.hub.emit('item.created', { item });
         return item;
@@ -149,16 +200,17 @@ export class ItemService {
     if (patch.listPriceMinor !== undefined) this.checkPrice(cur.kind, patch.listPriceMinor ?? undefined, actor);
     if (patch.listPriceMinor === null && cur.kind === 'drug') { /* clearing is a no-op for drugs */ }
     if (patch.eta !== undefined) this.checkEta(patch.eta);
-    if (patch.nameAr !== undefined && !patch.nameAr.trim()) throw new ItemError('invalid', 'Arabic name is required');
-    const m = { ...cur, ...Object.fromEntries(Object.entries(patch).filter(([k, v]) => v !== undefined && k !== 'eta' && k !== 'listPriceMinor')) } as Item & ItemPatch;
+    if (patch.nameAr !== undefined && !patch.nameAr.trim()) throw new ItemError('invalid', 'Arabic name is required'); if (patch.card) this.checkCard(patch.card, actor);
+    const m = { ...cur, ...Object.fromEntries(Object.entries(patch).filter(([k, v]) => v !== undefined && k !== 'eta' && k !== 'listPriceMinor' && k !== 'card')) } as Item & ItemPatch;
     const eta = patch.eta === undefined ? cur.eta : patch.eta ? { type: patch.eta.type, code: patch.eta.code, tax: patch.eta.tax ?? cur.eta.tax } : { type: null, code: null, tax: cur.eta.tax };
     const price = patch.listPriceMinor === undefined ? cur.listPriceMinor : patch.listPriceMinor;
     return this.db.tx(() => {
       this.db.prepare('UPDATE items SET name_ar=?,name_en=?,form=?,strength=?,active_ingredient=?,manufacturer=?,group_id=?,location=?,reorder_level=?,list_price_minor=?,eta_code_type=?,eta_code=?,eta_tax=?,search_text=?,updated_at=? WHERE id=?')
         .run(m.nameAr.trim(), m.nameEn ?? null, m.form ?? null, m.strength ?? null, m.activeIngredient ?? null, m.manufacturer ?? null, m.groupId ?? null, m.location ?? null, m.reorderLevel, price, eta.type, eta.code, eta.tax, this.searchText({ ...m, code: cur.code }), this.hub.now(), id);
+      if (patch.card) this.writeCard(id, patch.card);
       const item = this.get(id)!;
       const changed = Object.keys(patch).sort();
-      this.hub.audit(actor.id, 'item.updated', 'item', id, { fields: changed, before: { price: cur.listPriceMinor, name: cur.nameAr }, after: { price: item.listPriceMinor, name: item.nameAr } }); this.hub.emit('item.updated', { item, fields: changed });
+      this.hub.audit(actor.id, 'item.updated', 'item', id, { fields: changed, before: { price: cur.listPriceMinor, name: cur.nameAr, card: patch.card ? cur.card : undefined }, after: { price: item.listPriceMinor, name: item.nameAr, card: patch.card ? item.card : undefined } }); this.hub.emit('item.updated', { item, fields: changed });
       return item;
     });
   }

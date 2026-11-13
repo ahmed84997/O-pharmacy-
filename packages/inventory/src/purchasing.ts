@@ -10,6 +10,8 @@ export interface SupplierInput { name: string; phone?: string; address?: string;
 export interface InvoiceLineInput { itemId: string; lot: string; expiry: string; qty: number; unitName?: string; bonusQty?: number; costMinor: number; /** the supplier discount on this line, in basis points (12.5% = 1250); kept for reports */ discountBp?: number; /** tax on the whole line, piasters; goes into the cost (the pharmacy cannot reclaim it) */ taxMinor?: number; publicPriceMinor?: number; pharmacistPriceMinor?: number; priceUnitName?: string }
 export interface InvoiceInput { key: string; supplierId: string; supplierRef?: string; poId?: string; storeId?: string; lines: InvoiceLineInput[]; deviceId?: string; /** a held invoice this one completes */ draftId?: string }
 /** A held (suspended) purchase invoice: the lines as typed, no stock moves until it is posted. */
+/** The expiry stored for an item that has none (the item card says so). */
+export const NO_EXPIRY = '9999-12-31';
 export interface DraftInput { key: string; id?: string; supplierId?: string; supplierRef?: string; poId?: string; note?: string; lines: unknown[] }
 export interface InvoiceResult { id: string; piNo: string; totalMinor: number; lines: number; warnings: string[]; replay: boolean }
 export interface ReturnInput { key: string; supplierId: string; invoiceId?: string; storeId?: string; reason: string; lines: { batchId: string; qty: number; unitName?: string }[] }
@@ -125,8 +127,9 @@ export class PurchasingService {
         const disc = l.discountBp ?? 0; if (!Number.isInteger(disc) || disc < 0 || disc > 10000) throw new BuyError('invalid', `line ${i + 1}: discount must be 0 to 100%`);
         const tax = l.taxMinor ?? 0; if (!Number.isInteger(tax) || tax < 0) throw new BuyError('invalid', `line ${i + 1}: tax must be whole piasters`);
         const paidBase = l.qty * unit.factor, bonusBase = bonus * unit.factor; const eff = bonus || tax ? div(l.costMinor * l.qty + tax, l.qty + bonus) : l.costMinor; const lineTotal = div(paidBase * l.costMinor, pu.factor) + tax;
+        const noExpiry = !l.expiry?.trim() && item.card.hasExpiry === false; // items without an expiry (D38): kept as a far date, shown as none
         const lot = l.lot?.trim() || `${no}-${i + 1}`; // no lot on the pack: one batch per invoice line, still sold by expiry first
-        const rin: ReceiveInput = { key: `${inv.key}:${i}`, itemId: l.itemId, lot, expiry: l.expiry, qty: l.qty + bonus, unitName: unit.name, costMinor: eff, publicPriceMinor: l.publicPriceMinor, pharmacistPriceMinor: l.pharmacistPriceMinor, priceUnitName: pu.name, storeId, sourceRef: no, deviceId: inv.deviceId };
+        const rin: ReceiveInput = { key: `${inv.key}:${i}`, itemId: l.itemId, lot, expiry: noExpiry ? NO_EXPIRY : l.expiry, qty: l.qty + bonus, unitName: unit.name, costMinor: eff, publicPriceMinor: l.publicPriceMinor, pharmacistPriceMinor: l.pharmacistPriceMinor, priceUnitName: pu.name, storeId, sourceRef: no, deviceId: inv.deviceId };
         let res; try { res = this.batches.receive(actor, rin); } catch (e) { if (e instanceof BatchError) throw new BuyError(e.code === 'forbidden' ? 'forbidden' : 'invalid', `line ${i + 1}: ${e.message}`, { line: i + 1, code: e.code }); throw e; }
         warnings.push(...res.warnings.map(w => `line ${i + 1}: ${w}`)); const mv = JSON.parse(String(this.db.prepare('SELECT result FROM idempotency WHERE key=?').get(rin.key)!.result)) as { id: string };
         rows.push([uuidv7(), id, i + 1, l.itemId, res.batch.id, mv.id, paidBase, bonusBase, l.costMinor, eff, lineTotal, disc, tax]); total += lineTotal; taxTotal += tax;

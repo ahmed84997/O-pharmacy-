@@ -14,7 +14,7 @@ export const RIBBON: RibbonTab[] = [
     { label: 'التوصيل', items: [C('deliveries', 'توصيل الفواتير', 'truck', 'KeyD', ['home_delivery.create'])] },
     { label: 'نهاية اليوم', items: [C('closing', 'تقفيل الدرج واليوم', 'check', 'KeyL', ['drawer.close.review']), C('eta', 'الفاتورة الإلكترونية', 'file', 'KeyE', ['compliance.eta.view'])] } ] },
   { id: 'inv', label: 'المخزون', key: 'KeyI', groups: [
-    { label: 'الأصناف', items: [C('items2', 'الأصناف وكارت الصنف', 'box', 'KeyL', ['item.view'], { screen: 'items', primary: true }), C('expiry', 'الصلاحية والنواقص والتقييم', 'cal', 'KeyB', ['expiry.alerts.view', 'stock.view'])] },
+    { label: 'الأصناف', items: [C('items2', 'الأصناف وكارت الصنف', 'box', 'KeyL', ['item.view'], { screen: 'items', primary: true }), C('expiry', 'الصلاحية والنواقص والتقييم', 'cal', 'KeyB', ['expiry.alerts.view', 'stock.view']), C('catalogs', 'الوحدات والأماكن والمجموعات', 'tag', 'KeyU', ['item.update'])] },
     { label: 'الجرد والمخازن', items: [C('stocktake', 'الجرد والتسويات', 'clip', 'KeyJ', ['stocktake.count', 'stock.adjust', 'stock.adjust.approve']), C('stores', 'المخازن والتحويل', 'truck', 'KeyN', ['store.transfer.internal', 'settings.branch'])] },
     { label: 'الاستيراد', items: [C('import', 'استيراد من eStock', 'file', 'KeyE', ['item.import'])] } ] },
   { id: 'buy', label: 'المشتريات', key: 'KeyP', groups: [

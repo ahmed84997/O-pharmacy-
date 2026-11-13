@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { can, type Person } from '@o-pharmacy/core';
-import type { ImportKind, ItemInput, ReasonCode, StoreKind } from '@o-pharmacy/inventory';
+import type { CardInput, ImportKind, ItemInput, ReasonCode, StoreKind } from '@o-pharmacy/inventory';
 import type { App } from './compose';
 import { AccessError } from './access';
 import { printers, printService } from './printing';
@@ -18,10 +18,24 @@ export function invRoutes(s: FastifyInstance, app: App): void {
   const me = (q: FastifyRequest): Person => q.person!; const db = app.hub.db;
   const need = (p: Person, k: string) => { if (!can(p, k, app.hub.branchId)) throw new AccessError('forbidden', `missing permission ${k}`); };
   const nameOf = db.prepare('SELECT display_name FROM people WHERE id=?'); const who = (id: string) => String(nameOf.get(id)?.display_name ?? id);
-  const itemIn = (b: B): ItemInput => ({ nameAr: String(b.nameAr ?? ''), nameEn: str(b.nameEn), kind: (b.kind as ItemInput['kind']) ?? 'drug', code: str(b.code), form: str(b.form), strength: str(b.strength), activeIngredient: str(b.activeIngredient), manufacturer: str(b.manufacturer), groupId: str(b.groupId), location: str(b.location), reorderLevel: num(b.reorderLevel), listPriceMinor: num(b.listPriceMinor), eta: b.etaCode ? { type: String(b.etaType ?? 'EGS') as 'EGS', code: String(b.etaCode), tax: b.etaTax === 'taxable' ? 'taxable' : 'exempt' } : undefined, units: Array.isArray(b.units) ? (b.units as B[]).map(u => ({ name: String(u.name ?? ''), factor: Number(u.factor) })) : [], barcodes: Array.isArray(b.barcodes) ? (b.barcodes as B[]).filter(x => x.barcode).map(x => ({ barcode: String(x.barcode), unitName: str(x.unitName), kind: x.kind === 'internal' ? 'internal' : x.kind === 'alias' ? 'alias' : 'gtin' })) : [] });
+  const bpIn = (v: unknown) => (v === undefined || v === null || v === '' ? undefined : Math.round(Number(v)));
+  const cardIn = (c: unknown): CardInput | undefined => { if (!c || typeof c !== 'object') return undefined; const x = c as B; const out: CardInput = {};
+    if ('description' in x) out.description = str(x.description) ?? null; if ('defaultPriceMinor' in x) out.defaultPriceMinor = x.defaultPriceMinor === null || x.defaultPriceMinor === '' ? null : Number(x.defaultPriceMinor); if ('defaultCostMinor' in x) out.defaultCostMinor = x.defaultCostMinor === null || x.defaultCostMinor === '' ? null : Number(x.defaultCostMinor);
+    if ('defaultDiscountBp' in x) out.defaultDiscountBp = bpIn(x.defaultDiscountBp); if ('taxBp' in x) out.taxBp = bpIn(x.taxBp); for (const k of ['hasExpiry', 'printLabel', 'autoShortage', 'hideOnReceipt'] as const) if (typeof x[k] === 'boolean') out[k] = x[k] as boolean; return out; };
+  const itemIn = (b: B): ItemInput => ({ card: cardIn(b.card), nameAr: String(b.nameAr ?? ''), nameEn: str(b.nameEn), kind: (b.kind as ItemInput['kind']) ?? 'drug', code: str(b.code), form: str(b.form), strength: str(b.strength), activeIngredient: str(b.activeIngredient), manufacturer: str(b.manufacturer), groupId: str(b.groupId), location: str(b.location), reorderLevel: num(b.reorderLevel), listPriceMinor: num(b.listPriceMinor), eta: b.etaCode ? { type: String(b.etaType ?? 'EGS') as 'EGS', code: String(b.etaCode), tax: b.etaTax === 'taxable' ? 'taxable' : 'exempt' } : undefined, units: Array.isArray(b.units) ? (b.units as B[]).map(u => ({ name: String(u.name ?? ''), factor: Number(u.factor) })) : [], barcodes: Array.isArray(b.barcodes) ? (b.barcodes as B[]).filter(x => x.barcode).map(x => ({ barcode: String(x.barcode), unitName: str(x.unitName), kind: x.kind === 'internal' ? 'internal' : x.kind === 'alias' ? 'alias' : 'gtin' })) : [] });
 
   // ---------- items ----------
   s.get('/api/inv/groups', async (q) => { need(me(q), 'item.view'); return { groups: db.prepare('SELECT id, name FROM item_groups ORDER BY name').all() }; });
+  // unit names and storage places the item card picks from (Sprint 7.9)
+  s.get('/api/inv/unit-names', async (q) => { need(me(q), 'item.view'); return { units: app.items.unitNames(qs(q).all === '1') }; });
+  s.post('/api/inv/unit-names', async (q) => app.items.addUnitName(me(q), String(body(q).name ?? '')));
+  s.post('/api/inv/unit-names/:id/active', async (q) => { app.items.setUnitNameActive(me(q), param(q, 'id'), body(q).active === true); return { ok: true }; });
+  s.get('/api/inv/locations', async (q) => { need(me(q), 'item.view'); return { locations: app.items.locations(qs(q).all === '1') }; });
+  s.post('/api/inv/locations', async (q) => app.items.addLocation(me(q), String(body(q).name ?? '')));
+  s.post('/api/inv/locations/:id/active', async (q) => { app.items.setLocationActive(me(q), param(q, 'id'), body(q).active === true); return { ok: true }; });
+  s.post('/api/inv/locations/assign', async (q) => { const b = body(q); return { items: app.items.assignLocation(me(q), Array.isArray(b.itemIds) ? (b.itemIds as unknown[]).map(String) : [], str(b.location) ?? null) }; });
+  s.get('/api/inv/by-location', async (q) => { need(me(q), 'item.view'); const x = qs(q); const loc = str(x.location); const rows = loc === '-' ? db.prepare("SELECT id, code, name_ar, location FROM items WHERE status <> 'archived' AND (location IS NULL OR location='') ORDER BY name_ar LIMIT 300").all() : loc ? db.prepare("SELECT id, code, name_ar, location FROM items WHERE status <> 'archived' AND location=? ORDER BY name_ar LIMIT 300").all(loc) : [];
+    return { items: rows.map(r => ({ id: String(r.id), code: String(r.code), nameAr: String(r.name_ar), location: (r.location as string) ?? null })) }; });
   s.post('/api/inv/groups', async (q) => app.items.createGroup(me(q), String(body(q).name ?? '')));
   s.post('/api/inv/items', async (q) => app.items.create(me(q), itemIn(body(q))));
   s.get('/api/inv/search', async (q) => { need(me(q), 'item.view'); return { items: app.items.search(String(qs(q).q ?? ''), { limit: 25 }).map(i => ({ id: i.id, code: i.code, nameAr: i.nameAr, kind: i.kind, status: i.status, units: i.units.map(u => ({ name: u.name, factor: u.factor })), listPriceMinor: i.listPriceMinor })) }; });
@@ -33,7 +47,7 @@ export function invRoutes(s: FastifyInstance, app: App): void {
     if (can(p, 'supplier_price.view', app.hub.branchId)) out.prices = app.purchasing.priceHistory(p, id);
     return out;
   });
-  s.patch('/api/inv/items/:id', async (q) => { const b = body(q); const patch: B = {}; for (const k of ['nameAr', 'nameEn', 'form', 'strength', 'activeIngredient', 'manufacturer', 'groupId', 'location']) if (k in b) patch[k] = str(b[k]) ?? null; if ('reorderLevel' in b) patch.reorderLevel = Number(b.reorderLevel); if ('listPriceMinor' in b) patch.listPriceMinor = b.listPriceMinor === null ? null : Number(b.listPriceMinor); return app.items.update(me(q), param(q, 'id'), patch as never); });
+  s.patch('/api/inv/items/:id', async (q) => { const b = body(q); const patch: B = {}; for (const k of ['nameAr', 'nameEn', 'form', 'strength', 'activeIngredient', 'manufacturer', 'groupId', 'location']) if (k in b) patch[k] = str(b[k]) ?? null; if ('reorderLevel' in b) patch.reorderLevel = Number(b.reorderLevel); if ('listPriceMinor' in b) patch.listPriceMinor = b.listPriceMinor === null ? null : Number(b.listPriceMinor); if ('card' in b) patch.card = cardIn(b.card); return app.items.update(me(q), param(q, 'id'), patch as never); });
   s.post('/api/inv/items/:id/barcodes', async (q) => { const b = body(q); app.items.addBarcode(me(q), param(q, 'id'), { barcode: String(b.barcode ?? ''), unitName: str(b.unitName), kind: b.kind === 'internal' ? 'internal' : b.kind === 'alias' ? 'alias' : 'gtin' }); return { ok: true }; });
   s.post('/api/inv/items/:id/units', async (q) => { const b = body(q); return app.items.addUnit(me(q), param(q, 'id'), { name: String(b.name ?? ''), factor: Number(b.factor) }); });
   s.post('/api/inv/items/:id/status', async (q) => { const b = body(q); return app.items.setStatus(me(q), param(q, 'id'), String(b.to ?? '') as 'active', String(b.reason ?? '')); });
@@ -97,7 +111,7 @@ export function invRoutes(s: FastifyInstance, app: App): void {
   s.get('/api/buy/item-hint/:id', async (q) => {
     const p = me(q); need(p, 'purchase_invoice.create'); const it = app.items.get(param(q, 'id')); if (!it) throw new AccessError('not-found', 'item');
     const last = lastBuy.get(it.id);
-    return { id: it.id, code: it.code, nameAr: it.nameAr, kind: it.kind, status: it.status, units: it.units.map(u => ({ name: u.name, factor: u.factor })), listPriceMinor: it.listPriceMinor ?? null, stockBase: Number(onHand.get(it.id)!.q), barcode: (firstBarcode.get(it.id)?.barcode as string) ?? null,
+    return { card: it.card, id: it.id, code: it.code, nameAr: it.nameAr, kind: it.kind, status: it.status, units: it.units.map(u => ({ name: u.name, factor: u.factor })), listPriceMinor: it.listPriceMinor ?? null, stockBase: Number(onHand.get(it.id)!.q), barcode: (firstBarcode.get(it.id)?.barcode as string) ?? null,
       last: last ? { priceUnit: String(last.price_unit), publicPriceMinor: last.public_price_minor == null ? null : Number(last.public_price_minor), costMinor: Number(last.cost_minor), discountBp: Number(last.discount_bp) } : null };
   });
   // shelf labels for the items of an invoice (the first label printer)
@@ -105,7 +119,7 @@ export function invRoutes(s: FastifyInstance, app: App): void {
     const p = me(q); const b = body(q); const lines = Array.isArray(b.lines) ? (b.lines as B[]) : []; if (!lines.length || lines.length > 100) throw new AccessError('invalid', '1 to 100 lines');
     const printer = str(b.printer) ?? printers(app).find(x => x.kind === 'label')?.name; if (!printer) throw new AccessError('state', 'no label printer is set up');
     const svc = printService(app); const out: { itemId: string; ok: boolean; error?: string }[] = [];
-    for (const l of lines) { const it = app.items.get(String(l.itemId ?? '')); if (!it) { out.push({ itemId: String(l.itemId ?? ''), ok: false, error: 'not-found' }); continue; }
+    for (const l of lines) { const it = app.items.get(String(l.itemId ?? '')); if (!it) { out.push({ itemId: String(l.itemId ?? ''), ok: false, error: 'not-found' }); continue; } if (!it.card.printLabel) { out.push({ itemId: it.id, ok: false, error: 'no-label' }); continue; }
       const r = await svc.printLabel(p, { printer, name: it.nameAr, priceMinor: num(l.priceMinor), barcode: (firstBarcode.get(it.id)?.barcode as string) ?? null, copies: Math.min(200, Math.max(1, Number(l.copies) || 1)) }); out.push({ itemId: it.id, ok: r.ok, error: r.error }); }
     return { printer, results: out };
   });
