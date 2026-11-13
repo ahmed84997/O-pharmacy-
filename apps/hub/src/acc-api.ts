@@ -5,6 +5,7 @@ import type { AdjustmentKind } from '@o-pharmacy/hr';
 import type { ClaimStatus, ContractStatus, PayerType } from '@o-pharmacy/contracts';
 import type { App } from './compose';
 import { AccessError } from './access';
+import { autoShortage } from './auto-shortage';
 
 type B = Record<string, unknown>;
 const body = (q: FastifyRequest) => (q.body ?? {}) as B;
@@ -112,11 +113,12 @@ export function accRoutes(s: FastifyInstance, app: App): void {
   s.post('/api/pos/insurance-sale', async (q) => {
     const p = me(q); const b = body(q); const k = key(b); const contract = app.contracts.get(p, String(b.contractId ?? '')); if (!contract.customerId) throw new AccessError('invalid', 'link the contract to a customer account first'); if (contract.status !== 'active') throw new AccessError('state', 'the contract is not active');
     const lines = claimLines(app, b.lines);
-    return db.tx(() => { const quote = app.claims.quote(p, contract.id, today(), lines.map(l => l.claim)); const cash = b.cashMinor === undefined ? quote.copayMinor : Number(b.cashMinor);
+    const done = db.tx(() => { const quote = app.claims.quote(p, contract.id, today(), lines.map(l => l.claim)); const cash = b.cashMinor === undefined ? quote.copayMinor : Number(b.cashMinor);
       const sale = app.sales.createSale(p, { key: `${k}:sale`, sessionId: String(b.sessionId ?? ''), lines: lines.map(l => l.sale), customerId: contract.customerId!, onCredit: true, cashMinor: cash, deviceId: q.deviceId });
       if (sale.totalMinor !== quote.totalMinor) throw new AccessError('state', 'the prices changed while selling: try again');
       const claim = app.claims.create(p, { key: `${k}:claim`, contractId: contract.id, memberNo: String(b.memberNo ?? ''), serviceDate: today(), saleRef: sale.saleNo, rxRef: str(b.rxRef), lines: lines.map(l => l.claim) });
       return { sale, claim: claim.claim, coveredMinor: quote.coveredMinor, copayMinor: quote.copayMinor }; });
+    autoShortage(app, p, lines.map(l => l.sale.itemId)); return done;
   });
 
   // ---------- report centre ----------

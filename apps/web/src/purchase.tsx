@@ -8,7 +8,7 @@ import { qtyText } from './pos';
 import { dmyHm, egp, Icon, money, newKey, toMinor, useApp } from './ui';
 
 type Unit = { name: string; factor: number };
-type Hint = { id: string; code: string; nameAr: string; kind: string; status: string; units: Unit[]; listPriceMinor: number | null; stockBase: number; barcode: string | null; last: { priceUnit: string; publicPriceMinor: number | null; costMinor: number | null; discountBp: number } | null };
+type Hint = { id: string; code: string; nameAr: string; kind: string; status: string; units: Unit[]; listPriceMinor: number | null; stockBase: number; barcode: string | null; card?: { defaultPriceMinor: number | null; defaultCostMinor: number | null; defaultDiscountBp: number; taxBp: number; hasExpiry: boolean }; last: { priceUnit: string; publicPriceMinor: number | null; costMinor: number | null; discountBp: number } | null };
 type Line = { item: Hint; unit: string; qty: string; bonus: string; expiry: string; lot: string; price: string; disc: string; cost: string; tax: string };
 type Saved = Omit<Line, 'item'> & { itemId: string };
 type Posted = { piNo: string; status: string; supplierId: string; supplierRef: string | null; totalMinor: number; taxTotalMinor: number; createdAt: string; voidReason: string | null; lines: { itemId: string; itemName: string; lot: string; expiry: string; paidBase: number; bonusBase: number; costMinor: number; totalMinor: number; discountBp: number; taxMinor: number; publicPriceMinor: number | null; priceUnit: string; priceFactor: number }[] };
@@ -22,13 +22,15 @@ const pct = (v: string) => { const n = Number(v); return Number.isFinite(n) && n
 /** The sale price of one unit: for a drug the last state price we bought it at, for anything else the item's own price. */
 function priceFor(h: Hint, unit: string): number | null {
   const f = factor(h, unit);
-  if (h.kind === 'drug') { if (!h.last?.publicPriceMinor) return null; return conv(h.last.publicPriceMinor, factor(h, h.last.priceUnit), f); }
+  const big = [...h.units].sort((a, b) => b.factor - a.factor)[0]!;
+  if (h.kind === 'drug') { if (h.last?.publicPriceMinor) return conv(h.last.publicPriceMinor, factor(h, h.last.priceUnit), f); return h.card?.defaultPriceMinor != null ? conv(h.card.defaultPriceMinor, big.factor, f) : null; }
   if (h.listPriceMinor == null) return null; const last = h.units[h.units.length - 1]!; return conv(h.listPriceMinor, last.factor, f);
 }
 function newLine(h: Hint): Line {
-  const unit = biggest(h); const p = priceFor(h, unit); const bp = h.last?.discountBp ?? 0;
-  const cost = h.last?.costMinor != null ? conv(h.last.costMinor, factor(h, h.last.priceUnit), factor(h, unit)) : p != null ? Math.round((p * (10000 - bp)) / 10000) : null;
-  return { item: h, unit, qty: '1', bonus: '', expiry: '', lot: '', price: p == null ? '' : egp(p), disc: bp ? String(bp / 100) : '0', cost: cost == null ? '' : egp(cost), tax: '0' };
+  /* the item card's supplier discount wins when set, else the last purchase; price and cost from the last purchase, else the card */
+  const unit = biggest(h); const p = priceFor(h, unit); const cardBp = h.card?.defaultDiscountBp ?? 0; const bp = cardBp > 0 ? cardBp : h.last?.discountBp ?? 0;
+  const cost = cardBp === 0 && h.last?.costMinor != null ? conv(h.last.costMinor, factor(h, h.last.priceUnit), factor(h, unit)) : p != null ? Math.round((p * (10000 - bp)) / 10000) : h.card?.defaultCostMinor ?? null;
+  return { item: h, unit, qty: '1', bonus: '', expiry: '', lot: '', price: p == null ? '' : egp(p), disc: bp ? String(bp / 100) : '0', cost: cost == null ? '' : egp(cost), tax: h.card?.taxBp ? String(h.card.taxBp / 100) : '0' };
 }
 function calc(l: Line) {
   const P = toMinor(l.price), C = toMinor(l.cost), q = int(l.qty), b = l.bonus ? int(l.bonus) : 0, t = pct(l.tax);
@@ -70,7 +72,7 @@ export function PurchaseInvoiceScreen() {
 
   const save = useCallback(async () => {
     setErr(''); if (!supId) return setErr('اكتب كود المورد أو اختاره'); if (!lines.length) return setErr('الفاتورة فاضية');
-    const bad = lines.findIndex(l => { const c = calc(l); return !(c.q > 0) || c.C == null || !l.expiry.trim() || (l.item.kind === 'drug' && c.P == null) || Number.isNaN(bpOf(l.disc)) || Number.isNaN(pct(l.tax)) || (l.bonus && !(int(l.bonus) >= 0)); });
+    const bad = lines.findIndex(l => { const c = calc(l); return !(c.q > 0) || c.C == null || (!l.expiry.trim() && l.item.card?.hasExpiry !== false) || (l.item.kind === 'drug' && c.P == null) || Number.isNaN(bpOf(l.disc)) || Number.isNaN(pct(l.tax)) || (l.bonus && !(int(l.bonus) >= 0)); });
     if (bad >= 0) { setSel(bad); return setErr(`كمّل السطر ${bad + 1}: الكمية والصلاحية وسعر الشراء${lines[bad]!.item.kind === 'drug' ? ' وسعر البيع' : ''}`); }
     setBusy(true);
     try {
@@ -147,7 +149,7 @@ export function PurchaseInvoiceScreen() {
                   <td><select value={l.unit} onChange={e => upd(i, { unit: e.target.value })}>{l.item.units.map(u => <option key={u.name}>{u.name}</option>)}</select></td>
                   <td><input className="n w6" value={l.qty} onChange={e => upd(i, { qty: e.target.value })} /></td>
                   <td><input className="n w5" value={l.bonus} onChange={e => upd(i, { bonus: e.target.value })} /></td>
-                  <td><input dir="ltr" className="w8" value={l.expiry} placeholder="MM/YYYY" onChange={e => upd(i, { expiry: e.target.value })} /></td>
+                  <td><input dir="ltr" className="w8" value={l.expiry} placeholder={l.item.card?.hasExpiry === false ? 'بدون' : 'MM/YYYY'} onChange={e => upd(i, { expiry: e.target.value })} /></td>
                   <td><input dir="ltr" className="w7" value={l.lot} placeholder="اختياري" onChange={e => upd(i, { lot: e.target.value })} /></td>
                   <td><input className="n w8" value={l.price} readOnly={!drug} title={drug ? 'سعر الجمهور للوحدة' : 'سعر الصنف من كارت الصنف'} onChange={e => upd(i, { price: e.target.value })} /></td>
                   <td><input className="n w5" value={l.disc} onChange={e => upd(i, { disc: e.target.value })} /></td>

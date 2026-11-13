@@ -121,3 +121,24 @@ describe('purchase invoices: discount, tax, lot left empty, held invoices (Sprin
     expect(s.pu.draft(keeper, d2.id).status).toBe('cancelled'); expect(() => s.hub.db.exec('DELETE FROM purchase_drafts')).toThrow(); expect(code(() => s.pu.drafts(cashier))).toBe('forbidden');
   });
 });
+
+describe('item card, unit names and storage places (Sprint 7.9)', () => {
+  it('keeps the card fields, checks them, lets an item without expiry be bought with no date, and never deletes the lists', () => {
+    const s = setup();
+    const it = s.items.create(owner, drug({ nameAr: 'شاش طبي', kind: 'non_drug', listPriceMinor: 1500, units: [{ name: 'قطعة', factor: 1 }, { name: 'كيس', factor: 10 }], card: { description: 'شاش معقم', defaultCostMinor: 1100, defaultDiscountBp: 1500, taxBp: 1400, hasExpiry: false, printLabel: false, autoShortage: true, hideOnReceipt: true } }));
+    expect(it.card).toMatchObject({ description: 'شاش معقم', defaultCostMinor: 1100, defaultDiscountBp: 1500, taxBp: 1400, hasExpiry: false, printLabel: false, autoShortage: true, hideOnReceipt: true, defaultPriceMinor: null });
+    const d = s.items.create(owner, drug({ nameAr: 'أوجمنتين', card: { defaultPriceMinor: 16800 } })); expect(d.card).toMatchObject({ defaultPriceMinor: 16800, hasExpiry: true, printLabel: true, autoShortage: false });
+    expect(code(() => s.items.create(pharm, drug({ nameAr: 'x', card: { defaultPriceMinor: 100 } })))).toBe('forbidden');
+    expect(code(() => s.items.create(owner, drug({ nameAr: 'y', card: { taxBp: 10001 } })))).toBe('invalid');
+    expect(s.items.update(owner, d.id, { card: { taxBp: 500, autoShortage: true } }).card).toMatchObject({ taxBp: 500, autoShortage: true, defaultPriceMinor: 16800 });
+    const sup = s.pu.createSupplier(mgr, { name: 'م' });
+    const r = s.pu.postInvoice(keeper, { key: key(), supplierId: sup.id, lines: [{ itemId: it.id, lot: '', expiry: '', qty: 2, unitName: 'كيس', costMinor: 1100 }] }); expect(s.pu.invoice(keeper, r.piNo).lines[0]!.expiry).toBe('9999-12-31');
+    expect(code(() => s.pu.postInvoice(keeper, { key: key(), supplierId: sup.id, lines: [{ itemId: d.id, lot: '', expiry: '', qty: 1, unitName: 'علبة', costMinor: 100, publicPriceMinor: 200 }] }))).toBe('invalid');
+    // unit names and places
+    expect(s.items.unitNames().map(u => u.name)).toEqual(expect.arrayContaining(['قرص', 'شريط', 'علبة'])); s.items.addUnitName(owner, 'سرنجة'); expect(code(() => s.items.addUnitName(owner, 'سرنجة'))).toBe('invalid'); expect(code(() => s.items.addUnitName(cashier, 'z'))).toBe('forbidden');
+    const sh = s.items.addLocation(owner, 'رف A1'); s.items.addLocation(owner, 'الثلاجة'); expect(s.items.assignLocation(owner, [it.id, d.id], 'رف A1')).toBe(2); expect(s.items.get(d.id)!.location).toBe('رف A1');
+    expect(s.items.locations().find(l => l.name === 'رف A1')!.items).toBe(2); expect(code(() => s.items.assignLocation(owner, [it.id], 'مش موجود'))).toBe('invalid');
+    s.items.setLocationActive(owner, sh.id, false); expect(s.items.locations().map(l => l.name)).not.toContain('رف A1'); expect(s.items.locations(true).map(l => l.name)).toContain('رف A1');
+    expect(() => s.hub.db.exec('DELETE FROM unit_names')).toThrow(); expect(() => s.hub.db.exec('DELETE FROM item_locations')).toThrow();
+  });
+});

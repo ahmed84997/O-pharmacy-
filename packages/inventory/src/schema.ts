@@ -258,4 +258,25 @@ CREATE TABLE purchase_drafts (
 CREATE INDEX purchase_drafts_open ON purchase_drafts(status);
 CREATE TRIGGER purchase_drafts_no_delete BEFORE DELETE ON purchase_drafts BEGIN SELECT RAISE(ABORT, 'held invoices are never deleted: cancel with a reason'); END;
 CREATE TRIGGER purchase_drafts_closed BEFORE UPDATE ON purchase_drafts WHEN OLD.status <> 'open' BEGIN SELECT RAISE(ABORT, 'a used or cancelled held invoice never changes'); END;` },
+  { id: 'inv_0008_item_card', sql: `
+ALTER TABLE items ADD COLUMN description TEXT;
+ALTER TABLE items ADD COLUMN default_price_minor INTEGER CHECK (default_price_minor IS NULL OR default_price_minor >= 0);
+ALTER TABLE items ADD COLUMN default_cost_minor INTEGER CHECK (default_cost_minor IS NULL OR default_cost_minor >= 0);
+ALTER TABLE items ADD COLUMN default_discount_bp INTEGER NOT NULL DEFAULT 0 CHECK (default_discount_bp BETWEEN 0 AND 10000);
+ALTER TABLE items ADD COLUMN tax_bp INTEGER NOT NULL DEFAULT 0 CHECK (tax_bp BETWEEN 0 AND 10000);
+ALTER TABLE items ADD COLUMN has_expiry INTEGER NOT NULL DEFAULT 1 CHECK (has_expiry IN (0,1));
+ALTER TABLE items ADD COLUMN print_label INTEGER NOT NULL DEFAULT 1 CHECK (print_label IN (0,1));
+ALTER TABLE items ADD COLUMN auto_shortage INTEGER NOT NULL DEFAULT 0 CHECK (auto_shortage IN (0,1));
+ALTER TABLE items ADD COLUMN hide_on_receipt INTEGER NOT NULL DEFAULT 0 CHECK (hide_on_receipt IN (0,1));
+CREATE TABLE unit_names (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE CHECK (length(trim(name)) > 0), active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)), created_by TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TRIGGER unit_names_no_delete BEFORE DELETE ON unit_names BEGIN SELECT RAISE(ABORT, 'unit names are never deleted: switch them off'); END;
+CREATE TABLE item_locations (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE CHECK (length(trim(name)) > 0), active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)), created_by TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TRIGGER item_locations_no_delete BEFORE DELETE ON item_locations BEGIN SELECT RAISE(ABORT, 'locations are never deleted: switch them off'); END;
+INSERT INTO unit_names(id,name,created_by,created_at) VALUES
+  ('un-01','قرص','system','2026-11-13T00:00:00Z'),('un-02','كبسولة','system','2026-11-13T00:00:00Z'),('un-03','شريط','system','2026-11-13T00:00:00Z'),('un-04','علبة','system','2026-11-13T00:00:00Z'),
+  ('un-05','زجاجة','system','2026-11-13T00:00:00Z'),('un-06','أمبول','system','2026-11-13T00:00:00Z'),('un-07','فيال','system','2026-11-13T00:00:00Z'),('un-08','كيس','system','2026-11-13T00:00:00Z'),
+  ('un-09','أنبوبة','system','2026-11-13T00:00:00Z'),('un-10','لبوس','system','2026-11-13T00:00:00Z'),('un-11','بخاخ','system','2026-11-13T00:00:00Z'),('un-12','قطعة','system','2026-11-13T00:00:00Z'),
+  ('un-13','عبوة','system','2026-11-13T00:00:00Z'),('un-14','فوار','system','2026-11-13T00:00:00Z'),('un-15','قلم','system','2026-11-13T00:00:00Z'),('un-16','كرتونة','system','2026-11-13T00:00:00Z');
+INSERT OR IGNORE INTO unit_names(id,name,created_by,created_at) SELECT 'un-x-' || lower(hex(randomblob(6))), name, 'system', '2026-11-13T00:00:00Z' FROM (SELECT DISTINCT trim(name) name FROM item_units WHERE trim(name) <> '');
+INSERT OR IGNORE INTO item_locations(id,name,created_by,created_at) SELECT 'loc-x-' || lower(hex(randomblob(6))), loc, 'system', '2026-11-13T00:00:00Z' FROM (SELECT DISTINCT trim(location) loc FROM items WHERE location IS NOT NULL AND trim(location) <> '');` },
 ];

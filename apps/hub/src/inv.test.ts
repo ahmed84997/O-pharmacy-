@@ -70,3 +70,25 @@ describe('purchase invoice screen helpers (Sprint 7.8)', () => {
     const lab = (await s.call('POST', '/api/print/labels', { ...O, body: { lines: [{ itemId: it.id, copies: 2, priceMinor: 5000 }] } })).body; expect(lab).toMatchObject({ printer: 'استيكر', results: [{ itemId: it.id, ok: true }] });
   });
 });
+
+describe('item card (Sprint 7.9)', () => {
+  it('creates an item with the full card, picks unit names and places, and a "general shortage" item goes to the notebook when a sale empties it', async () => {
+    const s = await prep(); const O = { token: s.owner };
+    expect((await s.call('GET', '/api/inv/unit-names', O)).body.units.map((u: { name: string }) => u.name)).toEqual(expect.arrayContaining(['قرص', 'علبة']));
+    expect((await s.call('POST', '/api/inv/unit-names', { token: s.cs, body: { name: 'z' } })).status).toBe(403);
+    await s.call('POST', '/api/inv/locations', { ...O, body: { name: 'رف B2' } });
+    const it = (await s.call('POST', '/api/inv/items', { ...O, body: { nameAr: 'كمامة طبية', nameEn: 'Face mask', kind: 'non_drug', listPriceMinor: 2500, units: [{ name: 'قطعة', factor: 1 }, { name: 'علبة', factor: 50 }], barcodes: [{ barcode: '6221234567891', unitName: 'علبة' }, { barcode: 'MASK-1', unitName: 'قطعة', kind: 'internal' }],
+      card: { description: 'ثلاث طبقات', defaultCostMinor: 1800, defaultDiscountBp: 1000, taxBp: 1400, hasExpiry: false, printLabel: true, autoShortage: true, hideOnReceipt: true } } })).body;
+    expect(it.card).toMatchObject({ description: 'ثلاث طبقات', taxBp: 1400, hasExpiry: false, autoShortage: true, hideOnReceipt: true });
+    expect((await s.call('POST', '/api/inv/locations/assign', { ...O, body: { itemIds: [it.id], location: 'رف B2' } })).body.items).toBe(1);
+    expect((await s.call('GET', '/api/inv/by-location?location=' + encodeURIComponent('رف B2'), O)).body.items.map((x: { id: string }) => x.id)).toEqual([it.id]);
+    expect((await s.call('PATCH', `/api/inv/items/${it.id}`, { ...O, body: { card: { taxBp: 0 } } })).body.card.taxBp).toBe(0);
+    const hint = (await s.call('GET', `/api/buy/item-hint/${it.id}`, { token: s.sk })).body; expect(hint.card).toMatchObject({ hasExpiry: false, defaultDiscountBp: 1000 });
+    const sup = (await s.call('GET', '/api/buy/suppliers', O)).body.suppliers[0];
+    await s.call('POST', '/api/buy/invoices', { token: s.sk, body: { key: key(), supplierId: sup.id, lines: [{ itemId: it.id, lot: '', expiry: '', qty: 2, unitName: 'قطعة', costMinor: 30 }] } });
+    const ses = (await s.call('POST', '/api/pos/session/open', { token: s.mgr, body: { key: key(), openingFloatMinor: 0 } })).body;
+    const sale = (await s.call('POST', '/api/pos/sales', { token: s.mgr, body: { key: key(), sessionId: ses.id, lines: [{ itemId: it.id, qty: 2, unitName: 'قطعة' }], cashMinor: 100 } })).body; expect(sale.saleNo).toBeTruthy();
+    const short = (await s.call('GET', '/api/requests?kind=shortage', O)).body.requests; expect(short.some((r: { items: { itemName: string }[] }) => r.items.some(i => i.itemName === 'كمامة طبية'))).toBe(true);
+    const { receiptPng } = await import('./printing'); expect(receiptPng(s.app, { id: 'x', roles: ['O'], branchIds: 'all' }, sale.saleNo).length).toBeGreaterThan(1000);
+  });
+});

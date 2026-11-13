@@ -4,6 +4,7 @@ import type { PaymentInput, SaleLineInput } from '@o-pharmacy/pos';
 import type { App } from './compose';
 import { AccessError } from './access';
 import { printers, printService, receiptPng, receiptStyle, savePrinters } from './printing';
+import { autoShortage } from './auto-shortage';
 
 type B = Record<string, unknown>;
 const body = (q: FastifyRequest) => (q.body ?? {}) as B;
@@ -42,9 +43,10 @@ export function posRoutes(s: FastifyInstance, app: App): void {
   });
 
   // ---------- sales ----------
-  s.post('/api/pos/sales', async (q) => { const b = body(q); const dl = b.delivery as B | undefined;
-    return app.sales.createSale(me(q), { key: key(b), sessionId: String(b.sessionId ?? ''), lines: lines(b.lines), cashMinor: b.cashMinor === undefined ? undefined : int(b.cashMinor, 'cash'), payments: payments(b.payments), discountBp: b.discountBp === undefined ? undefined : Number(b.discountBp), customerId: b.customerId ? String(b.customerId) : undefined, onCredit: b.onCredit === true, fromHold: b.fromHold ? String(b.fromHold) : undefined, deviceId: q.deviceId,
-      delivery: dl ? { name: String(dl.name ?? ''), phone: String(dl.phone ?? ''), address: String(dl.address ?? ''), feeMinor: dl.feeMinor === undefined ? undefined : int(dl.feeMinor, 'delivery fee'), note: dl.note ? String(dl.note) : undefined } : undefined }); });
+  s.post('/api/pos/sales', async (q) => { const b = body(q); const dl = b.delivery as B | undefined; const ls = lines(b.lines);
+    const sold = app.sales.createSale(me(q), { key: key(b), sessionId: String(b.sessionId ?? ''), lines: ls, cashMinor: b.cashMinor === undefined ? undefined : int(b.cashMinor, 'cash'), payments: payments(b.payments), discountBp: b.discountBp === undefined ? undefined : Number(b.discountBp), customerId: b.customerId ? String(b.customerId) : undefined, onCredit: b.onCredit === true, fromHold: b.fromHold ? String(b.fromHold) : undefined, deviceId: q.deviceId,
+      delivery: dl ? { name: String(dl.name ?? ''), phone: String(dl.phone ?? ''), address: String(dl.address ?? ''), feeMinor: dl.feeMinor === undefined ? undefined : int(dl.feeMinor, 'delivery fee'), note: dl.note ? String(dl.note) : undefined } : undefined });
+    if (!(sold as { replay?: boolean }).replay) autoShortage(app, me(q), ls.map(l => l.itemId)); return sold; });
   s.get('/api/pos/sales', async (q) => { const qs = q.query as B; const p0 = me(q); const p = can(p0, 'sale.view_own', app.hub.branchId) || can(p0, 'sale.view_all', app.hub.branchId) || !can(p0, 'sale.create', app.hub.branchId) ? p0 : { ...p0, grants: [...(p0.grants ?? []), 'sale.view_own'] }; const list = app.sales.sales(p, { sessionId: qs.sessionId ? String(qs.sessionId) : undefined, status: qs.status === 'void' ? 'void' : qs.status === 'posted' ? 'posted' : undefined }).slice(0, 200); const name = db.prepare('SELECT display_name FROM people WHERE id=?'); return { sales: list.map(x => ({ ...x, createdByName: String(name.get(x.createdBy)?.display_name ?? '') })) }; });
   s.get('/api/pos/sales/:no', async (q) => { const p = forOwnSale(me(q), param(q, 'no')); return { sale: app.sales.sale(p, param(q, 'no')), returns: app.returns.returnsOf(p, param(q, 'no')) }; });
   s.post('/api/pos/sales/:no/void', async (q) => { app.sales.voidSale(me(q), param(q, 'no'), String(body(q).reason ?? '')); return { ok: true }; });
