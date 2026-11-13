@@ -323,3 +323,57 @@ button.card.stat:hover { border-color: var(--teal); }
   .title .logo svg { width: 26px; height: 26px; }
   .title .logo b { font-size: 19px !important; }
 }
+
+/* ================= Sprint 7.8: purchase invoice grid ================= */
+.pi { display: flex; gap: 14px; align-items: flex-start; min-height: 100%; }
+.pi-main { flex: 1; min-width: 0; display: grid; gap: 12px; }
+.pi-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pi-sup { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; padding: 12px 16px; }
+.pi-sup label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; flex: 1; min-width: 140px; }
+.pi-supinfo { flex-basis: 100%; font-size: 13px; }
+.pi-items { padding: 0; overflow: hidden; }
+.pi-itemsbar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 2px solid var(--line); background: var(--ribbon); flex-wrap: wrap; }
+.pi-itemsbar b { font-size: 16px; }
+.pi-search { flex: 1; min-width: 260px; }
+.pi-search .search { width: 100%; max-width: none; margin: 0; }
+.pgrid-wrap { border: 0; border-radius: 0; }
+.pgrid { min-width: 1080px; font-size: 14px; }
+.pgrid th { padding: 8px 6px; font-size: 12px; white-space: nowrap; }
+.pgrid td { padding: 5px 6px; vertical-align: middle; }
+.pgrid td.idx { color: var(--muted); font-weight: 700; width: 28px; text-align: center; }
+.pgrid td.nm { min-width: 170px; white-space: normal; }
+.pgrid td.nm b { display: block; font-weight: 700; } .pgrid td.nm small { font-size: 11px; }
+.pgrid td small { display: block; font-size: 11px; font-weight: 500; }
+.pgrid tr { cursor: default; }
+#app .pgrid input:not([type="checkbox"]), #app .pgrid select { min-height: 34px; padding: 4px 6px; font-size: 14px; border-radius: 8px; }
+#app .pgrid input.n { text-align: end; font-weight: 700; }
+#app .pgrid input[readonly] { border-style: dashed; color: var(--muted); }
+.pgrid .w5 { width: 60px; } .pgrid .w6 { width: 70px; } .pgrid .w7 { width: 78px; } .pgrid .w8 { width: 84px; }
+.pi-totals { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+.pi-tot { background: var(--panel); border: 2px solid var(--line); border-radius: 12px; padding: 8px 14px; display: flex; flex-direction: column; justify-content: center; min-width: 120px; }
+.pi-tot span { font-size: 12px; color: var(--muted); font-weight: 600; } .pi-tot b { font-size: 20px; }
+.pi-net { min-width: 220px; }
+.pi-side { position: sticky; top: 0; width: 140px; flex: none; display: flex; flex-direction: column; gap: 6px; background: var(--panel); border: 2px solid var(--line); border-radius: 14px; padding: 8px; }
+.pi-act { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 10px; font-weight: 700; font-size: 14px; text-align: start; color: var(--fg); }
+.pi-act svg.i { font-size: 20px; color: var(--teal); }
+.pi-act span { flex: 1; }
+.pi-act kbd { font-size: 11px; padding: 0 5px; }
+.pi-act:hover { background: var(--hover); }
+.pi-act.main { background: var(--orange); color: #fff; } .pi-act.main svg.i { color: #fff; } .pi-act.main kbd { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.4); color: #fff; }
+.pi-act:disabled { opacity: .5; }
+.ctx { position: fixed; z-index: 70; min-width: 220px; background: var(--panel); border: 2px solid var(--line-strong); border-radius: 12px; padding: 6px; box-shadow: 0 14px 34px rgba(0,0,0,.25); display: grid; gap: 2px; }
+.ctx button { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-weight: 600; font-size: 14px; text-align: start; }
+.ctx button svg.i { font-size: 18px; color: var(--teal); } .ctx button kbd { margin-inline-start: auto; font-size: 11px; }
+.ctx button:hover { background: var(--hover); }
+.pi-modal { position: fixed; z-index: 60; top: 8vh; inset-inline: 0; margin-inline: auto; width: min(980px, calc(100% - 32px)); display: grid; gap: 12px; max-height: 84vh; overflow: auto; }
+.pi-modal-head { display: flex; align-items: center; gap: 10px; } .pi-modal-head b { font-size: 18px; } .pi-modal-head .qbtn { margin-inline-start: auto; }
+.dd button.on { background: var(--hover); }
+.print-area { display: none; }
+@media print {
+  body * { visibility: hidden !important; }
+  .print-area, .print-area * { visibility: visible !important; }
+  .print-area { display: block; position: absolute; inset: 0; padding: 12mm; color: #000; background: #fff; font-family: var(--font); }
+  .print-area h1 { font-size: 18pt; margin: 0 0 4mm; } .print-area table { width: 100%; border-collapse: collapse; font-size: 10pt; min-width: 0; }
+  .print-area th, .print-area td { border: 1px solid #555; padding: 3px 5px; background: #fff !important; color: #000 !important; }
+}
+@media (max-width: 760px) { .pi { flex-direction: column; } .pi-side { position: static; width: 100%; flex-direction: row; flex-wrap: wrap; } .pi-act { flex: 1 1 140px; } }

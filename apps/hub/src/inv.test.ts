@@ -53,3 +53,20 @@ describe('items, stock and stocktake', () => {
     expect((await s.call('POST', '/api/inv/import/apply', { token: s.cs, body: { kind: 'suppliers', csv } })).status).toBe(403);
   });
 });
+
+describe('purchase invoice screen helpers (Sprint 7.8)', () => {
+  it('holds and restores an invoice, tells the grid about an item, posts with discount and tax, and prints shelf labels on the label printer', async () => {
+    const s = await prep(); const O = { token: s.sk }; const sup = (await s.call('GET', '/api/buy/suppliers', O)).body.suppliers[0]; const it = (await s.call('GET', '/api/inv/search?q=' + encodeURIComponent('اموكسيسيلين'), O)).body.items[0];
+    const hint = (await s.call('GET', `/api/buy/item-hint/${it.id}`, O)).body; expect(hint.units.length).toBeGreaterThan(0); expect(hint.stockBase).toBeGreaterThan(0); expect(hint.last).toMatchObject({ discountBp: 0 }); expect(hint.last.publicPriceMinor).toBeGreaterThan(0);
+    expect((await s.call('GET', `/api/buy/item-hint/${it.id}`, { token: s.cs })).status).toBe(403);
+    const d = (await s.call('POST', '/api/buy/drafts', { ...O, body: { key: key(), supplierId: sup.id, supplierRef: 'H-9', lines: [{ itemId: it.id, qty: '2' }] } })).body; expect(d.draftNo).toMatch(/^PH-/);
+    expect((await s.call('GET', '/api/buy/drafts', O)).body.drafts.map((x: { id: string }) => x.id)).toContain(d.id); expect((await s.call('GET', `/api/buy/drafts/${d.id}`, O)).body.lines).toEqual([{ itemId: it.id, qty: '2' }]);
+    const unit = hint.units[hint.units.length - 1].name;
+    const inv = (await s.call('POST', '/api/buy/invoices', { ...O, body: { key: key(), supplierId: sup.id, supplierRef: 'H-9', draftId: d.id, lines: [{ itemId: it.id, lot: '', expiry: '2028-05', qty: 2, unitName: unit, costMinor: 4000, discountBp: 2000, taxMinor: 560, publicPriceMinor: 5000, priceUnitName: unit }] } })).body;
+    expect(inv.totalMinor).toBe(8560); const back = (await s.call('GET', `/api/buy/invoices/${inv.piNo}`, O)).body; expect(back).toMatchObject({ taxTotalMinor: 560 }); expect(back.lines[0]).toMatchObject({ discountBp: 2000, taxMinor: 560, lot: `${inv.piNo}-1` });
+    expect((await s.call('GET', `/api/buy/drafts/${d.id}`, O)).body.status).toBe('used');
+    expect((await s.call('POST', '/api/print/labels', { ...O, body: { lines: [{ itemId: it.id, copies: 2 }] } })).body.error).toBe('state');
+    await s.call('POST', '/api/settings/printers', { token: s.owner, body: { printers: [{ name: 'استيكر', kind: 'label', transport: { type: 'preview' } }] } });
+    const lab = (await s.call('POST', '/api/print/labels', { ...O, body: { lines: [{ itemId: it.id, copies: 2, priceMinor: 5000 }] } })).body; expect(lab).toMatchObject({ printer: 'استيكر', results: [{ itemId: it.id, ok: true }] });
+  });
+});
