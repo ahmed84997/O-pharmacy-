@@ -3,6 +3,7 @@ import { can, type Person } from '@o-pharmacy/core';
 import type { ImportKind, ItemInput, ReasonCode, StoreKind } from '@o-pharmacy/inventory';
 import type { App } from './compose';
 import { AccessError } from './access';
+import { printers, printService } from './printing';
 
 type B = Record<string, unknown>;
 const body = (q: FastifyRequest) => (q.body ?? {}) as B;
@@ -83,7 +84,31 @@ export function invRoutes(s: FastifyInstance, app: App): void {
   // ---------- supplier invoices ----------
   s.get('/api/buy/invoices', async (q) => { const sup = new Map(app.purchasing.suppliers(me(q), { includeInactive: true }).map(x => [x.id, x.name])); return { invoices: app.purchasing.invoices(me(q), { supplierId: str(qs(q).supplierId) }).slice(0, 200).map(i => ({ ...i, supplier: sup.get(i.supplierId) ?? '' })) }; });
   s.get('/api/buy/invoices/:no', async (q) => app.purchasing.invoice(me(q), param(q, 'no')));
-  s.post('/api/buy/invoices', async (q) => { const b = body(q); return app.purchasing.postInvoice(me(q), { key: key(b), supplierId: String(b.supplierId ?? ''), supplierRef: str(b.supplierRef), poId: str(b.poId), storeId: str(b.storeId), deviceId: q.deviceId, lines: Array.isArray(b.lines) ? (b.lines as B[]).map(l => ({ itemId: String(l.itemId ?? ''), lot: String(l.lot ?? ''), expiry: String(l.expiry ?? ''), qty: Number(l.qty), unitName: str(l.unitName), bonusQty: num(l.bonusQty), costMinor: Number(l.costMinor), publicPriceMinor: num(l.publicPriceMinor), pharmacistPriceMinor: num(l.pharmacistPriceMinor), priceUnitName: str(l.priceUnitName) })) : [] }); });
+  s.post('/api/buy/invoices', async (q) => { const b = body(q); return app.purchasing.postInvoice(me(q), { key: key(b), supplierId: String(b.supplierId ?? ''), supplierRef: str(b.supplierRef), poId: str(b.poId), storeId: str(b.storeId), deviceId: q.deviceId, lines: Array.isArray(b.lines) ? (b.lines as B[]).map(l => ({ itemId: String(l.itemId ?? ''), lot: String(l.lot ?? ''), expiry: String(l.expiry ?? ''), qty: Number(l.qty), unitName: str(l.unitName), bonusQty: num(l.bonusQty), costMinor: Number(l.costMinor), discountBp: num(l.discountBp), taxMinor: num(l.taxMinor), publicPriceMinor: num(l.publicPriceMinor), pharmacistPriceMinor: num(l.pharmacistPriceMinor), priceUnitName: str(l.priceUnitName) })) : [], draftId: str(b.draftId) }); });
+  // held (suspended) purchase invoices and what the grid needs to know about an item (Sprint 7.8)
+  s.get('/api/buy/drafts', async (q) => ({ drafts: app.purchasing.drafts(me(q)) }));
+  s.get('/api/buy/drafts/:id', async (q) => app.purchasing.draft(me(q), param(q, 'id')));
+  s.post('/api/buy/drafts', async (q) => { const b = body(q); return app.purchasing.saveDraft(me(q), { key: key(b), id: str(b.id), supplierId: str(b.supplierId), supplierRef: str(b.supplierRef), poId: str(b.poId), note: str(b.note), lines: Array.isArray(b.lines) ? b.lines : [] }); });
+  s.post('/api/buy/drafts/:id/cancel', async (q) => { app.purchasing.cancelDraft(me(q), param(q, 'id'), String(body(q).reason ?? '')); return { ok: true }; });
+  const lastBuy = db.prepare(`SELECT l.cost_minor, l.discount_bp, b.public_price_minor, u.name price_unit FROM purchase_invoice_lines l JOIN purchase_invoices pi ON pi.id=l.invoice_id JOIN batches b ON b.id=l.batch_id JOIN item_units u ON u.id=b.price_unit_id
+    WHERE l.item_id=? AND pi.status='posted' ORDER BY pi.rowid DESC, l.line_no DESC LIMIT 1`);
+  const onHand = db.prepare('SELECT COALESCE(SUM(m.qty),0) q FROM movements m JOIN batches b ON b.id=m.batch_id WHERE b.item_id=?');
+  const firstBarcode = db.prepare("SELECT barcode FROM item_barcodes WHERE item_id=? ORDER BY CASE kind WHEN 'gtin' THEN 0 WHEN 'internal' THEN 1 ELSE 2 END LIMIT 1");
+  s.get('/api/buy/item-hint/:id', async (q) => {
+    const p = me(q); need(p, 'purchase_invoice.create'); const it = app.items.get(param(q, 'id')); if (!it) throw new AccessError('not-found', 'item');
+    const last = lastBuy.get(it.id);
+    return { id: it.id, code: it.code, nameAr: it.nameAr, kind: it.kind, status: it.status, units: it.units.map(u => ({ name: u.name, factor: u.factor })), listPriceMinor: it.listPriceMinor ?? null, stockBase: Number(onHand.get(it.id)!.q), barcode: (firstBarcode.get(it.id)?.barcode as string) ?? null,
+      last: last ? { priceUnit: String(last.price_unit), publicPriceMinor: last.public_price_minor == null ? null : Number(last.public_price_minor), costMinor: Number(last.cost_minor), discountBp: Number(last.discount_bp) } : null };
+  });
+  // shelf labels for the items of an invoice (the first label printer)
+  s.post('/api/print/labels', async (q) => {
+    const p = me(q); const b = body(q); const lines = Array.isArray(b.lines) ? (b.lines as B[]) : []; if (!lines.length || lines.length > 100) throw new AccessError('invalid', '1 to 100 lines');
+    const printer = str(b.printer) ?? printers(app).find(x => x.kind === 'label')?.name; if (!printer) throw new AccessError('state', 'no label printer is set up');
+    const svc = printService(app); const out: { itemId: string; ok: boolean; error?: string }[] = [];
+    for (const l of lines) { const it = app.items.get(String(l.itemId ?? '')); if (!it) { out.push({ itemId: String(l.itemId ?? ''), ok: false, error: 'not-found' }); continue; }
+      const r = await svc.printLabel(p, { printer, name: it.nameAr, priceMinor: num(l.priceMinor), barcode: (firstBarcode.get(it.id)?.barcode as string) ?? null, copies: Math.min(200, Math.max(1, Number(l.copies) || 1)) }); out.push({ itemId: it.id, ok: r.ok, error: r.error }); }
+    return { printer, results: out };
+  });
   s.post('/api/buy/invoices/:no/void', async (q) => { app.purchasing.voidInvoice(me(q), param(q, 'no'), String(body(q).reason ?? '')); return { ok: true }; });
   s.post('/api/buy/returns', async (q) => { const b = body(q); return app.purchasing.returnToSupplier(me(q), { key: key(b), supplierId: String(b.supplierId ?? ''), invoiceId: str(b.invoiceId), storeId: str(b.storeId), reason: String(b.reason ?? ''), lines: Array.isArray(b.lines) ? (b.lines as B[]).map(l => ({ batchId: String(l.batchId ?? ''), qty: Number(l.qty), unitName: str(l.unitName) })) : [] }); });
 

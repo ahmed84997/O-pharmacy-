@@ -97,3 +97,27 @@ describe('returns to supplier and price comparison', () => {
     expect(s.pu.priceHistory(pharm, s.a.id).map(p => [p.supplierName, p.effCostMinor])).toEqual([['الدلتا', 2727], ['المتحدة', 3000]]); expect(code(() => s.pu.priceHistory(cashier, s.a.id))).toBe('forbidden');
   });
 });
+
+describe('purchase invoices: discount, tax, lot left empty, held invoices (Sprint 7.8)', () => {
+  it('keeps the discount, adds the tax to the total and the cost, and makes a batch per line when the pack has no lot', () => {
+    const s = prep();
+    const r = s.pu.postInvoice(keeper, { key: key(), supplierId: s.sup.id, lines: [line(s.a.id, { lot: '', qty: 10, costMinor: 3000, discountBp: 2500, taxMinor: 1400 }), line(s.b.id, { lot: ' ', qty: 2, costMinor: 1000, publicPriceMinor: 2000, pharmacistPriceMinor: 1800 })] });
+    expect(r.totalMinor).toBe(30000 + 1400 + 2000);
+    const inv = s.pu.invoice(keeper, r.piNo); expect(inv.taxTotalMinor).toBe(1400);
+    expect(inv.lines[0]).toMatchObject({ lot: 'PI-000001-1', discountBp: 2500, taxMinor: 1400, effCostMinor: 3140, publicPriceMinor: 4500, priceUnit: 'علبة' }); expect(inv.lines[1]!.lot).toBe('PI-000001-2');
+    expect(code(() => s.pu.postInvoice(keeper, { key: key(), supplierId: s.sup.id, lines: [line(s.a.id, { lot: 'X', discountBp: 10001 })] }))).toBe('invalid');
+    expect(code(() => s.pu.postInvoice(keeper, { key: key(), supplierId: s.sup.id, lines: [line(s.a.id, { lot: 'Y', taxMinor: -1 })] }))).toBe('invalid');
+  });
+  it('holds an invoice without moving stock, updates it while open, posts it once and never deletes it', () => {
+    const s = prep(); const k = key(); const d = s.pu.saveDraft(keeper, { key: k, supplierId: s.sup.id, supplierRef: 'A-1', lines: [{ itemId: s.a.id, qty: '3' }] });
+    expect(d).toMatchObject({ draftNo: 'PH-000001', replay: false }); expect(s.pu.saveDraft(keeper, { key: k, lines: [] })).toMatchObject({ id: d.id, replay: true }); expect(s.st.onHand(s.a.id)).toBe(0);
+    s.pu.saveDraft(keeper, { key: key(), id: d.id, supplierId: s.sup.id, supplierRef: 'A-1', lines: [{ itemId: s.a.id, qty: '3' }, { itemId: s.b.id, qty: '1' }] });
+    expect(s.pu.drafts(keeper)).toMatchObject([{ draftNo: 'PH-000001', lines: 2, supplier: 'المتحدة' }]); expect(s.pu.draft(keeper, 'PH-000001').lines).toHaveLength(2);
+    const r = s.pu.postInvoice(keeper, { key: key(), supplierId: s.sup.id, supplierRef: 'A-1', draftId: d.id, lines: [line(s.a.id)] });
+    expect(s.pu.draft(keeper, d.id)).toMatchObject({ status: 'used', piNo: r.piNo }); expect(s.pu.drafts(keeper)).toHaveLength(0);
+    expect(code(() => s.pu.postInvoice(keeper, { key: key(), supplierId: s.sup.id, draftId: d.id, lines: [line(s.b.id, { lot: 'Z' })] }))).toBe('state');
+    expect(code(() => s.pu.saveDraft(keeper, { key: key(), id: d.id, lines: [] }))).toBe('state');
+    const d2 = s.pu.saveDraft(keeper, { key: key(), lines: [] }); expect(code(() => s.pu.cancelDraft(keeper, d2.id, ' '))).toBe('invalid'); s.pu.cancelDraft(keeper, d2.id, 'دخلت غلط');
+    expect(s.pu.draft(keeper, d2.id).status).toBe('cancelled'); expect(() => s.hub.db.exec('DELETE FROM purchase_drafts')).toThrow(); expect(code(() => s.pu.drafts(cashier))).toBe('forbidden');
+  });
+});

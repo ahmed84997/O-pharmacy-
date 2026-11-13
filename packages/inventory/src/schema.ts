@@ -245,4 +245,17 @@ CREATE TABLE import_refs (
 CREATE INDEX import_refs_entity ON import_refs(entity_id);
 CREATE TRIGGER import_refs_no_update BEFORE UPDATE ON import_refs BEGIN SELECT RAISE(ABORT, 'import references are append-only'); END;
 CREATE TRIGGER import_refs_no_delete BEFORE DELETE ON import_refs BEGIN SELECT RAISE(ABORT, 'import references are append-only'); END;` },
+  { id: 'inv_0007_purchase_drafts', sql: `
+ALTER TABLE purchase_invoice_lines ADD COLUMN discount_bp INTEGER NOT NULL DEFAULT 0 CHECK (discount_bp BETWEEN 0 AND 10000);
+ALTER TABLE purchase_invoice_lines ADD COLUMN tax_minor INTEGER NOT NULL DEFAULT 0 CHECK (tax_minor >= 0);
+ALTER TABLE purchase_invoices ADD COLUMN tax_total_minor INTEGER NOT NULL DEFAULT 0 CHECK (tax_total_minor >= 0);
+ALTER TABLE purchase_invoices ADD COLUMN draft_id TEXT;
+CREATE TABLE purchase_drafts (
+  id TEXT PRIMARY KEY, draft_no TEXT NOT NULL UNIQUE, req_key TEXT NOT NULL UNIQUE, supplier_id TEXT REFERENCES suppliers(id), supplier_ref TEXT, po_id TEXT REFERENCES purchase_orders(id),
+  lines TEXT NOT NULL, line_count INTEGER NOT NULL DEFAULT 0, note TEXT, status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','used','cancelled')),
+  created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_by TEXT NOT NULL, updated_at TEXT NOT NULL, closed_by TEXT, closed_at TEXT, closed_reason TEXT, pi_no TEXT
+);
+CREATE INDEX purchase_drafts_open ON purchase_drafts(status);
+CREATE TRIGGER purchase_drafts_no_delete BEFORE DELETE ON purchase_drafts BEGIN SELECT RAISE(ABORT, 'held invoices are never deleted: cancel with a reason'); END;
+CREATE TRIGGER purchase_drafts_closed BEFORE UPDATE ON purchase_drafts WHEN OLD.status <> 'open' BEGIN SELECT RAISE(ABORT, 'a used or cancelled held invoice never changes'); END;` },
 ];

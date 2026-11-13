@@ -7,8 +7,10 @@ export type BuyErrorCode = 'forbidden' | 'invalid' | 'not-found' | 'state' | 'du
 export class BuyError extends Error { constructor(public code: BuyErrorCode, m: string, public detail?: unknown) { super(m); } }
 export interface Supplier { id: string; code: string; name: string; phone: string | null; address: string | null; taxNo: string | null; notes: string | null; active: boolean }
 export interface SupplierInput { name: string; phone?: string; address?: string; taxNo?: string; notes?: string }
-export interface InvoiceLineInput { itemId: string; lot: string; expiry: string; qty: number; unitName?: string; bonusQty?: number; costMinor: number; publicPriceMinor?: number; pharmacistPriceMinor?: number; priceUnitName?: string }
-export interface InvoiceInput { key: string; supplierId: string; supplierRef?: string; poId?: string; storeId?: string; lines: InvoiceLineInput[]; deviceId?: string }
+export interface InvoiceLineInput { itemId: string; lot: string; expiry: string; qty: number; unitName?: string; bonusQty?: number; costMinor: number; /** the supplier discount on this line, in basis points (12.5% = 1250); kept for reports */ discountBp?: number; /** tax on the whole line, piasters; goes into the cost (the pharmacy cannot reclaim it) */ taxMinor?: number; publicPriceMinor?: number; pharmacistPriceMinor?: number; priceUnitName?: string }
+export interface InvoiceInput { key: string; supplierId: string; supplierRef?: string; poId?: string; storeId?: string; lines: InvoiceLineInput[]; deviceId?: string; /** a held invoice this one completes */ draftId?: string }
+/** A held (suspended) purchase invoice: the lines as typed, no stock moves until it is posted. */
+export interface DraftInput { key: string; id?: string; supplierId?: string; supplierRef?: string; poId?: string; note?: string; lines: unknown[] }
 export interface InvoiceResult { id: string; piNo: string; totalMinor: number; lines: number; warnings: string[]; replay: boolean }
 export interface ReturnInput { key: string; supplierId: string; invoiceId?: string; storeId?: string; reason: string; lines: { batchId: string; qty: number; unitName?: string }[] }
 
@@ -112,23 +114,28 @@ export class PurchasingService {
       if (prior) return { id: String(prior.id), piNo: String(prior.pi_no), totalMinor: Number(prior.total_minor), lines: Number(this.db.prepare('SELECT COUNT(*) c FROM purchase_invoice_lines WHERE invoice_id=?').get(String(prior.id))!.c), warnings: [], replay: true };
       if (ref && this.db.prepare('SELECT 1 FROM purchase_invoices WHERE supplier_id=? AND supplier_ref=?').get(inv.supplierId, ref)) throw new BuyError('duplicate', 'this supplier invoice number was already entered');
       if (inv.poId) { const o = this.order(inv.poId); if (String(o.supplier_id) !== inv.supplierId) throw new BuyError('invalid', 'the order belongs to another supplier'); if (o.status === 'draft' || o.status === 'cancelled') throw new BuyError('state', `the order is ${String(o.status)}`); }
-      const id = uuidv7(), no = this.next('pi', 'PI'); const warnings: string[] = []; let total = 0; const rows: unknown[][] = [];
+      let draft: Record<string, unknown> | undefined; if (inv.draftId) { draft = this.db.prepare('SELECT * FROM purchase_drafts WHERE id=?').get(inv.draftId); if (!draft) throw new BuyError('not-found', 'held invoice'); if (draft.status !== 'open') throw new BuyError('state', `the held invoice is ${String(draft.status)}`); }
+      const id = uuidv7(), no = this.next('pi', 'PI'); const warnings: string[] = []; let total = 0, taxTotal = 0; const rows: unknown[][] = [];
       inv.lines.forEach((l, i) => {
         const item = this.items.get(l.itemId); if (!item) throw new BuyError('not-found', l.itemId);
         const unit = l.unitName ? item.units.find(x => x.name === l.unitName) : item.units[item.units.length - 1]; if (!unit) throw new BuyError('invalid', `line ${i + 1}: unknown unit`);
         const pu = l.priceUnitName ? item.units.find(x => x.name === l.priceUnitName) : item.units[item.units.length - 1]; if (!pu) throw new BuyError('invalid', `line ${i + 1}: unknown price unit`);
         const bonus = l.bonusQty ?? 0; if (!Number.isInteger(bonus) || bonus < 0) throw new BuyError('invalid', `line ${i + 1}: bonus must be zero or a whole number`);
         if (!Number.isInteger(l.qty) || l.qty <= 0) throw new BuyError('invalid', `line ${i + 1}: quantity must be a positive whole number`); if (!Number.isInteger(l.costMinor) || l.costMinor < 0) throw new BuyError('invalid', `line ${i + 1}: cost must be whole piasters`);
-        const paidBase = l.qty * unit.factor, bonusBase = bonus * unit.factor; const eff = bonus ? div(l.costMinor * l.qty, l.qty + bonus) : l.costMinor; const lineTotal = div(paidBase * l.costMinor, pu.factor);
-        const rin: ReceiveInput = { key: `${inv.key}:${i}`, itemId: l.itemId, lot: l.lot, expiry: l.expiry, qty: l.qty + bonus, unitName: unit.name, costMinor: eff, publicPriceMinor: l.publicPriceMinor, pharmacistPriceMinor: l.pharmacistPriceMinor, priceUnitName: pu.name, storeId, sourceRef: no, deviceId: inv.deviceId };
+        const disc = l.discountBp ?? 0; if (!Number.isInteger(disc) || disc < 0 || disc > 10000) throw new BuyError('invalid', `line ${i + 1}: discount must be 0 to 100%`);
+        const tax = l.taxMinor ?? 0; if (!Number.isInteger(tax) || tax < 0) throw new BuyError('invalid', `line ${i + 1}: tax must be whole piasters`);
+        const paidBase = l.qty * unit.factor, bonusBase = bonus * unit.factor; const eff = bonus || tax ? div(l.costMinor * l.qty + tax, l.qty + bonus) : l.costMinor; const lineTotal = div(paidBase * l.costMinor, pu.factor) + tax;
+        const lot = l.lot?.trim() || `${no}-${i + 1}`; // no lot on the pack: one batch per invoice line, still sold by expiry first
+        const rin: ReceiveInput = { key: `${inv.key}:${i}`, itemId: l.itemId, lot, expiry: l.expiry, qty: l.qty + bonus, unitName: unit.name, costMinor: eff, publicPriceMinor: l.publicPriceMinor, pharmacistPriceMinor: l.pharmacistPriceMinor, priceUnitName: pu.name, storeId, sourceRef: no, deviceId: inv.deviceId };
         let res; try { res = this.batches.receive(actor, rin); } catch (e) { if (e instanceof BatchError) throw new BuyError(e.code === 'forbidden' ? 'forbidden' : 'invalid', `line ${i + 1}: ${e.message}`, { line: i + 1, code: e.code }); throw e; }
         warnings.push(...res.warnings.map(w => `line ${i + 1}: ${w}`)); const mv = JSON.parse(String(this.db.prepare('SELECT result FROM idempotency WHERE key=?').get(rin.key)!.result)) as { id: string };
-        rows.push([uuidv7(), id, i + 1, l.itemId, res.batch.id, mv.id, paidBase, bonusBase, l.costMinor, eff, lineTotal]); total += lineTotal;
+        rows.push([uuidv7(), id, i + 1, l.itemId, res.batch.id, mv.id, paidBase, bonusBase, l.costMinor, eff, lineTotal, disc, tax]); total += lineTotal; taxTotal += tax;
       });
-      this.db.prepare('INSERT INTO purchase_invoices(id,pi_no,req_key,supplier_id,supplier_ref,po_id,store_id,total_minor,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)').run(id, no, inv.key, inv.supplierId, ref, inv.poId ?? null, storeId, total, actor.id, this.hub.now());
-      for (const r of rows) this.db.prepare('INSERT INTO purchase_invoice_lines(id,invoice_id,line_no,item_id,batch_id,movement_id,paid_base,bonus_base,cost_minor,eff_cost_minor,line_total_minor) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(...r);
+      this.db.prepare('INSERT INTO purchase_invoices(id,pi_no,req_key,supplier_id,supplier_ref,po_id,store_id,total_minor,tax_total_minor,draft_id,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(id, no, inv.key, inv.supplierId, ref, inv.poId ?? null, storeId, total, taxTotal, inv.draftId ?? null, actor.id, this.hub.now());
+      if (draft) this.db.prepare("UPDATE purchase_drafts SET status='used', closed_by=?, closed_at=?, pi_no=? WHERE id=?").run(actor.id, this.hub.now(), no, String(draft.id));
+      for (const r of rows) this.db.prepare('INSERT INTO purchase_invoice_lines(id,invoice_id,line_no,item_id,batch_id,movement_id,paid_base,bonus_base,cost_minor,eff_cost_minor,line_total_minor,discount_bp,tax_minor) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(...r);
       if (inv.poId) this.refreshOrder(inv.poId, actor);
-      this.hub.audit(actor.id, 'purchase_invoice.posted', 'purchase_invoice', no, { supplierId: inv.supplierId, supplierRef: ref, lines: rows.length, totalMinor: total }); this.hub.emit('purchase_invoice.posted', { piNo: no, supplierId: inv.supplierId, totalMinor: total, lines: rows.length });
+      this.hub.audit(actor.id, 'purchase_invoice.posted', 'purchase_invoice', no, { supplierId: inv.supplierId, supplierRef: ref, lines: rows.length, totalMinor: total, taxMinor: taxTotal, draftId: inv.draftId ?? null }); this.hub.emit('purchase_invoice.posted', { piNo: no, supplierId: inv.supplierId, totalMinor: total, lines: rows.length });
       return { id, piNo: no, totalMinor: total, lines: rows.length, warnings, replay: false };
     });
   }
@@ -149,13 +156,46 @@ export class PurchasingService {
   }
   invoice(actor: Person, piNo: string) {
     this.need(actor, 'purchase_invoice.create'); const h = this.db.prepare('SELECT * FROM purchase_invoices WHERE pi_no=?').get(piNo); if (!h) throw new BuyError('not-found', piNo);
-    const lines = this.db.prepare('SELECT l.*, i.name_ar, b.lot, b.expiry FROM purchase_invoice_lines l JOIN items i ON i.id=l.item_id JOIN batches b ON b.id=l.batch_id WHERE l.invoice_id=? ORDER BY l.line_no').all(String(h.id))
-      .map(l => ({ lineNo: Number(l.line_no), itemId: String(l.item_id), itemName: String(l.name_ar), batchId: String(l.batch_id), lot: String(l.lot), expiry: String(l.expiry), paidBase: Number(l.paid_base), bonusBase: Number(l.bonus_base), costMinor: Number(l.cost_minor), effCostMinor: Number(l.eff_cost_minor), totalMinor: Number(l.line_total_minor) }));
-    return { piNo, status: String(h.status), supplierId: String(h.supplier_id), supplierRef: (h.supplier_ref as string) ?? null, poId: (h.po_id as string) ?? null, storeId: String(h.store_id), totalMinor: Number(h.total_minor), createdBy: String(h.created_by), createdAt: String(h.created_at), voidReason: (h.void_reason as string) ?? null, lines };
+    const lines = this.db.prepare('SELECT l.*, i.name_ar, b.lot, b.expiry, b.public_price_minor, u.name price_unit, u.factor price_factor FROM purchase_invoice_lines l JOIN items i ON i.id=l.item_id JOIN batches b ON b.id=l.batch_id JOIN item_units u ON u.id=b.price_unit_id WHERE l.invoice_id=? ORDER BY l.line_no').all(String(h.id))
+      .map(l => ({ lineNo: Number(l.line_no), itemId: String(l.item_id), itemName: String(l.name_ar), batchId: String(l.batch_id), lot: String(l.lot), expiry: String(l.expiry), paidBase: Number(l.paid_base), bonusBase: Number(l.bonus_base), costMinor: Number(l.cost_minor), effCostMinor: Number(l.eff_cost_minor), totalMinor: Number(l.line_total_minor), discountBp: Number(l.discount_bp), taxMinor: Number(l.tax_minor), publicPriceMinor: l.public_price_minor == null ? null : Number(l.public_price_minor), priceUnit: String(l.price_unit), priceFactor: Number(l.price_factor) }));
+    return { piNo, status: String(h.status), supplierId: String(h.supplier_id), supplierRef: (h.supplier_ref as string) ?? null, poId: (h.po_id as string) ?? null, storeId: String(h.store_id), totalMinor: Number(h.total_minor), taxTotalMinor: Number(h.tax_total_minor), createdBy: String(h.created_by), createdAt: String(h.created_at), voidReason: (h.void_reason as string) ?? null, lines };
   }
   invoices(actor: Person, o: { supplierId?: string; status?: 'posted' | 'void' } = {}) {
     this.need(actor, 'purchase_invoice.create'); const w: string[] = []; const a: unknown[] = []; if (o.supplierId) { w.push('supplier_id=?'); a.push(o.supplierId); } if (o.status) { w.push('status=?'); a.push(o.status); }
     return this.db.prepare(`SELECT pi_no, supplier_id, supplier_ref, status, total_minor, created_at FROM purchase_invoices ${w.length ? 'WHERE ' + w.join(' AND ') : ''} ORDER BY rowid DESC`).all(...a).map(r => ({ piNo: String(r.pi_no), supplierId: String(r.supplier_id), supplierRef: (r.supplier_ref as string) ?? null, status: String(r.status), totalMinor: Number(r.total_minor), createdAt: String(r.created_at) }));
+  }
+
+  // ---------- held (suspended) invoices ----------
+  /** Holds an invoice being typed: saves the lines as they are (no stock moves). Saving again with the same id updates it while it is open. */
+  saveDraft(actor: Person, d: DraftInput): { id: string; draftNo: string; replay: boolean } {
+    this.need(actor, 'purchase_invoice.create'); if (!Array.isArray(d.lines) || d.lines.length > 400) throw new BuyError('invalid', 'a held invoice holds up to 400 lines');
+    const text = JSON.stringify(d.lines); if (text.length > 400_000) throw new BuyError('invalid', 'the held invoice is too large');
+    if (d.supplierId) this.supplier(d.supplierId); const now = this.hub.now();
+    return this.db.tx(() => {
+      if (d.id) {
+        const cur = this.db.prepare('SELECT * FROM purchase_drafts WHERE id=?').get(d.id); if (!cur) throw new BuyError('not-found', 'held invoice'); if (cur.status !== 'open') throw new BuyError('state', `the held invoice is ${String(cur.status)}`);
+        this.db.prepare('UPDATE purchase_drafts SET supplier_id=?, supplier_ref=?, po_id=?, lines=?, line_count=?, note=?, updated_by=?, updated_at=? WHERE id=?').run(d.supplierId ?? null, d.supplierRef?.trim() || null, d.poId ?? null, text, d.lines.length, d.note?.trim() || null, actor.id, now, d.id);
+        this.hub.audit(actor.id, 'purchase_draft.saved', 'purchase_draft', String(cur.draft_no), { lines: d.lines.length }); return { id: d.id, draftNo: String(cur.draft_no), replay: false };
+      }
+      const prior = this.db.prepare('SELECT id, draft_no FROM purchase_drafts WHERE req_key=?').get(d.key); if (prior) return { id: String(prior.id), draftNo: String(prior.draft_no), replay: true };
+      const id = uuidv7(), no = this.next('pd', 'PH');
+      this.db.prepare('INSERT INTO purchase_drafts(id,draft_no,req_key,supplier_id,supplier_ref,po_id,lines,line_count,note,created_by,created_at,updated_by,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, no, d.key, d.supplierId ?? null, d.supplierRef?.trim() || null, d.poId ?? null, text, d.lines.length, d.note?.trim() || null, actor.id, now, actor.id, now);
+      this.hub.audit(actor.id, 'purchase_draft.held', 'purchase_draft', no, { lines: d.lines.length }); return { id, draftNo: no, replay: false };
+    });
+  }
+  drafts(actor: Person) {
+    this.need(actor, 'purchase_invoice.create');
+    return this.db.prepare("SELECT d.id, d.draft_no, d.supplier_id, s.name supplier, d.supplier_ref, d.line_count, d.note, d.updated_at FROM purchase_drafts d LEFT JOIN suppliers s ON s.id=d.supplier_id WHERE d.status='open' ORDER BY d.updated_at DESC").all()
+      .map(r => ({ id: String(r.id), draftNo: String(r.draft_no), supplierId: (r.supplier_id as string) ?? null, supplier: (r.supplier as string) ?? null, supplierRef: (r.supplier_ref as string) ?? null, lines: Number(r.line_count), note: (r.note as string) ?? null, updatedAt: String(r.updated_at) }));
+  }
+  draft(actor: Person, id: string) {
+    this.need(actor, 'purchase_invoice.create'); const r = this.db.prepare('SELECT * FROM purchase_drafts WHERE id=? OR draft_no=?').get(id, id); if (!r) throw new BuyError('not-found', 'held invoice');
+    return { id: String(r.id), draftNo: String(r.draft_no), status: String(r.status), supplierId: (r.supplier_id as string) ?? null, supplierRef: (r.supplier_ref as string) ?? null, poId: (r.po_id as string) ?? null, note: (r.note as string) ?? null, lines: JSON.parse(String(r.lines)) as unknown[], piNo: (r.pi_no as string) ?? null };
+  }
+  cancelDraft(actor: Person, id: string, reason: string): void {
+    this.need(actor, 'purchase_invoice.create'); if (!reason?.trim()) throw new BuyError('invalid', 'a reason is required');
+    this.db.tx(() => { const r = this.db.prepare('SELECT * FROM purchase_drafts WHERE id=?').get(id); if (!r) throw new BuyError('not-found', 'held invoice'); if (r.status !== 'open') throw new BuyError('state', `the held invoice is ${String(r.status)}`);
+      this.db.prepare("UPDATE purchase_drafts SET status='cancelled', closed_by=?, closed_at=?, closed_reason=? WHERE id=?").run(actor.id, this.hub.now(), reason.trim(), id); this.hub.audit(actor.id, 'purchase_draft.cancelled', 'purchase_draft', String(r.draft_no), { reason: reason.trim() }); });
   }
 
   // ---------- returns to supplier ----------

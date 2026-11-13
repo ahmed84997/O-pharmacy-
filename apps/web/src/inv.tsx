@@ -4,12 +4,12 @@ import { qtyText } from './pos';
 import { dmyHm, Icon, money, newKey, toMinor, useApp } from './ui';
 
 type Unit = { name: string; factor: number };
-type InvItem = { id: string; code: string; nameAr: string; kind: string; status: string; units: Unit[]; listPriceMinor: number | null };
+export type InvItem = { id: string; code: string; nameAr: string; kind: string; status: string; units: Unit[]; listPriceMinor: number | null };
 const KIND: Record<string, string> = { drug: 'دواء', non_drug: 'غير دوائي', service: 'خدمة' };
 const STATUS: Record<string, string> = { active: 'نشط', suspended: 'موقوف', archived: 'مؤرشف' };
 const INV_ERR: Record<string, string> = { 'price-rule': 'سعر الدواء مش بيتحط على الصنف: بييجي مع التشغيلة في فاتورة الشراء.', 'duplicate-barcode': 'الباركود ده متسجل لصنف تاني.', 'duplicate-code': 'الكود ده موجود.', insufficient: 'الكمية أكبر من الرصيد.', separation: 'لازم حد تاني هو اللي يوافق.', 'same-status': 'الصنف في الحالة دي بالفعل.', blocked: 'التشغيلة محجوزة أو منتهية.' };
 export const invErr = (e: unknown) => { const c = (e as { code?: string }).code; if (c && INV_ERR[c]) return INV_ERR[c]!; const m = (e as Error).message ?? ''; if (/not a valid GTIN/.test(m)) return 'الباركود مش صحيح (رقم التحقق غلط).'; if (/expired/.test(m)) return 'التشغيلة منتهية: مبتتستلمش.'; if (/already been entered|already entered|supplier invoice number/.test(m)) return 'فاتورة المورد دي اتسجلت قبل كده.'; return arabic(e); };
-const int = (v: string) => { const n = Number(v.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))); return Number.isInteger(n) ? n : NaN; };
+export const int = (v: string) => { const n = Number(v.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))); return Number.isInteger(n) ? n : NaN; };
 
 /** Search any item (also not-for-sale units) for stock and purchasing screens. */
 export function InvPicker({ onPick, placeholder }: { onPick: (it: InvItem) => void; placeholder?: string }) {
@@ -37,7 +37,7 @@ export function ItemsScreen() {
   </div>);
 }
 
-function NewItem({ done }: { done: (id?: string) => void }) {
+export function NewItem({ done }: { done: (id?: string) => void }) {
   const { can } = useApp(); const [f, setF] = useState({ nameAr: '', kind: 'drug', form: 'قرص', strength: '', activeIngredient: '', manufacturer: '', reorderLevel: '', listPrice: '', barcode: '', barcodeUnit: '' }); const [units, setUnits] = useState<{ name: string; factor: string }[]>([{ name: 'قرص', factor: '1' }, { name: 'علبة', factor: '20' }]); const [err, setErr] = useState('');
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   const save = async () => { setErr(''); const us = units.filter(u => u.name.trim()).map(u => ({ name: u.name.trim(), factor: int(u.factor) })); if (us.some(u => !(u.factor >= 1))) return setErr('عدد القطع في كل وحدة لازم رقم صحيح'); if (f.kind !== 'drug' && f.listPrice && toMinor(f.listPrice) === null) return setErr('السعر مش مظبوط');
@@ -147,7 +147,7 @@ function TakeView({ id, back }: { id: string; back: () => void }) {
 }
 
 /* ================= suppliers ================= */
-type Supplier = { id: string; code: string; name: string; phone: string | null; address: string | null; taxNo: string | null; notes: string | null; active: boolean };
+export type Supplier = { id: string; code: string; name: string; phone: string | null; address: string | null; taxNo: string | null; notes: string | null; active: boolean };
 export function SuppliersScreen() {
   const { can, toast, ask } = useApp(); const [list, setList] = useState<Supplier[]>([]); const [edit, setEdit] = useState<Partial<Supplier> | null>(null);
   const load = () => api<{ suppliers: Supplier[] }>('/api/buy/suppliers?all=1').then(r => setList(r.suppliers), e => toast(arabic(e))); useEffect(() => { void load(); }, []);
@@ -161,29 +161,7 @@ export function SuppliersScreen() {
 export function useSuppliers() { const [l, setL] = useState<Supplier[]>([]); useEffect(() => { api<{ suppliers: Supplier[] }>('/api/buy/suppliers').then(r => setL(r.suppliers), () => setL([])); }, []); return l; }
 
 /* ================= supplier invoice ================= */
-type PLine = { item: InvItem; lot: string; expiry: string; qty: string; unit: string; bonus: string; cost: string; price: string; phPrice: string };
-export function PurchaseInvoiceScreen() {
-  const { can, toast, ask } = useApp(); const sups = useSuppliers(); const [sup, setSup] = useState(''); const [ref, setRef] = useState(''); const [lines, setLines] = useState<PLine[]>([]); const [err, setErr] = useState(''); const [list, setList] = useState<{ piNo: string; supplier: string; supplierRef: string | null; status: string; totalMinor: number; createdAt: string }[]>([]); const [open, setOpen] = useState<{ piNo: string; status: string; totalMinor: number; lines: { itemName: string; lot: string; expiry: string; paidBase: number; bonusBase: number; costMinor: number }[] } | null>(null); const [warn, setWarn] = useState<string[]>([]);
-  const load = () => api<{ invoices: typeof list }>('/api/buy/invoices').then(r => setList(r.invoices), () => undefined); useEffect(() => { void load(); }, []);
-  const upd = (i: number, p: Partial<PLine>) => setLines(lines.map((l, k) => (k === i ? { ...l, ...p } : l)));
-  const post = async () => { setErr(''); if (!sup) return setErr('اختار المورد'); if (!lines.length) return setErr('الفاتورة فاضية');
-    const ls = lines.map(l => ({ itemId: l.item.id, lot: l.lot.trim(), expiry: l.expiry.trim(), qty: int(l.qty), unitName: l.unit, bonusQty: l.bonus ? int(l.bonus) : undefined, costMinor: toMinor(l.cost), publicPriceMinor: l.item.kind === 'drug' ? toMinor(l.price) : undefined, pharmacistPriceMinor: l.item.kind === 'drug' && l.phPrice ? toMinor(l.phPrice) : undefined, priceUnitName: l.item.kind === 'drug' ? l.unit : undefined }));
-    if (ls.some(l => !l.lot || !l.expiry || !(l.qty > 0) || l.costMinor === null || (lines.find(x => x.item.id === l.itemId)!.item.kind === 'drug' && l.publicPriceMinor == null))) return setErr('كمّل كل سطر: التشغيلة والصلاحية والكمية والتكلفة وسعر الجمهور للدواء');
-    try { const r = await api<{ piNo: string; totalMinor: number; warnings: string[] }>('/api/buy/invoices', { body: { key: newKey(), supplierId: sup, supplierRef: ref || undefined, lines: ls } }); toast(`اتسجلت ${r.piNo} - ${money(r.totalMinor)}`); setWarn(r.warnings); setLines([]); setRef(''); void load(); } catch (e) { setErr(invErr(e)); } };
-  return (<div style={{ display: 'grid', gap: 12 }}><h2><Icon n="file" />فاتورة مشتريات</h2>
-    <div className="card formgrid"><label>المورد<select value={sup} onChange={e => setSup(e.target.value)}><option value="">اختار</option>{sups.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>رقم فاتورة المورد<input dir="ltr" value={ref} onChange={e => setRef(e.target.value)} /></label></div>
-    <InvPicker onPick={it => setLines([...lines, { item: it, lot: '', expiry: '', qty: '1', unit: [...it.units].sort((a, b) => b.factor - a.factor)[0]!.name, bonus: '', cost: '', price: '', phPrice: '' }])} placeholder="ضيف صنف للفاتورة" />
-    {lines.map((l, i) => <div key={i} className="card formgrid"><b style={{ gridColumn: '1 / -1' }}>{l.item.nameAr} <button className="btn ghost" onClick={() => setLines(lines.filter((_, k) => k !== i))}>شيل</button></b>
-      <label>التشغيلة<input dir="ltr" value={l.lot} onChange={e => upd(i, { lot: e.target.value })} /></label><label>الصلاحية (12/2027)<input dir="ltr" value={l.expiry} onChange={e => upd(i, { expiry: e.target.value })} placeholder="MM/YYYY" /></label><label>الكمية<input className="num" value={l.qty} onChange={e => upd(i, { qty: e.target.value })} /></label><label>الوحدة<select value={l.unit} onChange={e => upd(i, { unit: e.target.value })}>{l.item.units.map(u => <option key={u.name}>{u.name}</option>)}</select></label><label>بونص (نفس الوحدة)<input className="num" value={l.bonus} onChange={e => upd(i, { bonus: e.target.value })} /></label>
-      <label>التكلفة للوحدة<input className="num" value={l.cost} onChange={e => upd(i, { cost: e.target.value })} /></label>{l.item.kind === 'drug' && <><label>سعر الجمهور للوحدة<input className="num" value={l.price} onChange={e => upd(i, { price: e.target.value })} /></label><label>سعر الصيدلي (اختياري)<input className="num" value={l.phPrice} onChange={e => upd(i, { phPrice: e.target.value })} /></label></>}
-      <span className="muted">الإجمالي: {money((toMinor(l.cost) ?? 0) * (int(l.qty) || 0))}</span></div>)}
-    {lines.length > 0 && <div className="card"><b>إجمالي الفاتورة: {money(lines.reduce((t, l) => t + (toMinor(l.cost) ?? 0) * (int(l.qty) || 0), 0))}</b></div>}
-    {err && <p className="err">{err}</p>}{warn.length > 0 && <div className="card warnbox">{warn.map((w, i) => <div key={i}>{w}</div>)}</div>}
-    <div className="actions"><button className="btn primary" disabled={!lines.length} onClick={() => void post()}>تسجيل الفاتورة</button></div>
-    <div className="card"><b>آخر فواتير الشراء</b><div className="tablewrap"><table className="cards"><thead><tr><th>رقم</th><th>المورد</th><th>رقم المورد</th><th className="n">الإجمالي</th><th>الوقت</th></tr></thead><tbody>{list.map(x => <tr key={x.piNo} onClick={() => void api<NonNullable<typeof open>>(`/api/buy/invoices/${x.piNo}`).then(setOpen, e => toast(arabic(e)))} style={{ cursor: 'pointer' }}><td className="code" data-l="رقم">{x.piNo}{x.status === 'void' && <span className="pill warn">ملغاة</span>}</td><td data-l="المورد">{x.supplier}</td><td data-l="رقم المورد" className="code">{x.supplierRef ?? '-'}</td><td className="n" data-l="الإجمالي">{money(x.totalMinor)}</td><td data-l="الوقت">{dmyHm(x.createdAt)}</td></tr>)}</tbody></table></div></div>
-    {open && <div className="card"><b>{open.piNo} - {money(open.totalMinor)}</b><ul>{open.lines.map((l, i) => <li key={i}>{l.itemName} - {l.lot} - {l.expiry} - {l.paidBase}{l.bonusBase ? ` + ${l.bonusBase} بونص` : ''} - تكلفة {money(l.costMinor)}</li>)}</ul><div className="actions">{open.status === 'posted' && can('purchase_invoice.void') && <button className="btn ghost" onClick={() => void ask('سبب إلغاء فاتورة الشراء').then(r => { if (r) void api(`/api/buy/invoices/${open.piNo}/void`, { body: { reason: r } }).then(() => { toast('اتلغت'); setOpen(null); void load(); }, e => toast(invErr(e))); })}>إلغاء الفاتورة</button>}<button className="btn ghost" onClick={() => setOpen(null)}>إغلاق</button></div></div>}
-  </div>);
-}
+/* the purchase invoice screen lives in purchase.tsx (Sprint 7.8) */
 
 /* ================= purchase orders ================= */
 export function OrdersScreen() {
