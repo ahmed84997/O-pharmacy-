@@ -25,11 +25,11 @@ export function ItemPicker({ onPick, autoFocus }: { onPick: (it: TillItem, unitN
   </div>);
 }
 /** Lines with unit and quantity; prices come from the server's FEFO preview so the screen never invents a price. */
-export function LinesTable({ lines, setLines, quotes }: { lines: Line[]; setLines: (l: Line[]) => void; quotes: Quote[] }) {
+export function LinesTable({ lines, setLines, quotes, sel, onSel }: { lines: Line[]; setLines: (l: Line[]) => void; quotes: Quote[]; sel?: number | null; onSel?: (i: number) => void }) {
   const upd = (i: number, p: Partial<Line>) => setLines(lines.map((l, k) => (k === i ? { ...l, ...p } : l)));
   return (<div className="tablewrap"><table className="lines"><thead><tr><th>الصنف</th><th>الوحدة</th><th className="n">الكمية</th><th className="n">القيمة</th><th></th></tr></thead><tbody>
     {lines.map((l, i) => { const q = quotes[i]; const short = q?.missingBase ? `ناقص ${qtyText(q.missingBase, l.item.units)}` : q?.error ? 'مش متاح' : q?.noPrice ? 'بدون سعر' : '';
-      return (<tr key={i}><td className="nm" data-l="الصنف">{l.item.nameAr}{q?.picks && q.picks.length > 1 && <small className="muted"><br />من {q.picks.length} تشغيلات (الأقرب انتهاءً الأول)</small>}{short && <><br /><span className="err">{short}</span></>}</td>
+      return (<tr key={i} className={sel === i ? 'sel' : ''} onClick={() => onSel?.(i)} onContextMenu={() => onSel?.(i)}><td className="nm" data-l="الصنف">{l.item.nameAr}{q?.picks && q.picks.length > 1 && <small className="muted"><br />من {q.picks.length} تشغيلات (الأقرب انتهاءً الأول)</small>}{short && <><br /><span className="err">{short}</span></>}</td>
         <td data-l="الوحدة">{l.item.units.length > 1 ? <select value={l.unitName} onChange={e => upd(i, { unitName: e.target.value })}>{l.item.units.map(u => <option key={u.name} value={u.name}>{u.name}</option>)}</select> : l.unitName}</td>
         <td className="n" data-l="الكمية"><input className="num" inputMode="numeric" value={l.qty} onChange={e => { const n = Number(e.target.value.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))); if (Number.isInteger(n) && n >= 0 && n < 100000) upd(i, { qty: n }); }} aria-label="الكمية" /></td>
         <td className="n" data-l="القيمة">{q?.amountMinor != null ? money(q.amountMinor) : '-'}</td>
@@ -90,10 +90,34 @@ export function ReportView({ r }: { r: Report }) {
 }
 
 /* ================= sale ================= */
+/* Sprint 7.10 (owner's list, 12 Nov 2026): a side bar and a right-click menu with save, hold for delivery, home-delivery orders,
+   add item, delete line, incomplete invoices (kept on this device while typing), close and the dose sticker; the customer by code. */
+type Cust = { id: string; code: string; name: string; phone: string | null; address: string | null; balanceMinor: number };
+type Deliv = { name: string; phone: string; address: string; fee: string };
+type Draft = { id: string; at: string; lines: Line[]; customer: Cust | null; deliv: Deliv | null };
+const DRAFTS = 'o.sale.drafts';
+const readDrafts = (): Draft[] => { try { return JSON.parse(localStorage.getItem(DRAFTS) ?? '[]') as Draft[]; } catch { return []; } };
+const writeDrafts = (d: Draft[]) => { try { localStorage.setItem(DRAFTS, JSON.stringify(d.slice(0, 10))); } catch { /* storage blocked: nothing kept */ } };
+const dropDraft = (id: string) => writeDrafts(readDrafts().filter(d => d.id !== id));
+
+/** Customer by code, name or phone; a new customer needs a name, a mobile and an address. */
+function CustomerPick({ value, onPick }: { value: Cust | null; onPick: (c: Cust | null) => void }) {
+  const { can, toast } = useApp(); const [q, setQ] = useState(''); const [list, setList] = useState<Cust[]>([]); const [add, setAdd] = useState<{ name: string; phone: string; address: string } | null>(null);
+  useEffect(() => { if (!q.trim()) { setList([]); return; } const t = window.setTimeout(() => { api<{ customers: Cust[] }>(`/api/customers?q=${encodeURIComponent(q)}`).then(r => setList(r.customers.slice(0, 8)), () => setList([])); }, 160); return () => window.clearTimeout(t); }, [q]);
+  const save = async () => { if (!add) return; if (!add.name.trim() || !add.phone.trim() || !add.address.trim()) return toast('اكتب الاسم والموبايل والعنوان'); try { const c = await api<Cust>('/api/customers', { body: add }); toast(`اتسجل العميل - كوده ${c.code}`); onPick(c); setAdd(null); } catch (e) { toast(arabic(e)); } };
+  if (value) return (<div className="cust-chip"><Icon n="users" /><b>{value.name}</b><span className="code">كود {value.code}</span>{value.phone && <span className="code">{value.phone}</span>}{value.balanceMinor > 0 && <span className="pill warn">عليه {money(value.balanceMinor)}</span>}<button className="btn ghost" onClick={() => onPick(null)}>غيّر</button></div>);
+  if (add) return (<div className="card formgrid"><label>اسم العميل<input value={add.name} onChange={e => setAdd({ ...add, name: e.target.value })} autoFocus /></label><label>الموبايل<input dir="ltr" value={add.phone} onChange={e => setAdd({ ...add, phone: e.target.value })} /></label><label style={{ gridColumn: 'span 2' }}>العنوان<input value={add.address} onChange={e => setAdd({ ...add, address: e.target.value })} /></label><div className="actions"><button className="btn primary" onClick={() => void save()}>حفظ العميل</button><button className="btn ghost" onClick={() => setAdd(null)}>إلغاء</button></div></div>);
+  return (<div className="searchbox cust-search"><input className="search" value={q} onChange={e => setQ(e.target.value)} placeholder="العميل: الكود أو الاسم أو الموبايل (اختياري)" onKeyDown={e => { if (e.key === 'Enter' && list[0]) { onPick(list[0]); setQ(''); } }} aria-label="العميل" />
+    {can('customer.create') && <button className="btn ghost" onClick={() => setAdd({ name: q && !/^\d+$/.test(q) ? q : '', phone: /^0\d{6,}$/.test(q) ? q : '', address: '' })}><Icon n="plus" />عميل جديد</button>}
+    {list.length > 0 && <div className="dd">{list.map(c => <button key={c.id} onClick={() => { onPick(c); setQ(''); setList([]); }}><span><b className="code">{c.code}</b> - {c.name}</span><span className="meta">{c.phone ?? ''}{c.address ? ` - ${c.address}` : ''}</span></button>)}</div>}</div>);
+}
+
 export function SaleScreen() {
   const { can, toast, go } = useApp(); const { info } = useSession(); const [lines, setLines] = useState<Line[]>(() => { try { const h = sessionStorage.getItem('o.resume'); if (h) { sessionStorage.removeItem('o.resume'); return JSON.parse(h).lines as Line[]; } } catch { /* none */ } return []; });
   const [fromHold] = useState<string | undefined>(() => { try { const h = sessionStorage.getItem('o.resumeId'); if (h) { sessionStorage.removeItem('o.resumeId'); return h; } } catch { /* none */ } return undefined; });
-  const [cash, setCash] = useState(''); const [card, setCard] = useState(''); const [cardRef, setCardRef] = useState(''); const [disc, setDisc] = useState(''); const [deliv, setDeliv] = useState<{ name: string; phone: string; address: string; fee: string } | null>(null);
+  const [cash, setCash] = useState(''); const [card, setCard] = useState(''); const [cardRef, setCardRef] = useState(''); const [disc, setDisc] = useState(''); const [deliv, setDeliv] = useState<Deliv | null>(null);
+  const [customer, setCustomer] = useState<Cust | null>(null); const [sel, setSel] = useState<number | null>(null); const [draftId, setDraftId] = useState(() => newKey());
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null); const [modal, setModal] = useState<null | 'home' | 'drafts' | 'dose'>(null); const [closeArmed, setCloseArmed] = useState(false);
   const [done, setDone] = useState<{ saleNo: string; totalMinor: number; changeMinor: number; codMinor: number; note?: string } | null>(null);
   const [ins, setIns] = useState<{ contractId: string; memberNo: string } | null>(null); const [contracts, setContracts] = useState<{ id: string; name: string; customerId: string | null; status: string }[]>([]); const [insQ, setInsQ] = useState<{ totalMinor: number; coveredMinor: number; copayMinor: number; needsApproval: boolean } | null>(null);
   useEffect(() => { if (ins && !contracts.length) api<{ contracts: typeof contracts }>('/api/contracts?status=active').then(r => setContracts(r.contracts.filter(c => c.customerId)), () => undefined); }, [ins, contracts.length]);
@@ -103,26 +127,56 @@ export function SaleScreen() {
   const quotes = useQuotes(lines); const total = useMemo(() => quotes.reduce((s, q) => s + (q.amountMinor ?? 0), 0), [quotes]);
   const discBp = disc ? Math.round(Number(disc.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))) * 100) : 0; const approxNet = total - Math.round(total * discBp / 10000) + (deliv ? toMinor(deliv.fee || '0') ?? 0 : 0);
   const blocked = quotes.some(q => q.error || q.missingBase || q.noPrice) || lines.some(l => l.qty <= 0);
-  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'F2') { e.preventDefault(); window.dispatchEvent(new Event('op-focus-search')); } if (e.key === 'F9') { e.preventDefault(); void sell(); } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); });
-  const reset = () => { setLines([]); setCash(''); setCard(''); setCardRef(''); setDisc(''); setDeliv(null); keyRef.current = newKey(); };
-  async function sell() {
+  /* incomplete invoices: what is on the screen is kept on this device while typing, so a crash or a closed window loses nothing */
+  useEffect(() => { const t = window.setTimeout(() => { const rest = readDrafts().filter(d => d.id !== draftId); if (lines.length) writeDrafts([{ id: draftId, at: new Date().toISOString(), lines, customer, deliv }, ...rest]); else writeDrafts(rest); }, 400); return () => window.clearTimeout(t); }, [lines, customer, deliv, draftId]);
+  const reset = () => { dropDraft(draftId); setDraftId(newKey()); setLines([]); setCash(''); setCard(''); setCardRef(''); setDisc(''); setDeliv(null); setCustomer(null); setSel(null); keyRef.current = newKey(); };
+  const pickCustomer = (c: Cust | null) => { setCustomer(c); if (c && deliv) setDeliv({ ...deliv, name: deliv.name || c.name, phone: deliv.phone || (c.phone ?? ''), address: deliv.address || (c.address ?? '') }); };
+  const toggleDeliv = (on: boolean) => setDeliv(on ? { name: customer?.name ?? '', phone: customer?.phone ?? '', address: customer?.address ?? '', fee: '' } : null);
+
+  async function sell(o: { delivery?: Deliv } = {}) {
     if (!info?.session || busy || !lines.length) return; if (blocked) return setErr('فيه سطر محتاج تعديل (كمية أو رصيد أو سعر).'); setErr('');
+    const dl = o.delivery ?? deliv;
     const cashM = cash ? toMinor(cash) : null; const cardM = card ? toMinor(card) : null; if ((cash && cashM === null) || (card && cardM === null)) return setErr('اكتب المبلغ صح'); if (cardM && !cardRef.trim()) return setErr('اكتب رقم عملية الفيزا');
-    const pays = [...(cardM ? [{ method: 'card', amountMinor: cardM, ref: cardRef.trim() }] : []), ...(cashM ? [{ method: 'cash', amountMinor: cashM }] : [])]; const paidNothing = !pays.length;
-    if (ins) { if (!ins.contractId || !ins.memberNo.trim()) return setErr('اختار جهة التأمين واكتب رقم العضو'); setBusy(true); try { const r = await api<{ sale: { saleNo: string; totalMinor: number; changeMinor: number; codMinor: number }; claim: { claimNo: string; status: string }; coveredMinor: number; copayMinor: number }>('/api/pos/insurance-sale', { body: { key: keyRef.current, sessionId: info.session.id, contractId: ins.contractId, memberNo: ins.memberNo.trim(), lines: lines.map(l => ({ itemId: l.item.id, qty: l.qty, unitName: l.unitName })), cashMinor: cashM ?? undefined } }); setDone({ ...r.sale, note: `مطالبة ${r.claim.claimNo}${r.claim.status === 'pending_approval' ? ' (محتاجة موافقة)' : ''}: على الجهة ${money(r.coveredMinor)} - العضو دفع ${money(r.copayMinor)}` }); reset(); setIns(null); } catch (e) { setErr(posErr(e)); } finally { setBusy(false); } return; }
-    setBusy(true); try { const r = await api<{ saleNo: string; totalMinor: number; changeMinor: number; codMinor: number }>('/api/pos/sales', { body: { key: keyRef.current, sessionId: info.session.id, lines: lines.map(l => ({ itemId: l.item.id, qty: l.qty, unitName: l.unitName })), ...(paidNothing && !deliv ? { cashMinor: approxNet } : { payments: pays }), discountBp: discBp || undefined, fromHold, delivery: deliv ? { name: deliv.name, phone: deliv.phone, address: deliv.address, feeMinor: toMinor(deliv.fee || '0') ?? 0 } : undefined } });
-      setDone(r); reset(); } catch (e) { setErr(posErr(e)); } finally { setBusy(false); } }
+    const pays = o.delivery ? [] : [...(cardM ? [{ method: 'card', amountMinor: cardM, ref: cardRef.trim() }] : []), ...(cashM ? [{ method: 'cash', amountMinor: cashM }] : [])]; const paidNothing = !pays.length;
+    if (ins && !o.delivery) { if (!ins.contractId || !ins.memberNo.trim()) return setErr('اختار جهة التأمين واكتب رقم العضو'); setBusy(true); try { const r = await api<{ sale: { saleNo: string; totalMinor: number; changeMinor: number; codMinor: number }; claim: { claimNo: string; status: string }; coveredMinor: number; copayMinor: number }>('/api/pos/insurance-sale', { body: { key: keyRef.current, sessionId: info.session.id, contractId: ins.contractId, memberNo: ins.memberNo.trim(), lines: lines.map(l => ({ itemId: l.item.id, qty: l.qty, unitName: l.unitName })), cashMinor: cashM ?? undefined } }); setDone({ ...r.sale, note: `مطالبة ${r.claim.claimNo}${r.claim.status === 'pending_approval' ? ' (محتاجة موافقة)' : ''}: على الجهة ${money(r.coveredMinor)} - العضو دفع ${money(r.copayMinor)}` }); reset(); setIns(null); } catch (e) { setErr(posErr(e)); } finally { setBusy(false); } return; }
+    if (dl && (!dl.name.trim() || !dl.phone.trim() || !dl.address.trim())) return setErr('التوصيل محتاج اسم العميل والموبايل والعنوان');
+    setBusy(true); try { const r = await api<{ saleNo: string; totalMinor: number; changeMinor: number; codMinor: number }>('/api/pos/sales', { body: { key: keyRef.current, sessionId: info.session.id, lines: lines.map(l => ({ itemId: l.item.id, qty: l.qty, unitName: l.unitName })), ...(paidNothing && !dl ? { cashMinor: approxNet } : { payments: pays }), discountBp: discBp || undefined, fromHold, customerId: customer?.id, delivery: dl ? { name: dl.name, phone: dl.phone, address: dl.address, feeMinor: toMinor(dl.fee || '0') ?? 0 } : undefined } });
+      setDone({ ...r, note: o.delivery ? 'الأوردر اتعلّق للتوصيل: هتلاقيه في "الفواتير المنزلي" لحد ما الدليفري يرجع بالفلوس' : undefined }); reset(); } catch (e) { setErr(posErr(e)); } finally { setBusy(false); } }
+  /* hold for delivery: the order leaves with the driver now (stock out) and is saved for good when the money comes back (الفواتير المنزلي) */
+  const holdDelivery = () => { if (!lines.length) return toast('الفاتورة فاضية'); if (!can('home_delivery.create')) return toast('التوصيل مش ضمن صلاحياتك'); const d = deliv ?? { name: customer?.name ?? '', phone: customer?.phone ?? '', address: customer?.address ?? '', fee: '' }; if (!deliv) setDeliv(d); if (!d.name.trim() || !d.phone.trim() || !d.address.trim()) return setErr('اختار العميل أو اكتب اسمه وموبايله وعنوانه في التوصيل'); void sell({ delivery: d }); };
   const hold = async () => { if (!info?.session || !lines.length) return; try { const r = await api<{ holdNo: string }>('/api/pos/holds', { body: { key: newKey(), sessionId: info.session.id, lines: lines.map(l => ({ itemId: l.item.id, qty: l.qty, unitName: l.unitName })) } }); toast(`الفاتورة اتعلّقت (${r.holdNo})`); reset(); } catch (e) { setErr(posErr(e)); } };
+  const delLine = () => { if (sel === null || !lines[sel]) return toast('اختار السطر الأول'); setLines(lines.filter((_, k) => k !== sel)); setSel(null); };
+  const closeInvoice = () => { if (!lines.length) { reset(); return; } if (!closeArmed) { setCloseArmed(true); toast('اضغط "إغلاق" تاني عشان تقفل الفاتورة من غير حفظ'); window.setTimeout(() => setCloseArmed(false), 3500); return; } setCloseArmed(false); reset(); toast('اتقفلت الفاتورة'); };
+  const actions: { id: string; label: string; icon: string; key?: string; run: () => void; show?: boolean }[] = [
+    { id: 'save', label: 'حفظ', icon: 'save', key: 'F9', run: () => void sell() },
+    { id: 'hold-d', label: 'تعليق (دليفري)', icon: 'truck', key: 'F4', run: holdDelivery, show: can('home_delivery.create') },
+    { id: 'home', label: 'الفواتير المنزلي', icon: 'store', key: 'F6', run: () => setModal('home'), show: can('home_delivery.create') },
+    { id: 'add', label: 'إضافة صنف', icon: 'search', key: 'F2', run: () => window.dispatchEvent(new Event('op-focus-search')) },
+    { id: 'del', label: 'حذف سطر', icon: 'trash', key: 'Del', run: delLine },
+    { id: 'drafts', label: 'فواتير غير مكتملة', icon: 'history', key: 'F7', run: () => setModal('drafts') },
+    { id: 'close', label: 'إغلاق', icon: 'x', key: 'Esc', run: closeInvoice },
+    { id: 'dose', label: 'طباعة الاستخدام', icon: 'print', key: 'F8', run: () => (lines.length ? setModal('dose') : toast('ضيف الأصناف الأول')) },
+    { id: 'hold', label: 'تعليق مؤقت', icon: 'pause', run: () => void hold(), show: can('sale.hold') },
+  ];
+  const visible = actions.filter(a => a.show !== false);
+  useEffect(() => { const k = (e: KeyboardEvent) => {
+    if (modal) { if (e.key === 'Escape') setModal(null); return; } const inField = (e.target as HTMLElement)?.closest?.('input, select, textarea');
+    if (e.key === 'F2') { e.preventDefault(); window.dispatchEvent(new Event('op-focus-search')); } else if (e.key === 'F9') { e.preventDefault(); void sell(); } else if (e.key === 'F4') { e.preventDefault(); holdDelivery(); }
+    else if (e.key === 'F6') { e.preventDefault(); setModal('home'); } else if (e.key === 'F7') { e.preventDefault(); setModal('drafts'); } else if (e.key === 'F8') { e.preventDefault(); if (lines.length) setModal('dose'); }
+    else if (e.key === 'Delete' && !inField) { e.preventDefault(); delLine(); } else if (e.key === 'Escape') { if (menu) setMenu(null); else if (!inField) closeInvoice(); }
+  }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); });
   if (!info) return <p>بيحمّل...</p>;
   if (!info.session) return (<div className="soonbox"><h2><Icon n="cart" />فاتورة بيع</h2><div className="card"><p>لازم تفتح جلسة كاشير على الجهاز ده الأول.</p><button className="btn primary" onClick={() => go('session')}>افتح الجلسة</button></div></div>);
-  return (<div style={{ display: 'grid', gap: 12 }}>
-    <h2><Icon n="cart" />فاتورة بيع <small className="muted">- {info.session.sessionNo}</small>{fromHold && <span className="pill">من فاتورة معلّقة</span>}</h2>
+  return (<div className="pi" onContextMenu={e => { if ((e.target as HTMLElement).closest('input, select, textarea')) return; e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); }} onClick={() => menu && setMenu(null)}>
+    <div className="pi-main">
+    <h2 style={{ margin: 0 }}><Icon n="cart" />فاتورة بيع <small className="muted">- {info.session.sessionNo}</small>{fromHold && <span className="pill">من فاتورة معلّقة</span>}</h2>
     {done && <div className="card warnbox" style={{ display: 'grid', gap: 8 }}><b>اتسجلت الفاتورة {done.saleNo} - الإجمالي {money(done.totalMinor)}{done.changeMinor > 0 && <> - الباقي للعميل <span style={{ fontSize: '1.3em' }}>{money(done.changeMinor)}</span></>}{done.codMinor > 0 && <> - يتحصّل عند التوصيل {money(done.codMinor)}</>}</b>{done.note && <span>{done.note}</span>}<ReceiptBox saleNo={done.saleNo} autoPrint /><button className="btn ghost" onClick={() => setDone(null)}>فاتورة جديدة</button></div>}
     {!done && <>
+      <CustomerPick value={customer} onPick={pickCustomer} />
       <ItemPicker autoFocus onPick={(it, u) => setLines(addLine(lines, it, u))} />
-      <LinesTable lines={lines} setLines={setLines} quotes={quotes} />
+      <LinesTable lines={lines} setLines={setLines} quotes={quotes} sel={sel} onSel={setSel} />
       <div className="card" style={{ display: 'grid', gap: 10 }}>
-        <div className="totals"><span>الإجمالي قبل الخصم</span><b>{money(total)}</b></div>
+        <div className="totals"><div className="net"><small>الصافي المطلوب</small><strong>{money(approxNet)}</strong></div><div className="mini"><span>الإجمالي قبل الخصم: <b>{money(total)}</b></span><span>عدد الأصناف: <b>{lines.length}</b></span></div></div>
         <div className="formgrid">
           {can('sale.discount') && <label>خصم %<input className="num" inputMode="decimal" value={disc} onChange={e => setDisc(e.target.value)} placeholder="0" /></label>}
           <label>كاش (جنيه)<input className="num" inputMode="decimal" value={cash} onChange={e => setCash(e.target.value)} placeholder={egp(approxNet)} onKeyDown={e => { if (e.key === 'Enter') void sell(); }} /></label>
@@ -132,14 +186,74 @@ export function SaleScreen() {
         {cash && toMinor(cash) !== null && (toMinor(cash)! + (toMinor(card || '0') ?? 0)) > approxNet && <div>الباقي تقريبًا: <b>{money(toMinor(cash)! + (toMinor(card || '0') ?? 0) - approxNet)}</b></div>}
         {can('insurance_claim.submit') && can('sale.credit.create') && <label className="chk"><input type="checkbox" checked={!!ins} onChange={e => setIns(e.target.checked ? { contractId: '', memberNo: '' } : null)} /> تأمين / تعاقد (العضو يدفع نسبته والباقي على الجهة)</label>}
         {ins && <div className="formgrid"><label>الجهة<select value={ins.contractId} onChange={e => setIns({ ...ins, contractId: e.target.value })}><option value="">اختار</option>{contracts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>رقم العضو<input dir="ltr" value={ins.memberNo} onChange={e => setIns({ ...ins, memberNo: e.target.value })} /></label>{insQ && <div>على الجهة <b>{money(insQ.coveredMinor)}</b> - العضو يدفع <b>{money(insQ.copayMinor)}</b>{insQ.needsApproval && <span className="pill warn">محتاجة موافقة</span>}</div>}</div>}
-        {can('home_delivery.create') && !ins && <label className="chk"><input type="checkbox" checked={!!deliv} onChange={e => setDeliv(e.target.checked ? { name: '', phone: '', address: '', fee: '' } : null)} /> توصيل للبيت (اللي مش مدفوع يتحصّل عند التوصيل)</label>}
-        {deliv && <div className="formgrid"><label>اسم العميل<input value={deliv.name} onChange={e => setDeliv({ ...deliv, name: e.target.value })} /></label><label>التليفون<input dir="ltr" value={deliv.phone} onChange={e => setDeliv({ ...deliv, phone: e.target.value })} /></label><label>العنوان<input value={deliv.address} onChange={e => setDeliv({ ...deliv, address: e.target.value })} /></label><label>مصاريف التوصيل<input className="num" value={deliv.fee} onChange={e => setDeliv({ ...deliv, fee: e.target.value })} /></label></div>}
+        {can('home_delivery.create') && !ins && <label className="chk"><input type="checkbox" checked={!!deliv} onChange={e => toggleDeliv(e.target.checked)} /> توصيل للبيت (اللي مش مدفوع يتحصّل عند التوصيل)</label>}
+        {deliv && <div className="formgrid"><label>اسم العميل<input value={deliv.name} onChange={e => setDeliv({ ...deliv, name: e.target.value })} /></label><label>الموبايل<input dir="ltr" value={deliv.phone} onChange={e => setDeliv({ ...deliv, phone: e.target.value })} /></label><label>العنوان<input value={deliv.address} onChange={e => setDeliv({ ...deliv, address: e.target.value })} /></label><label>مصاريف التوصيل<input className="num" value={deliv.fee} onChange={e => setDeliv({ ...deliv, fee: e.target.value })} /></label></div>}
         {err && <p className="err">{err}</p>}
-        <div className="actions"><button className="btn primary" disabled={busy || !lines.length} onClick={() => void sell()}>تسجيل الفاتورة (F9)</button>{can('sale.hold') && <button className="btn" disabled={!lines.length} onClick={() => void hold()}><Icon n="pause" />تعليق</button>}<button className="btn ghost" onClick={reset}>مسح</button></div>
-        <p className="hint">الكاش فاضي = العميل دفع المبلغ بالظبط. الأسعار من التشغيلة الأقرب انتهاءً، وكل تشغيلة بسعرها.</p>
+        <p className="hint" style={{ margin: 0 }}>الكاش فاضي = العميل دفع المبلغ بالظبط. الأسعار من التشغيلة الأقرب انتهاءً. كليك يمين في أي حتة يطلع نفس أوامر الشريط.</p>
       </div>
     </>}
+    </div>
+    <nav className="pi-side" aria-label="أوامر الفاتورة">
+      {visible.map(a => <button key={a.id} className={`pi-act${a.id === 'save' ? ' main' : ''}${a.id === 'close' && closeArmed ? ' armed' : ''}`} disabled={busy && a.id === 'save'} onClick={a.run}><Icon n={a.icon} /><span>{a.label}</span>{a.key && <kbd>{a.key}</kbd>}</button>)}
+    </nav>
+    {menu && <div className="ctx" style={{ top: Math.min(menu.y, window.innerHeight - 380), left: Math.min(menu.x, window.innerWidth - 230) }} role="menu">{visible.map(a => <button key={a.id} role="menuitem" onClick={() => { setMenu(null); a.run(); }}><Icon n={a.icon} />{a.label}{a.key && <kbd>{a.key}</kbd>}</button>)}</div>}
+    {modal === 'home' && <HomeOrders close={() => setModal(null)} />}
+    {modal === 'drafts' && <Drafts current={draftId} close={() => setModal(null)} open={d => { setLines(d.lines); setCustomer(d.customer); setDeliv(d.deliv); setDraftId(d.id); setSel(null); setModal(null); setDone(null); }} />}
+    {modal === 'dose' && <DosePrint lines={lines} patient={customer?.name ?? deliv?.name ?? ''} close={() => setModal(null)} />}
   </div>);
+}
+
+/** الفواتير المنزلي: delivery orders out with the driver; collecting the money saves them for good. */
+function HomeOrders({ close }: { close: () => void }) {
+  const { toast, ask } = useApp(); const [list, setList] = useState<{ saleNo: string; status: string; name: string; phone: string; address: string; codMinor: number; agent: string | null; createdAt: string }[]>([]);
+  const load = useCallback(() => { Promise.all(['pending', 'out_for_delivery'].map(st => api<{ deliveries: typeof list }>(`/api/pos/deliveries?status=${st}`).then(r => r.deliveries, () => []))).then(([a, b]) => setList([...(a ?? []), ...(b ?? [])])); }, []);
+  useEffect(() => { load(); }, [load]);
+  const act = (p: Promise<unknown>, ok: string) => p.then(() => { toast(ok); load(); }, e => toast(posErr(e)));
+  return (<><div className="drawer-bg" onClick={close} /><div className="card pi-modal" role="dialog" aria-label="الفواتير المنزلي">
+    <div className="pi-modal-head"><b>الفواتير المنزلي ({list.length})</b><button className="qbtn" onClick={close} aria-label="إغلاق"><Icon n="x" /></button></div>
+    <div className="tablewrap" style={{ maxHeight: '60vh', overflow: 'auto' }}><table><thead><tr><th>الفاتورة</th><th>العميل</th><th>العنوان</th><th>الحالة</th><th className="n">يتحصّل</th><th></th></tr></thead><tbody>
+      {list.map(d => <tr key={d.saleNo}><td className="code">{d.saleNo}</td><td>{d.name}<br /><small className="code">{d.phone}</small></td><td>{d.address}</td><td>{d.status === 'pending' ? <span className="pill s-pending_purchase">مستني</span> : <span className="pill s-out_for_delivery">مع {d.agent ?? 'المندوب'}</span>}</td><td className="n"><b>{money(d.codMinor)}</b></td>
+        <td><div className="actions">
+          {d.status === 'pending' && <button className="btn" onClick={() => void ask('اسم المندوب').then(a => { if (a) void act(api(`/api/pos/deliveries/${d.saleNo}/status`, { body: { status: 'out_for_delivery', agent: a } }), 'خرج مع المندوب'); })}>خرج</button>}
+          {d.status === 'out_for_delivery' && <button className="btn primary" onClick={() => void ask(`المبلغ اللي رجع بيه الدليفري (المطلوب ${egp(d.codMinor)})`).then(v => { const m = v ? toMinor(v) : null; if (m !== null) act(api(`/api/pos/deliveries/${d.saleNo}/collect`, { body: { cashMinor: m } }), 'اتحفظت ودخلت الفلوس الدرج'); })}>الفلوس وصلت - احفظ</button>}
+          <button className="btn ghost" onClick={() => void ask('سبب إلغاء التوصيل (الأصناف هترجع المخزون)').then(r => { if (r) void act(api(`/api/pos/deliveries/${d.saleNo}/status`, { body: { status: 'failed', reason: r } }), 'اتلغى والمخزون رجع'); })}>فشل</button>
+        </div></td></tr>)}
+      {!list.length && <tr><td colSpan={6} className="muted">مفيش أوردرات توصيل مستنية</td></tr>}</tbody></table></div>
+    <p className="hint" style={{ margin: 0 }}>الأوردر بيطلع من المخزون وقت ما بيخرج مع الدليفري، والفلوس بتدخل الدرج لما تدوس "الفلوس وصلت".</p>
+  </div></>);
+}
+
+/** Invoices left on this device before they were saved (a crash, a closed window, a switch to another screen). */
+function Drafts({ current, close, open }: { current: string; close: () => void; open: (d: Draft) => void }) {
+  const [list, setList] = useState<Draft[]>(() => readDrafts().filter(d => d.id !== current));
+  return (<><div className="drawer-bg" onClick={close} /><div className="card pi-modal" role="dialog" aria-label="فواتير غير مكتملة">
+    <div className="pi-modal-head"><b>فواتير غير مكتملة ({list.length})</b><button className="qbtn" onClick={close} aria-label="إغلاق"><Icon n="x" /></button></div>
+    <div className="tablewrap"><table><thead><tr><th>الوقت</th><th>العميل</th><th>الأصناف</th><th></th></tr></thead><tbody>
+      {list.map(d => <tr key={d.id}><td>{dmyHm(d.at)}</td><td>{d.customer?.name ?? d.deliv?.name ?? '-'}</td><td>{d.lines.map(l => `${l.item.nameAr} ×${l.qty}`).join(' - ')}</td><td><div className="actions"><button className="btn primary" onClick={() => open(d)}>رجّعها</button><button className="btn ghost" onClick={() => { dropDraft(d.id); setList(list.filter(x => x.id !== d.id)); }}>شيلها</button></div></td></tr>)}
+      {!list.length && <tr><td colSpan={4} className="muted">مفيش فواتير ناقصة على الجهاز ده</td></tr>}</tbody></table></div>
+    <p className="hint" style={{ margin: 0 }}>دي محفوظة على الجهاز ده بس لحد ما تتسجل أو تتقفل.</p>
+  </div></>);
+}
+
+const DOSE_CHIPS = ['قرص', 'كبسولة', 'معلقة صغيرة', 'مرة يوميًا', 'مرتين يوميًا', '3 مرات يوميًا', 'كل 8 ساعات', 'كل 12 ساعة', 'قبل الأكل', 'بعد الأكل', 'قبل النوم', 'لمدة 5 أيام', 'لمدة أسبوع', 'عند اللزوم'];
+/** طباعة الاستخدام: a sticker per item with how to take it (label printer), or a slip when there is none. */
+function DosePrint({ lines, patient, close }: { lines: Line[]; patient: string; close: () => void }) {
+  const { toast } = useApp(); const [doses, setDoses] = useState<string[]>(() => lines.map(() => '')); const [who, setWho] = useState(patient); const [slip, setSlip] = useState(false); const [focus, setFocus] = useState(0);
+  const chip = (c: string) => setDoses(ds => ds.map((d, i) => (i === focus ? (d ? `${d} ${c}` : c) : d)));
+  useEffect(() => { if (!slip) return; const t = window.setTimeout(() => { window.print(); setSlip(false); }, 60); return () => window.clearTimeout(t); }, [slip]);
+  const print = async () => {
+    const ls = lines.map((l, i) => ({ itemId: l.item.id, dose: doses[i]!.trim() })).filter(l => l.dose); if (!ls.length) return toast('اكتب الجرعة لصنف واحد على الأقل');
+    try { const r = await api<{ printer: string; results: { ok: boolean }[] }>('/api/print/dose', { body: { patient: who || undefined, lines: ls } }); const bad = r.results.filter(x => !x.ok).length; toast(bad ? `${bad} استيكر مطبعش` : `اتبعتت ${ls.length} استيكر لـ ${r.printer}`); close(); }
+    catch (e) { if ((e as { code?: string }).code === 'state') { toast('مفيش طابعة استيكر: هتطلع ورقة'); setSlip(true); } else toast(arabic(e)); }
+  };
+  return (<><div className="drawer-bg" onClick={close} /><div className="card pi-modal" role="dialog" aria-label="طباعة الاستخدام">
+    <div className="pi-modal-head"><b>طباعة الاستخدام</b><button className="qbtn" onClick={close} aria-label="إغلاق"><Icon n="x" /></button></div>
+    <label className="f" style={{ display: 'grid', gap: 6, maxWidth: 360 }}>اسم المريض (اختياري)<input value={who} onChange={e => setWho(e.target.value)} /></label>
+    <div style={{ display: 'grid', gap: 8 }}>{lines.map((l, i) => <label key={i} className="dose-row"><b>{l.item.nameAr}</b><input value={doses[i]} onFocus={() => setFocus(i)} onChange={e => setDoses(doses.map((d, k) => (k === i ? e.target.value : d)))} placeholder="مثلًا: قرص كل 8 ساعات بعد الأكل" /></label>)}</div>
+    <div className="dose-chips">{DOSE_CHIPS.map(c => <button key={c} className="btn ghost" onClick={() => chip(c)}>{c}</button>)}</div>
+    <div className="actions"><button className="btn primary" onClick={() => void print()}><Icon n="print" />اطبع</button><button className="btn ghost" onClick={close}>إلغاء</button></div>
+    {slip && <div className="print-area" dir="rtl"><h1>طريقة الاستخدام</h1>{who && <p>المريض: {who}</p>}<table><tbody>{lines.map((l, i) => doses[i]!.trim() ? <tr key={i}><td><b>{l.item.nameAr}</b></td><td>{doses[i]}</td></tr> : null)}</tbody></table></div>}
+  </div></>);
 }
 
 /* ================= held bills ================= */

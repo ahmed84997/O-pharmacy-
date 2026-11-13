@@ -92,3 +92,16 @@ describe('item card (Sprint 7.9)', () => {
     const { receiptPng } = await import('./printing'); expect(receiptPng(s.app, { id: 'x', roles: ['O'], branchIds: 'all' }, sale.saleNo).length).toBeGreaterThan(1000);
   });
 });
+
+describe('sale helpers (Sprint 7.10)', () => {
+  it('adds a customer with an address and a plain-number code, finds the code first, and prints dose stickers on the label printer', async () => {
+    const s = await prep(); const O = { token: s.owner };
+    const c = (await s.call('POST', '/api/customers', { token: s.mgr, body: { name: 'منى حسن', phone: '01234567890', address: 'مدينة نصر - عمارة 5' } })).body; expect(c.code).toMatch(/^\d+$/); expect(c.address).toBe('مدينة نصر - عمارة 5');
+    expect((await s.call('GET', `/api/customers?q=${c.code}`, O)).body.customers[0].id).toBe(c.id);
+    const it = (await s.call('GET', '/api/inv/search?q=' + encodeURIComponent('اموكسيسيلين'), O)).body.items[0];
+    expect((await s.call('POST', '/api/print/dose', { token: s.cs, body: { lines: [{ itemId: it.id, dose: 'قرص كل 8 ساعات' }] } })).body.error).toBe('state');
+    await s.call('POST', '/api/settings/printers', { ...O, body: { printers: [{ name: 'استيكر', kind: 'label', transport: { type: 'preview' } }] } });
+    const r = (await s.call('POST', '/api/print/dose', { token: s.cs, body: { patient: 'منى', lines: [{ itemId: it.id, dose: 'قرص كل 8 ساعات بعد الأكل' }, { itemId: it.id, dose: '' }] } })).body;
+    expect(r.results).toMatchObject([{ ok: true }, { ok: false, error: 'no-dose' }]);
+  });
+});

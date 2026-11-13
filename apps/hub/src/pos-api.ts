@@ -89,6 +89,15 @@ export function posRoutes(s: FastifyInstance, app: App): void {
   s.post('/api/print/session-report', async (q) => { const b = body(q); return printService(app).printSessionReport(me(q), { sessionId: String(b.sessionId ?? ''), printer: String(b.printer ?? ''), reason: b.reason ? String(b.reason) : undefined }); });
   s.post('/api/print/drawer', async (q) => { const b = body(q); return printService(app).openDrawer(me(q), { printer: String(b.printer ?? ''), reason: String(b.reason ?? '') }); });
   s.get('/api/print/preview/:no', async (q, rep) => { const w = (q.query as B).w === '58' ? 58 : 80; rep.header('Content-Type', 'image/png'); return rep.send(receiptPng(app, forOwnSale(me(q), param(q, 'no')), param(q, 'no'), w)); });
+  /* the dose sticker (طباعة الاستخدام, D38): one sticker per item on the label printer: the item name and how to take it */
+  s.post('/api/print/dose', async (q) => {
+    const p = me(q); const b = body(q); const ls = Array.isArray(b.lines) ? (b.lines as B[]) : []; if (!ls.length || ls.length > 60) throw new AccessError('invalid', '1 to 60 lines');
+    const printer = b.printer ? String(b.printer) : printers(app).find(x => x.kind === 'label')?.name; if (!printer) throw new AccessError('state', 'no label printer is set up');
+    const svc = printService(app); const who = b.patient ? String(b.patient).slice(0, 40) : ''; const out: { itemId: string; ok: boolean; error?: string }[] = [];
+    for (const l of ls) { const it = app.items.get(String(l.itemId ?? '')); const dose = String(l.dose ?? '').trim().slice(0, 80); if (!it || !dose) { out.push({ itemId: String(l.itemId ?? ''), ok: false, error: !it ? 'not-found' : 'no-dose' }); continue; }
+      const r = await svc.printLabel(p, { printer, name: `${it.nameAr}\n${dose}${who ? `\n${who}` : ''}`, copies: Math.min(20, Math.max(1, Number(l.copies) || 1)) }); out.push({ itemId: it.id, ok: r.ok, error: r.error }); }
+    return { printer, results: out };
+  });
   s.get('/api/print/jobs', async (q) => ({ jobs: printService(app).jobs(me(q), { limit: 100 }) }));
 }
 

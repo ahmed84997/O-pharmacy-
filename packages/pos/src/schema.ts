@@ -123,4 +123,6 @@ CREATE TABLE day_closings (
 );
 CREATE TRIGGER day_closings_no_update BEFORE UPDATE ON day_closings BEGIN SELECT RAISE(ABORT, 'a closed day cannot change: corrections go forward'); END;
 CREATE TRIGGER day_closings_no_delete BEFORE DELETE ON day_closings BEGIN SELECT RAISE(ABORT, 'a closed day is never deleted'); END;` },
+  { id: 'pos_0006_customer_address', sql: `
+ALTER TABLE customers ADD COLUMN address TEXT;` },
 ];
