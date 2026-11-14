@@ -6,7 +6,7 @@ import { can, type Person } from '@o-pharmacy/core';
 import { expiryText, type LabelSpec, type ReceiptLine } from '@o-pharmacy/print';
 import type { App } from './compose';
 import { AccessError } from './access';
-import { labelPng, labelStyle, mergeReceiptStyle, pharmacyInfo, printers, printService, receiptSamplePng, receiptStyle, saveLabelStyle } from './printing';
+import { A4_LAYOUTS, labelPng, labelStyle, mergeReceiptStyle, pharmacyInfo, printers, printService, receiptSamplePng, receiptStyle, saveLabelStyle } from './printing';
 
 type B = Record<string, unknown>;
 const body = (q: FastifyRequest) => (q.body ?? {}) as B;
@@ -16,14 +16,16 @@ const money = (minor: number) => `${(minor / 100).toFixed(2)} ج`;
 const shortExpiry = (iso: string | null | undefined) => { const t = expiryText(iso); return t ? `${t.slice(0, 2)}/${t.slice(5)}` : ''; };
 
 let winCache: { at: number; list: string[] } | null = null;
-/** The printers installed in Windows on the PC that runs the Hub (for the settings drop-downs). Empty elsewhere. */
-function windowsPrinters(): Promise<string[]> {
+/* Get-Printer where it exists, the WMI list otherwise; UTF-8 so Arabic printer names come through. */
+const LIST_PS = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; try { Get-Printer -ErrorAction Stop | Select-Object -ExpandProperty Name } catch { Get-CimInstance Win32_Printer | Select-Object -ExpandProperty Name }";
+/** The printers installed in Windows on the PC that runs the Hub (for the settings drop-downs). Empty elsewhere. An empty answer is not kept, so the next look tries again. */
+function windowsPrinters(fresh = false): Promise<string[]> {
   if (process.platform !== 'win32') return Promise.resolve([]);
-  if (winCache && Date.now() - winCache.at < 30_000) return Promise.resolve(winCache.list);
+  if (!fresh && winCache && Date.now() - winCache.at < 30_000) return Promise.resolve(winCache.list);
   return new Promise(ok => {
-    const p = spawn('powershell', ['-NoProfile', '-Command', 'Get-Printer | Select-Object -ExpandProperty Name'], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }); let out = '';
-    p.stdout.on('data', d => { out += String(d); }); p.once('error', () => ok([])); const t = setTimeout(() => { p.kill(); ok([]); }, 8000);
-    p.once('close', () => { clearTimeout(t); const list = out.split(/\r?\n/).map(x => x.trim()).filter(Boolean).slice(0, 50); winCache = { at: Date.now(), list }; ok(list); });
+    const p = spawn('powershell', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', LIST_PS], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }); let out = '';
+    p.stdout.setEncoding('utf8'); p.stdout.on('data', d => { out += String(d); }); p.once('error', () => ok([])); const t = setTimeout(() => { p.kill(); ok([]); }, 20_000);
+    p.once('close', () => { clearTimeout(t); const list = [...new Set(out.replace(/^\uFEFF/, '').split(/\r?\n/).map(x => x.trim()).filter(Boolean))].slice(0, 60); winCache = list.length ? { at: Date.now(), list } : null; ok(list); });
   });
 }
 
@@ -52,20 +54,20 @@ export function printRoutes(s: FastifyInstance, app: App): void {
   const labelPrinter = (b: B) => { const name = b.printer ? String(b.printer) : printers(app).find(x => x.kind === 'label')?.name; if (!name) throw new AccessError('state', 'no label printer is set up'); return name; };
 
   s.get('/api/print/label-item/:id', async (q) => { need(me(q), 'item.view'); return { item: labelItem(param(q, 'id')) }; });
-  s.get('/api/settings/label-style', async (q) => { need(me(q), 'item.view'); const ph = pharmacyInfo(app); return { style: labelStyle(app), pharmacy: { name: ph.name, phone: ph.phones?.[0] ?? '' }, printers: printers(app).filter(p => p.kind === 'label') }; });
+  s.get('/api/settings/label-style', async (q) => { need(me(q), 'item.view'); const ph = pharmacyInfo(app); return { style: labelStyle(app), layouts: A4_LAYOUTS, pharmacy: { name: ph.name, phone: ph.phones?.[0] ?? '' }, printers: printers(app).filter(p => p.kind === 'label') }; });
   s.post('/api/settings/label-style', async (q) => { const p = me(q); need(p, 'settings.branch'); return { style: saveLabelStyle(app, p, body(q)) }; });
   s.get('/api/settings/receipt-style', async (q) => { need(me(q), 'settings.branch'); return { style: receiptStyle(app), printers: printers(app).filter(p => p.kind === 'receipt') }; });
   s.post('/api/settings/receipt-style', async (q) => { const p = me(q); need(p, 'settings.branch'); const st = mergeReceiptStyle(receiptStyle(app), body(q)); app.access.setSetting('receipt.style', JSON.stringify(st), p.id); app.hub.audit(p.id, 'settings.receipt_style', 'settings', 'receipt.style', st as Record<string, unknown>); return { style: st }; });
   /* previews: pictures only, nothing is printed or logged */
   s.post('/api/print/receipt-sample', async (q, rep) => { need(me(q), 'settings.branch'); const b = body(q); const st = mergeReceiptStyle(receiptStyle(app), (b.style ?? {}) as B); rep.header('Content-Type', 'image/png'); return rep.send(receiptSamplePng(app, st, b.width === 58 ? 58 : 80)); });
   s.post('/api/print/label-preview', async (q, rep) => {
-    const p = me(q); need(p, 'item.view'); const b = body(q); const mm: [number, number] = Array.isArray(b.mm) ? [Math.min(110, Math.max(20, Number(b.mm[0]) || 40)), Math.min(150, Math.max(10, Number(b.mm[1]) || 30))] : printers(app).find(x => x.kind === 'label')?.labelMm ?? [40, 30];
+    const p = me(q); need(p, 'item.view'); const b = body(q); const mm: [number, number] = Array.isArray(b.mm) ? [Math.min(110, Math.max(15, Number(b.mm[0]) || 40)), Math.min(150, Math.max(8, Number(b.mm[1]) || 30))] : printers(app).find(x => x.kind === 'label')?.labelMm ?? [40, 30]; const dpmm = Math.min(16, Math.max(8, Math.round(Number(b.dpmm) || 8))); const sh0 = (b.show ?? null) as B | null;
     const ph = pharmacyInfo(app); const st = { ...labelStyle(app), ...((b.style ?? {}) as object) } as ReturnType<typeof labelStyle>;
-    const spec: LabelSpec = b.itemId ? priceSpec(labelItem(String(b.itemId)), b, { st, pharmacy: st.showPharmacy, phone: st.showPhone, price: st.showPrice, expiry: st.showExpiry })
+    const spec: LabelSpec = b.itemId ? priceSpec(labelItem(String(b.itemId)), b, sh0 ? show(b) : { st, pharmacy: st.showPharmacy, phone: st.showPhone, price: st.showPrice, expiry: st.showExpiry })
       : { kind: 'price', name: 'اسم الصنف بيكون مكتوب هنا', barcode: '6221031234569', code: '26824', pharmacy: st.showPharmacy ? st.pharmacyName || ph.name : null, phone: st.showPhone ? st.phone || ph.phones?.[0] || null : null, price: st.showPrice ? '4.00 ج' : null, expiry: st.showExpiry ? '10/27' : null };
-    rep.header('Content-Type', 'image/png'); return rep.send(labelPng(spec, mm));
+    rep.header('Content-Type', 'image/png'); return rep.send(labelPng(spec, mm, dpmm));
   });
-  s.get('/api/print/windows-printers', async (q) => { need(me(q), 'settings.branch'); return { printers: await windowsPrinters(), platform: process.platform }; });
+  s.get('/api/print/windows-printers', async (q) => { need(me(q), 'settings.branch'); return { printers: await windowsPrinters((q.query as B).fresh === '1'), platform: process.platform }; });
 
   /* price stickers for many items, each with its quantity (طباعة باركود); the purchase invoice uses it too (only items whose card prints a label) */
   s.post('/api/print/labels', async (q) => {

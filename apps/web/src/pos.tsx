@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, arabic } from './api';
 import { dmyHm, egp, Icon, money, newKey, toMinor, useApp } from './ui';
 import { useFrame } from './frames';
+import { SaleA4, usePrintWhen, type A4Pharmacy, type A4Sale, type A4Style } from './a4';
 
 /* ================= shared ================= */
 export type TillItem = { id: string; code: string; nameAr: string; kind: string; units: { name: string; factor: number }[]; sellableBase: number; priceMinor: number | null; priceUnit: string | null; nearestExpiry: string | null };
@@ -49,23 +50,26 @@ export const addLine = (lines: Line[], it: TillItem, unitName?: string): Line[] 
 type Session = { id: string; sessionNo: string; terminal: string } | null;
 export function useSession() { const [s, setS] = useState<{ session: Session; terminal: string; today: string } | null>(null); const load = useCallback(() => api<{ session: Session; terminal: string; today: string }>('/api/pos/session').then(setS), []); useEffect(() => { void load(); }, [load]); return { info: s, reload: load }; }
 type Printer = { name: string; kind: string; paperWidthMm?: number; type: string };
-export type PrintStyle = { askBeforePrint?: boolean; minPrintMinor?: number; copies?: number };
+export type PrintStyle = { askBeforePrint?: boolean; minPrintMinor?: number; copies?: number; paper?: 'receipt' | 'a4' };
 export function usePrintSetup() { const [v, setV] = useState<{ printers: Printer[]; style: PrintStyle }>({ printers: [], style: {} }); useEffect(() => { api<{ printers: Printer[]; style: PrintStyle }>('/api/print/printers').then(r => setV({ printers: r.printers.filter(x => x.kind === 'receipt'), style: r.style ?? {} }), () => undefined); }, []); return v; }
 export function usePrinters() { return usePrintSetup().printers; }
 
 /** The receipt as it prints, plus print and reprint (a reprint needs a reason). */
 /* Sprint 7.12: the receipt settings decide the automatic print: below the minimum value nothing prints by itself, and "ask before each print" asks here first. */
 export function ReceiptBox({ saleNo, autoPrint, totalMinor }: { saleNo: string; autoPrint?: boolean; totalMinor?: number }) {
-  const { toast, ask } = useApp(); const { printers, style } = usePrintSetup(); const [askNow, setAskNow] = useState(false); const [src, setSrc] = useState(''); const [printed, setPrinted] = useState(0); const done = useRef('');
+  const { toast, ask } = useApp(); const { printers: recPrinters, style } = usePrintSetup(); const [askNow, setAskNow] = useState(false); const [a4, setA4] = useState<{ sale: A4Sale; pharmacy: A4Pharmacy; style: A4Style; seller: string; customer: string | null; copyNo: number } | null>(null);
+  /* نوع الطباعة A4: one target, the Windows print dialog */ const printers = style.paper === 'a4' ? [{ name: 'A4', kind: 'receipt', type: 'a4' }] : recPrinters;
+  usePrintWhen(!!a4, () => setA4(null), 200); const [src, setSrc] = useState(''); const [printed, setPrinted] = useState(0); const done = useRef('');
   useEffect(() => { let url = ''; const h: Record<string, string> = {}; try { const d = localStorage.getItem('o.device'); const t = sessionStorage.getItem('o.token'); if (d) h['x-device'] = d; if (t) h.authorization = `Bearer ${t}`; } catch { /* storage blocked */ }
     fetch(`/api/print/preview/${encodeURIComponent(saleNo)}`, { headers: h }).then(r => (r.ok ? r.blob() : null)).then(b => { if (b) { url = URL.createObjectURL(b); setSrc(url); } }).catch(() => undefined); return () => { if (url) URL.revokeObjectURL(url); }; }, [saleNo]);
-  const print = useCallback(async (printer: string, reason?: string) => { try { const r = await api<{ ok: boolean; error?: string; copyNo?: number; drawer?: boolean }>('/api/print/receipt', { body: { saleNo, printer, reason } }); if (r.ok) { setPrinted(n => n + 1); toast(r.copyNo && r.copyNo > 1 ? `اتطبعت نسخة رقم ${r.copyNo}` : `اتطبع الوصل${r.drawer ? ' واتفتح الدرج' : ''}`); } else toast(`الطباعة فشلت: ${r.error ?? ''}`); } catch (e) { toast(arabic(e)); } }, [saleNo, toast]);
+  const print = useCallback(async (printer: string, reason?: string) => { if (printer === 'A4') { try { const r = await api<{ copyNo: number; sale: A4Sale; pharmacy: A4Pharmacy; style: A4Style; seller: string; customer: string | null }>('/api/print/receipt-a4', { body: { saleNo, reason } }); setPrinted(n => n + 1); setA4(r); } catch (e) { toast(arabic(e)); } return; } try { const r = await api<{ ok: boolean; error?: string; copyNo?: number; drawer?: boolean }>('/api/print/receipt', { body: { saleNo, printer, reason } }); if (r.ok) { setPrinted(n => n + 1); toast(r.copyNo && r.copyNo > 1 ? `اتطبعت نسخة رقم ${r.copyNo}` : `اتطبع الوصل${r.drawer ? ' واتفتح الدرج' : ''}`); } else toast(`الطباعة فشلت: ${r.error ?? ''}`); } catch (e) { toast(arabic(e)); } }, [saleNo, toast]);
   useEffect(() => { if (autoPrint && printers[0] && done.current !== saleNo) { done.current = saleNo; if (totalMinor !== undefined && style.minPrintMinor && totalMinor < style.minPrintMinor) return; if (style.askBeforePrint) setAskNow(true); else void print(printers[0].name); } }, [autoPrint, printers, saleNo, print, style, totalMinor]);
   return (<div className="card" style={{ display: 'grid', gap: 8, justifyItems: 'center' }}>
     {src ? <img src={src} alt={`وصل ${saleNo}`} style={{ width: 'min(300px, 100%)', background: '#fff', border: '1px solid var(--line)' }} /> : <span className="muted">بيجهّز الوصل...</span>}
     {askNow && printers[0] && printed === 0 && <div className="actions"><b>تطبع الفاتورة؟</b><button className="btn primary" autoFocus onClick={() => { setAskNow(false); void print(printers[0]!.name); }}><Icon n="print" />اطبع</button><button className="btn ghost" onClick={() => setAskNow(false)}>لا</button></div>}
     <div className="actions">{printers.length === 0 && <span className="hint">مفيش طابعة متعرّفة: الإعدادات ← الطابعات.</span>}
       {printers.map(p => <button key={p.name} className="btn" onClick={() => { if (printed === 0) void print(p.name); else void ask('سبب طباعة نسخة تانية').then(r => { if (r) void print(p.name, r); }); }}><Icon n="print" />{printed === 0 ? `اطبع (${p.name})` : `نسخة تانية (${p.name})`}</button>)}</div>
+    {a4 && <div className="print-area a4-print"><SaleA4 sale={a4.sale} pharmacy={a4.pharmacy} style={a4.style} seller={a4.seller} customer={a4.customer} copyNo={a4.copyNo} /></div>}
   </div>);
 }
 

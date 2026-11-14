@@ -5,7 +5,7 @@ export type Digits = 'western' | 'arabic';
 /** Everything a pharmacy can change about its receipt (becomes settings later; nothing is hardcoded here). */
 export interface ReceiptStyle { header?: string; footer?: string; returnPolicy?: string; digits?: Digits; showExpiry?: boolean; showBatch?: boolean; showUnitPrice?: boolean; reserveQr?: boolean; timeZone?: string;
   /** Sprint 7.12 ("إعدادات طباعة فاتورة البيع"): "table" = bordered table like eStock (default), "compact" = the earlier lines */
-  template?: 'table' | 'compact'; printCustomer?: boolean; printSeller?: boolean; copies?: number; askBeforePrint?: boolean; minPrintMinor?: number; sideMarginMm?: number }
+  template?: 'table' | 'compact'; /** نوع الطباعة: a receipt on the receipt printer, or an A4 invoice through the Windows print dialog */ paper?: 'receipt' | 'a4'; printCustomer?: boolean; printSeller?: boolean; copies?: number; askBeforePrint?: boolean; minPrintMinor?: number; sideMarginMm?: number }
 export interface PharmacyInfo { name: string; branch?: string; phones?: string[]; address?: string; taxRegNo?: string; commercialRegNo?: string }
 export interface ReceiptContext { pharmacy: PharmacyInfo; style?: ReceiptStyle; cashierName: string; customerName?: string | null; /** 'delivery' is the copy that goes with the order: only it carries the customer's phone and address. */ copy?: 'counter' | 'delivery'; /** 1 = the original; more = a reprint, marked as a copy. */ copyNo?: number; /** The ETA e-receipt link to print as a QR (the Hub's ETA queue provides it). */ qrText?: string | null }
 
