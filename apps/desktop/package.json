@@ -1,7 +1,7 @@
 {
   "name": "o-pharmacy-desktop",
   "private": true,
-  "version": "0.7.11",
+  "version": "0.7.12",
   "description": "O Pharmacy desktop window (Electron, ADR-0002) over the local Hub",
   "author": "O Pharmacy",
   "main": "main.cjs",
@@ -21,6 +21,8 @@
       "main.cjs",
       "preload.cjs",
       "splash.html",
+      "print-raw.ps1",
+      "setup.html",
       "package.json",
       "tray.png",
       "build/icon.png"

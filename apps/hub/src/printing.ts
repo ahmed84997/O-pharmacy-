@@ -4,9 +4,10 @@ import type { GrayImage } from '@o-pharmacy/print';
 import type { Person } from '@o-pharmacy/core';
 import type { App } from './compose';
 import { AccessError } from './access';
+import { PrintRelay, RelayTransport } from './print-relay';
 
-/** A printer as the pharmacy sets it up (settings screen). `windows` = a printer installed in Windows (raw ESC/POS through the spooler), `tcp` = a network printer (port 9100), `preview` = no printer: the receipt is only shown on screen (test server). */
-export interface PrinterConfig { name: string; kind: 'receipt' | 'label'; paperWidthMm?: 58 | 80; drawerOnCash?: boolean; transport: { type: 'windows'; printer: string } | { type: 'tcp'; host: string; port?: number } | { type: 'file'; path: string } | { type: 'preview' } }
+/** A printer as the pharmacy sets it up (settings screen). `windows` = a printer installed in Windows (raw ESC/POS through the spooler), `tcp` = a network printer (port 9100), `preview` = no printer: the receipt is only shown on screen (test server). `device` = the Windows printer of the PC that asks for the print (each cashier on its own printer, chosen in its desktop app, D39). */
+export interface PrinterConfig { name: string; kind: 'receipt' | 'label'; paperWidthMm?: 58 | 80; drawerOnCash?: boolean; transport: { type: 'windows'; printer: string } | { type: 'tcp'; host: string; port?: number } | { type: 'file'; path: string } | { type: 'preview' } | { type: 'device' } }
 const raster = new SkiaRasterizer();
 
 export function printers(app: App): PrinterConfig[] { try { return JSON.parse(app.access.setting('printers') ?? '[]') as PrinterConfig[]; } catch { return []; } }
@@ -18,21 +19,25 @@ export function savePrinters(app: App, actor: Person, list: unknown): PrinterCon
     if (p.kind !== 'receipt' && p.kind !== 'label') throw new AccessError('invalid', 'printer kind must be receipt or label'); const t = p.transport as PrinterConfig['transport'];
     if (t?.type === 'windows' && String(t.printer ?? '').trim()) return { name, kind: p.kind, paperWidthMm: p.paperWidthMm === 58 ? 58 : 80, drawerOnCash: p.drawerOnCash !== false, transport: { type: 'windows', printer: String(t.printer).trim() } };
     if (t?.type === 'tcp' && /^[A-Za-z0-9.-]+$/.test(String(t.host ?? ''))) return { name, kind: p.kind, paperWidthMm: p.paperWidthMm === 58 ? 58 : 80, drawerOnCash: p.drawerOnCash !== false, transport: { type: 'tcp', host: String(t.host), port: Number(t.port) || 9100 } };
+    if (t?.type === 'device') return { name, kind: p.kind, paperWidthMm: p.paperWidthMm === 58 ? 58 : 80, drawerOnCash: p.drawerOnCash !== false, transport: { type: 'device' } };
     if (t?.type === 'preview') return { name, kind: p.kind, paperWidthMm: p.paperWidthMm === 58 ? 58 : 80, drawerOnCash: false, transport: { type: 'preview' } };
     throw new AccessError('invalid', 'choose how the printer is connected');
   });
   app.access.setSetting('printers', JSON.stringify(out), actor.id); app.hub.audit(actor.id, 'settings.printers', 'settings', 'printers', { count: out.length }); return out;
 }
-function setup(c: PrinterConfig): PrinterSetup {
-  const t = c.transport; const transport = t.type === 'windows' ? new WindowsSpoolerTransport(c.name, t.printer) : t.type === 'tcp' ? new TcpTransport(c.name, t.host, t.port ?? 9100) : t.type === 'file' ? new FileTransport(c.name, t.path) : new MemoryTransport(c.name);
+const relays = new WeakMap<App, PrintRelay>();
+/** The one relay of this Hub: device printers wait on it. */
+export function relayOf(app: App): PrintRelay { let r = relays.get(app); if (!r) { r = new PrintRelay(); relays.set(app, r); } return r; }
+function setup(app: App, c: PrinterConfig, device?: string): PrinterSetup {
+  const t = c.transport; const transport = t.type === 'device' ? new RelayTransport(c.name, relayOf(app), device, c.kind) : t.type === 'windows' ? new WindowsSpoolerTransport(c.name, t.printer) : t.type === 'tcp' ? new TcpTransport(c.name, t.host, t.port ?? 9100) : t.type === 'file' ? new FileTransport(c.name, t.path) : new MemoryTransport(c.name);
   return { transport, kind: c.kind, paperWidthMm: c.paperWidthMm ?? 80, drawerOnCash: c.drawerOnCash ?? true };
 }
 function env(app: App): PrintEnv {
   const db = app.hub.db; const hidden = db.prepare('SELECT hide_on_receipt h FROM items WHERE id=?'); return { hideName: id => Number(hidden.get(id)?.h ?? 0) === 1, pharmacy: { name: app.access.setting('pharmacy.name') ?? 'O Pharmacy', branch: app.hub.branchId, phones: (app.access.setting('pharmacy.phones') ?? '').split(',').map(s => s.trim()).filter(Boolean) }, style: receiptStyle(app),
     nameOf: id => String(db.prepare('SELECT display_name FROM people WHERE id=?').get(id)?.display_name ?? id), customerNameOf: id => (db.prepare('SELECT name FROM customers WHERE id=?').get(id)?.name as string) ?? null };
 }
-/** A print service with the printers as configured right now. */
-export function printService(app: App): PrintService { const map: Record<string, PrinterSetup> = {}; for (const c of printers(app)) map[c.name] = setup(c); return new PrintService(app.hub, app.sales, raster, map, () => env(app), app.closing); }
+/** A print service with the printers as configured right now. `device` = the PC asking (for "device" printers). */
+export function printService(app: App, device?: string): PrintService { const map: Record<string, PrinterSetup> = {}; for (const c of printers(app)) map[c.name] = setup(app, c, device); return new PrintService(app.hub, app.sales, raster, map, () => env(app), app.closing); }
 
 /** The receipt as a picture (PNG), exactly as it would print: for the screen and the test server. Nothing is logged: it is not a print. */
 export function receiptPng(app: App, actor: Person, saleNo: string, widthMm: 58 | 80 = 80): Buffer {

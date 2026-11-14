@@ -118,7 +118,7 @@ export function invRoutes(s: FastifyInstance, app: App): void {
   s.post('/api/print/labels', async (q) => {
     const p = me(q); const b = body(q); const lines = Array.isArray(b.lines) ? (b.lines as B[]) : []; if (!lines.length || lines.length > 100) throw new AccessError('invalid', '1 to 100 lines');
     const printer = str(b.printer) ?? printers(app).find(x => x.kind === 'label')?.name; if (!printer) throw new AccessError('state', 'no label printer is set up');
-    const svc = printService(app); const out: { itemId: string; ok: boolean; error?: string }[] = [];
+    const svc = printService(app, q.deviceId); const out: { itemId: string; ok: boolean; error?: string }[] = [];
     for (const l of lines) { const it = app.items.get(String(l.itemId ?? '')); if (!it) { out.push({ itemId: String(l.itemId ?? ''), ok: false, error: 'not-found' }); continue; } if (!it.card.printLabel) { out.push({ itemId: it.id, ok: false, error: 'no-label' }); continue; }
       const r = await svc.printLabel(p, { printer, name: it.nameAr, priceMinor: num(l.priceMinor), barcode: (firstBarcode.get(it.id)?.barcode as string) ?? null, copies: Math.min(200, Math.max(1, Number(l.copies) || 1)) }); out.push({ itemId: it.id, ok: r.ok, error: r.error }); }
     return { printer, results: out };

@@ -12,8 +12,9 @@ import { opsRoutes } from './ops-api';
 import { accRoutes } from './acc-api';
 import { glanceRoutes } from './glance-api';
 import { SystemService } from './system';
+import { relayOf } from './printing';
 
-export const VERSION = '0.7.11';
+export const VERSION = '0.7.12';
 export interface ServerOptions { webDir?: string; staffSecret?: string; logger?: boolean; system?: SystemService }
 const STATUS: Record<string, number> = { separation: 403, file: 400, 'duplicate-barcode': 409, 'duplicate-code': 409, 'same-status': 409, insufficient: 409, underpaid: 400, 'no-price': 409, session: 409, 'discount-limit': 403, 'credit-limit': 409, 'day-closed': 409, blocked: 409, 'window-closed': 409, forbidden: 403, 'device-pending': 403, 'device-revoked': 403, 'not-found': 404, 'device-unknown': 401, unauthenticated: 401, 'bad-credentials': 401, locked: 423, inactive: 403, invalid: 400, state: 409, duplicate: 409, 'price-rule': 400, 'reason-required': 400 };
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff' };
@@ -42,6 +43,11 @@ export function buildServer(app: App, o: ServerOptions = {}): FastifyInstance {
   f.get('/api/devices/me', async (q) => { const h = String(q.headers['x-device'] ?? ''); const i = h.indexOf('.'); if (i < 1) throw new AccessError('device-unknown', 'unknown device'); const d = app.access.device(h.slice(0, i), h.slice(i + 1)); return { id: d.id, name: d.name, status: d.status }; });
   f.post('/api/setup', async (q) => { const d = deviceOf(q); const b = (q.body ?? {}) as B; const p = app.access.setup(d, { pharmacyName: String(b.pharmacyName ?? ''), displayName: String(b.displayName ?? ''), username: String(b.username ?? ''), secret: String(b.secret ?? '') }); const s = app.access.login(d, p.username, String(b.secret)); return { token: s.token }; });
   f.post('/api/login', async (q) => { const d = deviceOf(q); const b = (q.body ?? {}) as B; const s = app.access.login(d, String(b.username ?? ''), String(b.secret ?? '')); return { token: s.token, mustChangeSecret: s.mustChangeSecret }; });
+
+  // ---------- the desktop app's print agent (D39): an approved device, no session (it prints while nobody is logged in too) ----------
+  const agentDevice = (q: FastifyRequest): string => { const h = String(q.headers['x-device'] ?? ''); const i = h.indexOf('.'); if (i < 1) throw new AccessError('device-unknown', 'unknown device'); const d = app.access.device(h.slice(0, i), h.slice(i + 1)); if (d.status !== 'approved') throw new AccessError('device-pending', 'device not approved'); return d.id; };
+  f.get('/api/agent/next', async (q, rep) => { const d = agentDevice(q); const wait = Math.min(Math.max(Number((q.query as B).wait ?? 25) || 25, 1), 30) * 1000; const j = await relayOf(app).next(d, wait); if (!j) return rep.status(204).send(); return j; });
+  f.post('/api/agent/result', async (q) => { const d = agentDevice(q); const b = (q.body ?? {}) as B; return { ok: relayOf(app).result(d, String(b.id ?? ''), b.ok === true, b.error === undefined ? undefined : String(b.error)) }; });
 
   // ---------- signed in ----------
   f.register(async (s) => {

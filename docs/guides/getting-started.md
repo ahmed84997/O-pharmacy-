@@ -9,6 +9,7 @@ This is the first complete test build of O Pharmacy: the whole program on one Wi
 4. O Pharmacy opens by itself. A desktop icon is created. The program also starts with Windows (it can be switched off, section 6).
 
 ## 2. First run
+The app first asks how this PC works: **Primary** (the first PC: it holds the pharmacy's data) or **Cashier** (joins the primary, see section 4). On the primary:
 1. Enter the pharmacy name and the owner's account (your name, a username in English, a password). This PC becomes the first approved device.
 2. On the home page press **Load test data** (only offered on an empty database in test builds): about 185 items with batches, expiry dates and state prices, 6 suppliers, 25 customers, a cash box and a bank, an insurance contract (member `M-1001`), and pay profiles.
 3. **Administration > Users and permissions**: add the staff you want to try with (cashier, pharmacist, storekeeper, manager, accountant). Each gets a temporary password and must change it at first login. Extra permissions (for example returns for a cashier) are chosen per person.
@@ -29,10 +30,11 @@ This is the first complete test build of O Pharmacy: the whole program on one Wi
 The `Alt` key shows the key tips on the Ribbon; `Ctrl+F1` folds it.
 
 ## 4. Other devices in the pharmacy
-1. Right-click the O Pharmacy icon next to the clock > **Allow devices on the network**.
-2. **About** shows the address to open on the other device (for example `http://192.168.1.20:4870`).
-3. The new device waits for approval: approve it in **Administration > Devices**. Nobody can log in on a device that is not approved.
-4. The PC with O Pharmacy must stay on. Closing the window keeps O Pharmacy running in the background; **Exit** (tray menu) stops it for everyone.
+1. On the primary: right-click the O Pharmacy icon next to the clock > **Allow devices on the network**. Windows asks once to allow the program through the firewall: press **Yes**.
+2. On a cashier PC: install O Pharmacy and choose **Cashier** at the first run. It searches the network and lists the primary; press **Connect**. If it is not found, type the address shown in the primary's **About** (for example `192.168.1.20`). A PC that was already set up as a primary by mistake: tray menu > **This PC becomes a cashier** (its data is kept, not deleted). A phone or another browser can still open the address directly.
+3. Each cashier prints on its own printers: in **Settings > Printers** add a printer of type **Each device's printer**, then on every cashier PC choose its receipt and label printers under **This PC's printers** (this works in the app, not in a browser).
+4. The new device waits for approval: approve it in **Administration > Devices**. Nobody can log in on a device that is not approved.
+5. The primary must stay on. Closing the window keeps O Pharmacy running in the background; **Exit** (tray menu) stops it for everyone.
 
 ## 5. Backups
 - A full copy of the database is made every day by itself; the last 14 days are kept in the data folder (tray menu > **Open data folder**). **About > Backup now** makes one at any time.
