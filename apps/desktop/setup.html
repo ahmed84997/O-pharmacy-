@@ -1,0 +1,59 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>O Pharmacy</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<style>
+:root{color-scheme:light;--bg:#F3F7F9;--card:#fff;--fg:#14232B;--mut:#5B6E78;--line:#D5E0E5;--teal:#1F7A93;--teal2:#E3F1F5;--org:#F85A0A;--err:#B42318}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--fg);font-family:"Segoe UI",Tahoma,sans-serif;font-size:15px}
+.box{width:min(640px,94vw);display:grid;gap:16px}.head{display:flex;align-items:center;gap:12px;justify-content:center;direction:ltr;font-size:28px;font-weight:700;color:var(--teal)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;display:grid;gap:12px}h2{margin:0;font-size:19px}p{margin:0;color:var(--mut);line-height:1.6}
+.choice{display:grid;grid-template-columns:1fr 1fr;gap:12px}.opt{border:2px solid var(--line);border-radius:10px;padding:16px;background:var(--card);text-align:right;cursor:pointer;font:inherit;color:inherit;display:grid;gap:6px}
+.opt:hover,.opt:focus-visible{border-color:var(--teal);outline:none}.opt b{font-size:17px;color:var(--teal)}
+button.btn{font:inherit;border:1px solid var(--teal);background:var(--card);color:var(--teal);border-radius:6px;padding:8px 16px;cursor:pointer}button.btn.primary{background:var(--teal);color:#fff}button.btn:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}input{font:inherit;padding:8px 10px;border:2px solid var(--line);border-radius:4px;min-width:0;flex:1;direction:ltr;text-align:left}input:focus{border-color:var(--teal);outline:none}
+.list{display:grid;gap:8px}.hub{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--teal2)}
+.hub span{direction:ltr;color:var(--mut)}.err{color:var(--err)}.warn{background:#FFF4E5;border:1px solid #F5C27A;border-radius:8px;padding:10px 12px;color:#7A4B00;line-height:1.6}[hidden]{display:none!important}
+</style></head>
+<body><div class="box">
+  <div class="head"><svg width="44" height="44" aria-hidden="true" viewBox="0 0 70 70"><circle cx="35" cy="35" r="35" fill="#F85A0A"/><g transform="rotate(-40 35 35)"><rect x="17" y="27" width="36" height="16" rx="8" fill="#fff"/><rect x="35" y="27" width="18" height="16" rx="8" fill="#FFD9C4"/><rect x="35" y="27" width="6" height="16" fill="#FFD9C4"/></g></svg>Pharmacy</div>
+
+  <section class="card" id="pick">
+    <h2>الجهاز ده هيشتغل إزاي؟</h2>
+    <div class="choice">
+      <button class="opt" id="asPrimary"><b>الجهاز الأساسي</b><span>عليه بيانات الصيدلية كلها. الأجهزة التانية بتتوصّل بيه. (أول جهاز في الصيدلية)</span></button>
+      <button class="opt" id="asCashier"><b>كاشير</b><span>بيتوصّل بالجهاز الأساسي ويشتغل على نفس البيانات، ويطبع على طابعاته هو.</span></button>
+    </div>
+    <p id="dataNote" hidden class="warn">الجهاز ده عليه بيانات صيدلية قبل كده. لو اخترت كاشير البيانات دي هتفضل محفوظة زي ما هي ومش هتتمسح، بس البرنامج هيفتح على الجهاز الأساسي.</p>
+  </section>
+
+  <section class="card" id="find" hidden>
+    <h2>توصيل بالجهاز الأساسي</h2>
+    <p id="why" class="err" hidden>مش لاقي الجهاز الأساسي على العنوان المحفوظ. اتأكد إن الجهاز الأساسي مفتوح وإن «السماح لأجهزة الشبكة» متعلّم عليه، وبعدين دوّر تاني.</p>
+    <div class="row"><button class="btn primary" id="scan">دوّر في الشبكة</button><span id="scanMsg"></span></div>
+    <div class="list" id="found"></div>
+    <p>أو اكتب عنوانه (بيظهر في الجهاز الأساسي: عن البرنامج ← عناوين الشبكة)</p>
+    <div class="row"><input id="addr" placeholder="192.168.1.10" aria-label="عنوان الجهاز الأساسي"><button class="btn" id="try">اتصل</button></div>
+    <p id="tryMsg"></p>
+    <div class="row"><button class="btn" id="back">رجوع</button><button class="btn" id="retry" hidden>جرّب العنوان المحفوظ تاني</button></div>
+  </section>
+</div>
+<script>
+const S = window.oSetup; const $ = id => document.getElementById(id);
+let info = { mode: null, hubUrl: null, hasData: false };
+const show = id => { for (const x of ['pick', 'find']) $(x).hidden = x !== id; };
+const hubRow = h => { const d = document.createElement('div'); d.className = 'hub'; const t = document.createElement('div'); const b = document.createElement('b'); b.textContent = h.pharmacyName || 'صيدلية'; const s = document.createElement('span'); s.textContent = ' ' + h.url.replace(/^http:\/\//, ''); t.append(b, s); const go = document.createElement('button'); go.className = 'btn primary'; go.textContent = 'اتوصّل'; go.onclick = () => choose('cashier', h.url); d.append(t, go); return d; };
+async function choose(mode, hubUrl) { document.querySelectorAll('button').forEach(b => b.disabled = true); const r = await S.choose({ mode, hubUrl }); if (r && r.error) { document.querySelectorAll('button').forEach(b => b.disabled = false); $('tryMsg').textContent = r.error; $('tryMsg').className = 'err'; } }
+$('asPrimary').onclick = () => choose('primary');
+$('asCashier').onclick = () => { show('find'); scan(); };
+$('back').onclick = () => show('pick');
+$('retry').onclick = async () => { $('tryMsg').textContent = 'بيجرّب...'; $('tryMsg').className = ''; const r = await S.probe(info.hubUrl); if (r.ok) choose('cashier', r.url); else { $('tryMsg').textContent = 'لسه مش لاقيه.'; $('tryMsg').className = 'err'; } };
+async function scan() { $('scan').disabled = true; $('scanMsg').textContent = 'بيدوّر...'; $('found').replaceChildren(); const list = await S.scan(); $('scan').disabled = false; $('scanMsg').textContent = list.length ? '' : 'ملقيتش جهاز أساسي في الشبكة. اكتب العنوان تحت.'; for (const h of list) $('found').append(hubRow(h)); }
+$('scan').onclick = scan;
+$('try').onclick = async () => { const a = $('addr').value.trim(); if (!a) return; $('tryMsg').textContent = 'بيجرّب...'; $('tryMsg').className = ''; const r = await S.probe(a); if (r.ok) choose('cashier', r.url); else { $('tryMsg').textContent = 'مفيش جهاز أساسي على العنوان ده.'; $('tryMsg').className = 'err'; } };
+$('addr').addEventListener('keydown', e => { if (e.key === 'Enter') $('try').click(); });
+(async () => {
+  info = await S.info(); $('dataNote').hidden = !info.hasData;
+  const q = new URLSearchParams(location.search).get('state');
+  if (q === 'unreachable' && info.hubUrl) { show('find'); $('why').hidden = false; $('retry').hidden = false; $('addr').value = info.hubUrl.replace(/^http:\/\//, '').replace(/:4870$/, ''); }
+  else if (q === 'cashier') { show('find'); scan(); }
+  else show('pick');
+})();
+</script></body></html>

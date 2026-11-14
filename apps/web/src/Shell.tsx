@@ -34,6 +34,8 @@ export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () =
   useEffect(() => { refreshGlance(); }, [screen, refreshGlance]);
   useEffect(() => { const t = window.setInterval(refreshGlance, 120000); return () => window.clearInterval(t); }, [refreshGlance]);
 
+  /* D39: in the desktop app, start its print agent with this device's key (prints for "device" printers come back to this PC) */
+  useEffect(() => { try { const d = localStorage.getItem('o.device'); const od = (window as unknown as { oDesktop?: { agent?: (k: string) => Promise<boolean> } }).oDesktop; if (d && od?.agent) void od.agent(d); } catch { /* storage blocked: no agent */ } }, []);
   useEffect(() => { const ping = () => { api<{ readOnly?: boolean }>('/api/state').then(r => { setOnline(true); setReadOnly(!!r.readOnly); }, () => setOnline(false)); }; ping(); const t = window.setInterval(ping, 30000); return () => window.clearInterval(t); }, []);
   useEffect(() => {
     let altAlone = false;
