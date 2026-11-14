@@ -25,23 +25,37 @@ type Desk = { localPrinters?: () => Promise<{ printers: string[]; receipt: strin
 const desk = (): Desk | undefined => (window as unknown as { oDesktop?: Desk }).oDesktop;
 
 /** All printers as saved, to edit one of them and save the list back. */
-function usePrinterList() {
-  const [list, setList] = useState<PrinterCfg[] | null>(null); const [win, setWin] = useState<string[]>([]);
-  const load = useCallback(() => { api<{ printers: PrinterCfg[] }>('/api/settings/printers').then(r => setList(r.printers), () => setList([])); api<{ printers: string[] }>('/api/print/windows-printers').then(r => setWin(r.printers), () => setWin([])); }, []);
-  useEffect(load, [load]);
+export function usePrinterList() {
+  const [list, setList] = useState<PrinterCfg[] | null>(null); const win = useWindowsPrinters();
+  useEffect(() => { api<{ printers: PrinterCfg[] }>('/api/settings/printers').then(r => setList(r.printers), () => setList([])); }, []);
   const save = async (next: PrinterCfg[]) => { await api('/api/settings/printers', { body: { printers: next } }); setList(next); };
   return { list, setList, win, save };
 }
+/** The printers installed in Windows on the main PC (from the Hub); on the main PC's own desktop app, its Windows list is added, so the list is never empty there. */
+export function useWindowsPrinters() {
+  const [names, setNames] = useState<string[]>([]); const [loading, setLoading] = useState(true);
+  const load = useCallback((fresh = false) => {
+    setLoading(true);
+    const hub = api<{ printers: string[] }>(`/api/print/windows-printers${fresh ? '?fresh=1' : ''}`).then(r => r.printers, () => [] as string[]);
+    const d = desk(); const local = d?.localPrinters ? d.localPrinters().then(v => (v && v.mode !== 'cashier' ? v.printers : []), () => [] as string[]) : Promise.resolve([] as string[]);
+    void Promise.all([hub, local]).then(([a, b]) => { setNames([...new Set([...a, ...b])]); setLoading(false); });
+  }, []);
+  useEffect(() => load(), [load]);
+  return { names, loading, refresh: () => load(true) };
+}
 
 /** How one printer is reached: each PC's own printer (the desktop app), a printer installed on the main PC (picked from Windows), a network printer, or the screen only. */
-function Connection({ p, set, win, kind }: { p: PrinterCfg; set: (p: PrinterCfg) => void; win: string[]; kind: 'receipt' | 'label' }) {
+export function Connection({ p, set, win, kind }: { p: PrinterCfg; set: (p: PrinterCfg) => void; win: ReturnType<typeof useWindowsPrinters>; kind: 'receipt' | 'label' }) {
   const [local, setLocal] = useState<{ printers: string[]; receipt: string; label: string } | null>(null);
   useEffect(() => { const d = desk(); if (p.transport.type === 'device' && d?.localPrinters) void d.localPrinters().then(v => setLocal(v), () => setLocal(null)); }, [p.transport.type]);
   const t = p.transport;
   return (<>
-    <label>طريقة التوصيل<select value={t.type} onChange={e => set({ ...p, transport: e.target.value === 'windows' ? { type: 'windows', printer: win[0] ?? '' } : e.target.value === 'tcp' ? { type: 'tcp', host: '', port: 9100 } : e.target.value === 'device' ? { type: 'device' } : { type: 'preview' } })}>
+    <label>طريقة التوصيل<select value={t.type} onChange={e => set({ ...p, transport: e.target.value === 'windows' ? { type: 'windows', printer: win.names[0] ?? '' } : e.target.value === 'tcp' ? { type: 'tcp', host: '', port: 9100 } : e.target.value === 'device' ? { type: 'device' } : { type: 'preview' } })}>
       <option value="device">طابعة الجهاز اللي بيطبع (كل كاشير على طابعته)</option><option value="windows">طابعة متسطّبة على الجهاز الأساسي</option><option value="tcp">طابعة شبكة (IP)</option><option value="preview">عرض على الشاشة بس</option></select></label>
-    {t.type === 'windows' && <label>إسم الطابعة{win.length ? <select value={t.printer} onChange={e => set({ ...p, transport: { type: 'windows', printer: e.target.value } })}>{!win.includes(t.printer) && t.printer && <option value={t.printer}>{t.printer}</option>}{win.map(n => <option key={n} value={n}>{n}</option>)}</select> : <input dir="ltr" value={t.printer} onChange={e => set({ ...p, transport: { type: 'windows', printer: e.target.value } })} placeholder={kind === 'label' ? 'Xprinter XP-243B' : 'XP-80C'} />}</label>}
+    {t.type === 'windows' && <label>إسم الطابعة<span className="pick-row"><select value={t.printer} onChange={e => set({ ...p, transport: { type: 'windows', printer: e.target.value } })}>
+      <option value="" disabled>{win.loading ? 'بيدوّر على الطابعات...' : win.names.length ? 'اختار الطابعة' : 'مفيش طابعات ظاهرة في Windows'}</option>
+      {t.printer && !win.names.includes(t.printer) && <option value={t.printer}>{t.printer} (مش ظاهرة دلوقتي)</option>}{win.names.map(n => <option key={n} value={n}>{n}</option>)}</select>
+      <button type="button" className="btn ghost" onClick={win.refresh} title="حدّث قايمة الطابعات" aria-label="حدّث قايمة الطابعات"><Icon n="history" /></button></span></label>}
     {t.type === 'tcp' && <label>عنوان IP<input dir="ltr" value={t.host} onChange={e => set({ ...p, transport: { type: 'tcp', host: e.target.value, port: 9100 } })} placeholder="192.168.1.50" /></label>}
     {t.type === 'device' && (local ? <label>طابعة {kind === 'label' ? 'الباركود' : 'الفاتورة'} على الجهاز ده<select value={local[kind]} onChange={e => { const v = { ...local, [kind]: e.target.value }; setLocal(v); void desk()!.setLocalPrinters!({ receipt: v.receipt, label: v.label }); }}><option value="">اختار</option>{local.printers.map(n => <option key={n} value={n}>{n}</option>)}</select></label>
       : <span className="hint">كل جهاز بيختار طابعته من برنامج O Pharmacy عليه (من الشاشة دي).</span>)}
