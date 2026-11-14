@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, arabic } from './api';
 import { dmyHm, egp, Icon, money, newKey, toMinor, useApp } from './ui';
+import { useFrame } from './frames';
 
 /* ================= shared ================= */
 export type TillItem = { id: string; code: string; nameAr: string; kind: string; units: { name: string; factor: number }[]; sellableBase: number; priceMinor: number | null; priceUnit: string | null; nearestExpiry: string | null };
@@ -14,7 +15,7 @@ export const qtyText = (base: number, units: { name: string; factor: number }[])
 /** Scan or type: Enter tries the exact barcode or code first, otherwise the matches show below. */
 export function ItemPicker({ onPick, autoFocus }: { onPick: (it: TillItem, unitName?: string) => void; autoFocus?: boolean }) {
   const [q, setQ] = useState(''); const [list, setList] = useState<TillItem[]>([]); const [msg, setMsg] = useState(''); const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => { const f = () => ref.current?.focus(); window.addEventListener('op-focus-search', f); return () => window.removeEventListener('op-focus-search', f); }, []);
+  useEffect(() => { const f = () => { if (ref.current?.offsetParent) ref.current.focus(); }; window.addEventListener('op-focus-search', f); return () => window.removeEventListener('op-focus-search', f); }, []);
   useEffect(() => { if (q.trim().length < 2) { setList([]); return; } const t = window.setTimeout(() => { api<{ items: TillItem[] }>(`/api/pos/search?q=${encodeURIComponent(q)}`).then(r => setList(r.items), () => setList([])); }, 180); return () => window.clearTimeout(t); }, [q]);
   const pick = (it: TillItem, unit?: string) => { onPick(it, unit); setQ(''); setList([]); setMsg(''); ref.current?.focus(); };
   const enter = async () => { const code = q.trim(); if (!code) return; try { const r = await api<{ item: TillItem | null; unitName: string | null }>(`/api/pos/lookup?code=${encodeURIComponent(code)}`); if (r.item) return pick(r.item, r.unitName ?? undefined); if (list.length === 1) return pick(list[0]!); setMsg(list.length ? 'اختار من القائمة' : 'مفيش صنف بالكود أو الاسم ده'); } catch (e) { setMsg(arabic(e)); } };
@@ -113,7 +114,7 @@ function CustomerPick({ value, onPick }: { value: Cust | null; onPick: (c: Cust 
 }
 
 export function SaleScreen() {
-  const { can, toast, go } = useApp(); const { info } = useSession(); const [lines, setLines] = useState<Line[]>(() => { try { const h = sessionStorage.getItem('o.resume'); if (h) { sessionStorage.removeItem('o.resume'); return JSON.parse(h).lines as Line[]; } } catch { /* none */ } return []; });
+  const frame = useFrame(); const { can, toast, go } = useApp(); const { info } = useSession(); const [lines, setLines] = useState<Line[]>(() => { try { const h = sessionStorage.getItem('o.resume'); if (h) { sessionStorage.removeItem('o.resume'); return JSON.parse(h).lines as Line[]; } } catch { /* none */ } return []; });
   const [fromHold] = useState<string | undefined>(() => { try { const h = sessionStorage.getItem('o.resumeId'); if (h) { sessionStorage.removeItem('o.resumeId'); return h; } } catch { /* none */ } return undefined; });
   const [cash, setCash] = useState(''); const [card, setCard] = useState(''); const [cardRef, setCardRef] = useState(''); const [disc, setDisc] = useState(''); const [deliv, setDeliv] = useState<Deliv | null>(null);
   const [customer, setCustomer] = useState<Cust | null>(null); const [sel, setSel] = useState<number | null>(null); const [draftId, setDraftId] = useState(() => newKey());
@@ -159,7 +160,7 @@ export function SaleScreen() {
     { id: 'hold', label: 'تعليق مؤقت', icon: 'pause', run: () => void hold(), show: can('sale.hold') },
   ];
   const visible = actions.filter(a => a.show !== false);
-  useEffect(() => { const k = (e: KeyboardEvent) => {
+  useEffect(() => { if (!frame.active) return; const k = (e: KeyboardEvent) => {
     if (modal) { if (e.key === 'Escape') setModal(null); return; } const inField = (e.target as HTMLElement)?.closest?.('input, select, textarea');
     if (e.key === 'F2') { e.preventDefault(); window.dispatchEvent(new Event('op-focus-search')); } else if (e.key === 'F9') { e.preventDefault(); void sell(); } else if (e.key === 'F4') { e.preventDefault(); holdDelivery(); }
     else if (e.key === 'F6') { e.preventDefault(); setModal('home'); } else if (e.key === 'F7') { e.preventDefault(); setModal('drafts'); } else if (e.key === 'F8') { e.preventDefault(); if (lines.length) setModal('dose'); }

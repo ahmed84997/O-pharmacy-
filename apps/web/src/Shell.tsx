@@ -11,34 +11,44 @@ import { PurchaseInvoiceScreen } from './purchase';
 import { CatalogsScreen } from './itemform';
 import { Logo } from './icons';
 import { SideBar, Ticker, sideNarrow, type Glance } from './chrome';
+import { FrameTabs, FramesMenu, WorkArea, setFrameNames, useFrameNames, useFrames, type Frame } from './frames';
+import { BackupScreen, DrawerScreen, OrgScreen } from './general';
+import { LockScreen, ToolBar, lockFlag } from './tools';
 import { ClosingScreen, DeliveriesScreen, EtaScreen, HeldScreen, InvoicesScreen, ReturnsScreen, SaleScreen, SessionScreen } from './pos';
 
 /* physical key -> Arabic letter, so Alt key tips work whichever keyboard layout is active (from the S5 prototype) */
 const AR: Record<string, string> = { KeyQ: 'ض', KeyW: 'ص', KeyE: 'ث', KeyR: 'ق', KeyT: 'ف', KeyY: 'غ', KeyU: 'ع', KeyI: 'ه', KeyO: 'خ', KeyP: 'ح', KeyA: 'ش', KeyS: 'س', KeyD: 'ي', KeyF: 'ب', KeyG: 'ل', KeyH: 'ا', KeyJ: 'ت', KeyK: 'ن', KeyL: 'م', KeyZ: 'ئ', KeyX: 'ء', KeyC: 'ؤ', KeyV: 'ر', KeyB: 'لا', KeyN: 'ى', KeyM: 'ة' };
 type Tips = null | 'tabs' | 'items';
 
+/* names for frames opened from the side bar or the tool bar (the Ribbon names the rest) */
+const EXTRA_NAMES: Record<string, { label: string; icon: string }> = { home: { label: 'الرئيسية', icon: 'home' }, sale: { label: 'فاتورة بيع', icon: 'cart' }, held: { label: 'الفواتير المعلّقة', icon: 'pause' }, items: { label: 'الأصناف', icon: 'box' }, expiry: { label: 'الصلاحية', icon: 'clock' }, requests: { label: 'الطلبات', icon: 'bell' }, pinv: { label: 'فاتورة مشتريات', icon: 'truck' }, customers: { label: 'العملاء', icon: 'users' }, tasks: { label: 'مهامي', icon: 'check' }, session: { label: 'الدرج', icon: 'wallet' }, drawer: { label: 'فتح الدرج', icon: 'wallet' }, attendance: { label: 'الحضور', icon: 'clock' }, alerts: { label: 'التنبيهات', icon: 'bell' }, soon: { label: 'قريبًا', icon: 'clock' } };
+
 export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () => Promise<void>; logout: () => void }) {
-  const tabs = me.ribbon; const [tab, setTab] = useState(tabs[0]?.id ?? 'home'); const [screen, setScreen] = useState<{ id: string; cmd?: RibbonCmd }>({ id: 'home' });
+  const tabs = me.ribbon; const [tab, setTab] = useState(tabs.find(t => t.id === 'home')?.id ?? tabs[0]?.id ?? 'home');
   const [collapsed, setCollapsed] = useState(false); const [popup, setPopup] = useState(false); const [tips, setTips] = useState<Tips>(null); const [drawer, setDrawer] = useState(false);
   const [online, setOnline] = useState(true); const [readOnly, setReadOnly] = useState(false); const [askQ, setAskQ] = useState<{ label: string; secret?: boolean; done: (v: string | null) => void } | null>(null); const [askV, setAskV] = useState(''); const [msg, setMsg] = useState(''); const timer = useRef<number>();
   const [glance, setGlance] = useState<Glance | null>(null); const [narrow, setNarrowS] = useState(sideNarrow.get()); const setNarrow = (v: boolean) => { sideNarrow.set(v); setNarrowS(v); };
+  const [locked, setLockedS] = useState(lockFlag.get()); const setLocked = (v: boolean) => { lockFlag.set(v); setLockedS(v); };
   const refreshGlance = useCallback(() => { api<Glance>('/api/glance').then(setGlance, () => undefined); }, []);
   const cur = tabs.find(t => t.id === tab) ?? tabs[0]; const perms = useMemo(() => new Set(me.permissions), [me]);
   const toast = useCallback((m: string) => { setMsg(m); window.clearTimeout(timer.current); timer.current = window.setTimeout(() => setMsg(''), 4200); }, []);
-  const go = useCallback((id: string, cmd?: RibbonCmd) => { setScreen({ id: cmd?.sprint ? 'soon' : id, cmd }); setPopup(false); setDrawer(false); setTips(null); }, []);
+  const fr = useFrames(toast); const names = useFrameNames(tabs, EXTRA_NAMES); setFrameNames(names.title, names.icon);
+  /* a screen handed data through sessionStorage (resume a held sale, return from a sale) starts afresh even when its frame is open */
+  const go = useCallback((id: string, cmd?: RibbonCmd) => { const has = (k: string) => { try { return sessionStorage.getItem(k) !== null; } catch { return false; } }; fr.open(id, cmd, (id === 'sale' && has('o.resume')) || (id === 'returns' && has('o.returnSale'))); setPopup(false); setDrawer(false); setTips(null); }, [fr.open]); // eslint-disable-line react-hooks/exhaustive-deps
   const run = useCallback((c: RibbonCmd) => go(c.screen, c), [go]);
   /* An in-page question instead of window.prompt (the desktop window does not show browser dialogs). */
   const ask = useCallback((label: string, o: { secret?: boolean } = {}) => new Promise<string | null>(done => { setAskV(''); setAskQ({ label, secret: o.secret, done }); }), []);
   const ctx = useMemo(() => ({ me, can: (k: string) => perms.has(k), toast, go, reloadMe, ask, glance, refreshGlance }), [me, perms, toast, go, reloadMe, ask, glance, refreshGlance]);
+  const can = useCallback((k: string) => perms.has(k), [perms]);
   /* counts and the alert strip: on every screen change and every 2 minutes */
-  useEffect(() => { refreshGlance(); }, [screen, refreshGlance]);
+  useEffect(() => { refreshGlance(); }, [fr.focused, refreshGlance]);
   useEffect(() => { const t = window.setInterval(refreshGlance, 120000); return () => window.clearInterval(t); }, [refreshGlance]);
-
   /* D39: in the desktop app, start its print agent with this device's key (prints for "device" printers come back to this PC) */
   useEffect(() => { try { const d = localStorage.getItem('o.device'); const od = (window as unknown as { oDesktop?: { agent?: (k: string) => Promise<boolean> } }).oDesktop; if (d && od?.agent) void od.agent(d); } catch { /* storage blocked: no agent */ } }, []);
+
   useEffect(() => { const ping = () => { api<{ readOnly?: boolean }>('/api/state').then(r => { setOnline(true); setReadOnly(!!r.readOnly); }, () => setOnline(false)); }; ping(); const t = window.setInterval(ping, 30000); return () => window.clearInterval(t); }, []);
   useEffect(() => {
-    let altAlone = false;
+    if (locked) return; let altAlone = false;
     const down = (e: KeyboardEvent) => {
       if (e.key === 'Alt') { altAlone = true; e.preventDefault(); return; } altAlone = false;
       if (e.key === 'F1' && e.ctrlKey) { e.preventDefault(); setCollapsed(c => !c); setPopup(false); return; }
@@ -48,57 +58,59 @@ export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () =
     };
     const up = (e: KeyboardEvent) => { if (e.key === 'Alt' && altAlone) setTips(t => (t ? null : 'tabs')); altAlone = false; };
     window.addEventListener('keydown', down); window.addEventListener('keyup', up); return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
-  }, [tips, tabs, cur, run, collapsed]);
+  }, [tips, tabs, cur, run, collapsed, locked]);
 
   const tip = (code: string) => (tips ? <span className="tip" aria-hidden="true">{AR[code] ?? code.replace('Key', '')}</span> : null);
-  const expanded = !collapsed || popup;
-  const body = (() => { switch (screen.id) {
-    case 'home': return <Home />; case 'items': return <ItemsScreen />; case 'expiry': return <ExpiryScreen />; case 'catalogs': return <CatalogsScreen />; case 'stocktake': return <StocktakeScreen />; case 'stores': return <StoresScreen />; case 'import': return <ImportScreen />; case 'pinv': return <PurchaseInvoiceScreen />; case 'po': return <OrdersScreen />; case 'pret': return <PurchaseReturnScreen />; case 'suppliers': return <SuppliersScreen />; case 'deleted': return <DeletedScreen />; case 'customers': return <CustomersScreen />; case 'requests': return <RequestsScreen key={screen.cmd?.id ?? 'r'} initial={screen.cmd?.id === 'shortages' ? 'shortage' : undefined} />; case 'notify': return <NotifyScreen />; case 'handovers': return <HandoversScreen />; case 'stages': return <StagesScreen />; case 'tasks': return <TasksScreen />; case 'attendance': return <AttendanceScreen />; case 'alerts': return <AlertsScreen />; case 'ledger': return <LedgerScreen />; case 'cheques': return <ChequesScreen />; case 'books': return <BooksScreen />; case 'payroll': return <PayrollScreen />; case 'contracts': return <ContractsScreen />; case 'reports': return <ReportsScreen />; case 'people': return <People />; case 'devices': return <Devices />;
+  const max = fr.lay.max; const expanded = (!collapsed || popup) && !max;
+  const render = (f: Frame) => { const cmd = f.cmd; switch (f.id) {
+    case 'home': return <Home />; case 'items': return <ItemsScreen />; case 'expiry': return <ExpiryScreen />; case 'catalogs': return <CatalogsScreen />; case 'stocktake': return <StocktakeScreen />; case 'stores': return <StoresScreen />; case 'import': return <ImportScreen />; case 'pinv': return <PurchaseInvoiceScreen />; case 'po': return <OrdersScreen />; case 'pret': return <PurchaseReturnScreen />; case 'suppliers': return <SuppliersScreen />; case 'deleted': return <DeletedScreen />; case 'customers': return <CustomersScreen />; case 'requests': return <RequestsScreen initial={f.key === 'requests:shortages' ? 'shortage' : undefined} />; case 'notify': return <NotifyScreen />; case 'handovers': return <HandoversScreen />; case 'stages': return <StagesScreen />; case 'tasks': return <TasksScreen />; case 'attendance': return <AttendanceScreen />; case 'alerts': return <AlertsScreen />; case 'ledger': return <LedgerScreen />; case 'cheques': return <ChequesScreen />; case 'books': return <BooksScreen />; case 'payroll': return <PayrollScreen />; case 'contracts': return <ContractsScreen />; case 'reports': return <ReportsScreen />; case 'people': return <People />; case 'devices': return <Devices />;
     case 'sale': return <SaleScreen />; case 'session': return <SessionScreen />; case 'held': return <HeldScreen />; case 'invoices': return <InvoicesScreen />; case 'returns': return <ReturnsScreen />; case 'deliveries': return <DeliveriesScreen />; case 'closing': return <ClosingScreen />; case 'eta': return <EtaScreen />;
-    case 'settings': return <Settings />; case 'about': return <About />; default: return <Soon cmd={screen.cmd} />;
-  } })();
+    case 'org': return <OrgScreen />; case 'backup': return <BackupScreen />; case 'drawer': return <DrawerScreen />;
+    case 'settings': return <Settings />; case 'about': return <About />; default: return <Soon cmd={cmd} />;
+  } };
+  const focusedFrame = fr.frames.find(f => f.key === fr.focused);
 
   return (
     <AppCtx.Provider value={ctx}>
-      <div id="app">
-        <header className="title">
-          <button className="qbtn menu-btn" onClick={() => setDrawer(true)} aria-label="القائمة"><Icon n="menu" /></button>
-          <Logo size={30} />
-          <div className="qat" role="toolbar" aria-label="شريط الوصول السريع">
-            <button className="qbtn" title="الرئيسية" onClick={() => go('home')}><Icon n="store" /></button>
-            {perms.has('sale.create') && <button className="qbtn" title="فاتورة بيع" onClick={() => go('sale')}><Icon n="cart" /></button>}{perms.has('item.view') && <button className="qbtn" title="الأصناف والأرصدة" onClick={() => go('items')}><Icon n="search" /></button>}
-            <button className="qbtn" title="اختصارات لوحة المفاتيح (Alt)" onClick={() => setTips(t => (t ? null : 'tabs'))}><Icon n="kbd" /></button>
+      <div id="app" className={max ? 'maxed' : undefined}>
+        {!max && <SideBar can={can} current={focusedFrame?.key === 'requests:shortages' ? 'shortages' : focusedFrame?.id ?? ''} glance={glance} narrow={narrow} setNarrow={setNarrow} go={go} head={{ pharmacy: me.pharmacyName ?? '', person: `${me.person.displayName} - ${me.person.roles.map(r => ROLE_AR[r] ?? r).join(' و ')}`, testMode: me.testMode }} />}
+        <div className="col">
+          <div className="mainbar">
+            <button className="qbtn menu-btn" onClick={() => setDrawer(true)} aria-label="القائمة"><Icon n="menu" /></button>
+            <nav className="tabs" role="tablist" aria-label="القوائم">
+              {tabs.map(t => <button key={t.id} className="tab" role="tab" aria-selected={t.id === cur?.id && expanded} onClick={() => { if (max) fr.unmax(); setTab(t.id); if (collapsed) setPopup(p => (t.id === cur?.id ? !p : true)); }}>{t.label}{tips === 'tabs' && tip(t.key)}</button>)}
+            </nav>
+            <FramesMenu fr={fr} />
+            <button className="mbtn collapse" onClick={() => { setCollapsed(c => !c); setPopup(false); }} title="طيّ أو تثبيت الشريط (Ctrl+F1)" aria-label="طيّ أو تثبيت الشريط"><Icon n={collapsed ? 'down' : 'up'} /></button>
+            <button className="mbtn" title="اختصارات لوحة المفاتيح (Alt)" aria-label="اختصارات لوحة المفاتيح" onClick={() => setTips(t => (t ? null : 'tabs'))}><Icon n="kbd" /></button>
+            <span className="mlogo"><Logo size={30} orbit light /></span>
+            <button className="mbtn" onClick={logout} title="خروج" aria-label="خروج"><Icon n="logout" /></button>
           </div>
-          <span className="muted">{me.pharmacyName}</span>{me.testMode && <span className="tests">نسخة تجربة</span>}<span className="spacer" />
-          <button className="btn ghost" onClick={logout}>خروج</button>
-        </header>
-        <div className="tabs" role="tablist" aria-label="تبويبات الشريط">
-          {tabs.map(t => <button key={t.id} className="tab" role="tab" aria-selected={t.id === cur?.id} onClick={() => { setTab(t.id); if (collapsed) setPopup(true); }}>{t.label}{tips === 'tabs' && tip(t.key)}</button>)}
-          <button className="collapse" onClick={() => { setCollapsed(c => !c); setPopup(false); }} title="طيّ أو تثبيت الشريط (Ctrl+F1)" aria-label="طيّ أو تثبيت الشريط"><Icon n={collapsed ? 'down' : 'up'} /></button>
+          <div className="ribbon-wrap">
+            {expanded && cur && (
+              <div className={`ribbon${collapsed ? ' popup' : ''}`} role="tabpanel">
+                {cur.groups.map(g => (
+                  <div className="group" key={g.label}>
+                    <div className="items">{g.items.map(c => <button key={c.id} className={`rb${c.primary ? ' primary' : ''}${c.sprint ? ' off' : ''}`} onClick={() => run(c)} title={c.sprint ? `قريبًا في Sprint ${c.sprint}` : c.label}><Icon n={c.icon} />{c.label}{tips === 'items' && tip(c.key)}</button>)}</div>
+                    <div className="glabel">{g.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {readOnly && <div className="card warnbox" role="alert" style={{ margin: 8 }}>الترخيص انتهى: البرنامج للقراءة والتقارير بس لحد ما يتجدد. البيانات كلها موجودة. (عن البرنامج ← تفعيل الترخيص)</div>}
+          <FrameTabs fr={fr} />
+          <div className="bodyrow">
+            <WorkArea fr={fr} render={render} />
+            <ToolBar can={can} go={go} toast={toast} onLock={() => setLocked(true)} hidden={max} />
+          </div>
+          <Ticker glance={glance} go={go} />
+          <footer className="status">
+            <span><span className={`dot${online ? '' : ' off'}`} />{online ? 'متصل بالـ Hub' : 'مش متصل بالـ Hub'}</span>
+            <span>{me.person.displayName} - {me.person.roles.map(r => ROLE_AR[r] ?? r).join(' و ')}</span>
+            <span className="muted">الإصدار {me.version}</span>
+          </footer>
         </div>
-        <div className="ribbon-wrap">
-          {expanded && cur && (
-            <div className={`ribbon${collapsed ? ' popup' : ''}`} role="tabpanel">
-              {cur.groups.map(g => (
-                <div className="group" key={g.label}>
-                  <div className="items">{g.items.map(c => <button key={c.id} className={`rb${c.primary ? ' primary' : ''}${c.sprint ? ' off' : ''}`} onClick={() => run(c)} title={c.sprint ? `قريبًا في Sprint ${c.sprint}` : c.label}><Icon n={c.icon} />{c.label}{tips === 'items' && tip(c.key)}</button>)}</div>
-                  <div className="glabel">{g.label}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        {readOnly && <div className="card warnbox" role="alert" style={{ margin: 8 }}>الترخيص انتهى: البرنامج للقراءة والتقارير بس لحد ما يتجدد. البيانات كلها موجودة. (عن البرنامج ← تفعيل الترخيص)</div>}
-        <div className="bodyrow">
-          <SideBar can={k => perms.has(k)} current={screen.cmd?.id ?? screen.id} glance={glance} narrow={narrow} setNarrow={setNarrow} go={go} />
-          <main id="work">{body}</main>
-        </div>
-        <Ticker glance={glance} go={go} />
-        <footer className="status">
-          <span><span className={`dot${online ? '' : ' off'}`} />{online ? 'متصل بالـ Hub' : 'مش متصل بالـ Hub'}</span>
-          <span>{me.person.displayName} - {me.person.roles.map(r => ROLE_AR[r] ?? r).join(' و ')}</span>
-          <span>فرع {me.branchId}</span><span className="muted">الإصدار {me.version}</span>
-        </footer>
         {drawer && (<>
           <div className="drawer-bg" onClick={() => setDrawer(false)} />
           <nav className="drawer" aria-label="القائمة">
@@ -114,6 +126,7 @@ export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () =
           </form>
         </>)}
         {msg && <div className="toast" role="status">{msg}</div>}
+        {locked && <LockScreen username={me.person.username} name={me.person.displayName} unlock={() => setLocked(false)} logout={() => { setLocked(false); logout(); }} />}
       </div>
     </AppCtx.Provider>
   );

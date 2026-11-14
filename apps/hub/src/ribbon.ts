@@ -5,6 +5,10 @@ export interface RibbonTab { id: string; label: string; key: string; groups: Rib
 const C = (id: string, label: string, icon: string, key: string, perms: string[], o: Partial<RibbonCmd> = {}): RibbonCmd => ({ id, label, icon, key, perms, screen: o.screen ?? id, ...o });
 
 export const RIBBON: RibbonTab[] = [
+  { id: 'gen', label: 'البيانات العامة', key: 'KeyD', groups: [
+    { label: 'المؤسسة', items: [C('org', 'بيانات المؤسسة', 'store', 'KeyB', ['settings.branch'], { primary: true }), C('opsettings', 'إعدادات التشغيل', 'gear', 'KeyT', ['settings.branch', 'settings.security'], { screen: 'settings' })] },
+    { label: 'الطباعة', items: [C('rcptset', 'إعدادات طباعة فاتورة البيع', 'print', 'KeyF', ['settings.branch'], { sprint: '7.12' }), C('labelset', 'إعدادات طباعة الباركود', 'barcode', 'KeyL', ['settings.branch'], { sprint: '7.12' }), C('barcodes', 'طباعة باركود', 'barcode', 'KeyP', ['item.view'], { sprint: '7.12' }), C('drawer', 'فتح الدرج', 'wallet', 'KeyJ', ['sale.void']), C('contractpaper', 'إصدار فاتورة ورقية للتعاقد', 'file', 'KeyC', ['contract.view'], { sprint: '7.12' })] },
+    { label: 'البيانات', items: [C('backup', 'أخذ نسخة احتياطية', 'shield', 'KeyN', ['settings.security']), C('backupauto', 'نسخ احتياطية دورية', 'clock', 'KeyR', ['settings.security'], { sprint: '7.12' }), C('dbsize', 'حجم قاعدة البيانات', 'chart', 'KeyS', ['settings.security'], { screen: 'backup' })] } ] },
   { id: 'home', label: 'الرئيسية', key: 'KeyH', groups: [
     { label: 'البداية', items: [C('home', 'الصفحة الرئيسية', 'store', 'KeyH', ['item.view', 'user.view', 'report.view', 'staff_tasks.my'], { primary: true }), C('alerts2', 'التنبيهات', 'bell', 'KeyN', ['notification.view'], { screen: 'alerts' })] },
     { label: 'البيع', items: [C('sale', 'فاتورة بيع', 'cart', 'KeyS', ['sale.create']), C('session', 'جلسة الكاشير', 'wallet', 'KeyJ', ['cashier_session.open'])] },

@@ -410,3 +410,153 @@ button.card.stat:hover { border-color: var(--teal); }
 .dose-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 10px; align-items: center; font-size: 14px; }
 .dose-chips { display: flex; flex-wrap: wrap; gap: 6px; } .dose-chips .btn { min-height: 32px; padding: 4px 10px; font-size: 13px; }
 @media (max-width: 760px) { .dose-row { grid-template-columns: 1fr; } }
+
+/* ================= Sprint 7.11 (owner, 14 Nov 2026): side bar to the top, logo on the left, a coloured main bar with separators,
+   a tinted Ribbon, open screens as frames (split, minimize, maximize, close), tools on the left, the lock and the login screen ================= */
+:root { --bar: #1F7A93; --bar-sep: #5FA8BC; --bar-fg: #FFFFFF; --bar-on: #DDEFF4; --bar-on-fg: #0F3B48; --ribbon2: #DDEFF4; --ribbon2-line: #A9CFDA; --ftab: #F4F8FA; }
+:root[data-theme="dark"] { --bar: #12384A; --bar-sep: #2D5F73; --bar-fg: #E7EEF8; --bar-on: #1B4D63; --bar-on-fg: #FFFFFF; --ribbon2: #16314A; --ribbon2-line: #2A4A66; --ftab: #111A2E; }
+#app { flex-direction: row; }
+#app > .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.side { padding-top: 0; }
+.shead { display: grid; gap: 2px; justify-items: center; text-align: center; padding: 12px 4px 10px; margin: 0 -6px 6px; background: rgba(0,0,0,.18); border-bottom: 1px solid rgba(255,255,255,.12); color: var(--side-fg); font-size: 11.5px; line-height: 1.35; }
+.shead b { color: #fff; font-size: 13px; }
+.side.narrow .shead b { font-size: 11px; }
+.shead .tests { font-size: 11px; padding: 0 6px; }
+
+.mainbar { display: flex; align-items: stretch; min-height: 46px; background: var(--bar); color: var(--bar-fg); }
+.mainbar .tabs { display: flex; align-items: stretch; gap: 0; padding: 0; background: none; border: 0; border-inline: 1px solid var(--bar-sep); overflow-x: auto; scrollbar-width: none; min-width: 0; }
+.mainbar .tab { color: var(--bar-fg); border: 0; border-inline-end: 1px solid var(--bar-sep); border-radius: 0; padding: 0 14px; font-size: 14px; font-weight: 600; white-space: nowrap; margin: 0; background: none; }
+.mainbar .tab:last-child { border-inline-end: 0; }
+.mainbar .tab:hover { background: rgba(255,255,255,.12); color: var(--bar-fg); }
+.mainbar .tab[aria-selected="true"] { background: var(--bar-on); color: var(--bar-on-fg); font-weight: 700; border-bottom: 0; box-shadow: inset 0 3px 0 var(--brand-orange); }
+.mbtn { width: 40px; display: grid; place-items: center; color: var(--bar-fg); font-size: 19px; flex: none; }
+.mbtn:hover { background: rgba(255,255,255,.12); }
+.mainbar .collapse { margin: 0; width: 40px; height: auto; color: var(--bar-fg); border-radius: 0; }
+.mlogo { margin-inline-start: auto; display: flex; align-items: center; padding: 0 12px; }
+.logo.light b { color: #fff; font-family: "Segoe UI", var(--font); }
+.mainbar .menu-btn { color: var(--bar-fg); width: 44px; height: auto; border-radius: 0; }
+.ribbon { background: var(--ribbon2); border-bottom: 2px solid var(--ribbon2-line); }
+.group { border-inline-start-color: var(--ribbon2-line); }
+.rb:hover { background: rgba(255,255,255,.65); }
+:root[data-theme="dark"] .rb:hover { background: rgba(255,255,255,.08); }
+
+.frames { position: relative; display: flex; align-items: center; padding: 0 8px; }
+.framesbtn { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--bar-sep); background: rgba(255,255,255,.1); color: var(--bar-fg); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.framesbtn svg.i { font-size: 17px; }
+.fcount { min-width: 20px; height: 20px; border-radius: 10px; background: var(--brand-orange); color: #fff; display: grid; place-items: center; font-size: 12px; padding: 0 5px; }
+.fmenu { position: absolute; top: 42px; inset-inline-start: 0; width: 340px; max-width: calc(100vw - 24px); background: var(--panel); color: var(--fg); border: 2px solid var(--line-strong); border-radius: 10px; box-shadow: 0 12px 28px rgba(10,40,50,.25); z-index: 30; overflow: hidden; }
+.fhead { padding: 8px 12px; background: var(--ribbon); font-size: 12px; font-weight: 700; color: var(--muted); border-bottom: 1px solid var(--line); }
+.frow { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.frow.on { background: var(--teal-soft); }
+.fgo { flex: 1; display: flex; align-items: center; gap: 10px; padding: 6px 4px; text-align: start; font-size: 14px; }
+.fgo svg.i { font-size: 18px; color: var(--teal); }
+.fgo small { display: block; font-size: 12px; color: var(--muted); }
+.ffoot { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; font-size: 12px; color: var(--muted); }
+.linkbtn { color: var(--teal); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+.ftabs { display: flex; align-items: flex-end; gap: 4px; padding: 6px 8px 0; background: var(--bg); border-bottom: 2px solid var(--line); overflow-x: auto; scrollbar-width: thin; flex: none; }
+.ftab { display: flex; align-items: center; gap: 2px; max-width: 260px; min-width: 0; padding-inline-end: 4px; border: 2px solid var(--line); border-bottom: 0; border-radius: 10px 10px 0 0; background: var(--ftab); margin-bottom: -2px; }
+.ftab.on { background: var(--panel); border-color: var(--teal); box-shadow: inset 0 3px 0 var(--brand-orange); }
+.ftab.vis { background: var(--panel); border-color: var(--line-strong); }
+.ftab.min .fname { opacity: .6; font-style: italic; }
+.fname { display: flex; align-items: center; gap: 6px; padding: 7px 10px; min-width: 0; font-size: 13.5px; font-weight: 600; }
+.fname svg.i { font-size: 17px; color: var(--teal); }
+.fname span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fctl { position: relative; display: flex; align-items: center; gap: 1px; }
+.ftab .fctl { opacity: 0; transition: opacity .12s; }
+.ftab.on .fctl, .ftab:hover .fctl, .ftab:focus-within .fctl { opacity: 1; }
+.fbtn { width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); font-size: 15px; }
+.fbtn:hover { background: var(--hover); color: var(--fg); }
+.fbtn.on { color: var(--teal); background: var(--teal-soft); }
+.fbtn.x:hover { background: var(--bad-soft); color: var(--bad); }
+.splitpop { position: absolute; top: 30px; inset-inline-end: 0; width: 260px; background: var(--panel); color: var(--fg); border: 2px solid var(--line-strong); border-radius: 10px; box-shadow: 0 12px 28px rgba(10,40,50,.25); z-index: 30; padding: 6px; display: grid; gap: 2px; }
+.splitpop > button { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; text-align: start; font-size: 14px; font-weight: 600; }
+.splitpop > button:hover, .sprow:hover { background: var(--hover); }
+.splitpop svg.i { font-size: 18px; color: var(--teal); }
+.splitpop .hint { margin: 6px; }
+.sphead { font-size: 12px; font-weight: 700; color: var(--muted); padding: 4px 8px; }
+.sprow { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border-radius: 8px; font-size: 14px; }
+.sprow span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sprow button { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; border: 1px solid var(--line); }
+.sprow button:hover { border-color: var(--teal); background: var(--teal-soft); }
+
+.bodyrow { flex: 1; display: flex; min-height: 0; }
+.work { position: relative; flex: 1; min-width: 0; min-height: 0; }
+.frame { position: absolute; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
+.frame.split { border: 2px solid var(--line); border-radius: 10px; overflow: hidden; }
+.frame.split.focus { border-color: var(--teal); }
+.phead { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 4px; padding-inline-start: 12px; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 13.5px; flex: none; }
+.phead > svg.i { color: var(--teal); font-size: 17px; }
+.phead b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frame.focus .phead { background: var(--teal-soft); }
+.fbody { flex: 1; min-height: 0; overflow: auto; padding: 18px 20px; }
+.divider { position: absolute; z-index: 4; display: grid; place-items: center; touch-action: none; }
+.divider.h { top: 0; bottom: 0; width: 6px; cursor: col-resize; }
+.divider.v { left: 0; right: 0; height: 6px; cursor: row-resize; }
+.divider span { background: var(--line-strong); border-radius: 3px; }
+.divider.h span { width: 4px; height: 48px; }
+.divider.v span { height: 4px; width: 48px; }
+.divider:hover span, .divider:focus-visible span { background: var(--teal); }
+.fempty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); padding: 24px; text-align: center; }
+
+.tools { position: relative; width: 52px; flex: none; background: var(--panel); border-inline-start: 2px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0; }
+.tool { position: relative; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: var(--muted); font-size: 21px; }
+.tool:hover, .tool.on { background: var(--teal-soft); color: var(--teal-ink); }
+.tsep { width: 28px; height: 1px; background: var(--line); margin: 4px 0; }
+.ttip { position: absolute; inset-inline-end: 48px; top: 8px; white-space: nowrap; background: var(--deep); color: #fff; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 6px; pointer-events: none; opacity: 0; transition: opacity .12s; z-index: 20; }
+.ttip kbd { font-family: inherit; color: #F8A27A; margin-inline-start: 6px; }
+.tool:hover .ttip, .tool:focus-visible .ttip { opacity: 1; }
+.calc { position: absolute; bottom: 12px; inset-inline-end: 58px; width: 260px; background: var(--panel); border: 2px solid var(--line-strong); border-radius: 12px; box-shadow: 0 14px 30px rgba(10,40,50,.28); padding: 10px; z-index: 25; display: grid; gap: 8px; }
+.calc:focus { outline: none; }
+.cscreen { background: var(--deep); color: #fff; border-radius: 8px; padding: 8px 10px; display: grid; justify-items: end; min-height: 62px; }
+.cscreen small { color: #9FDDEE; min-height: 16px; font-size: 12px; }
+.cscreen b { font-size: 24px; word-break: break-all; }
+.ckeys { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.ckeys button { height: 42px; border-radius: 8px; background: var(--ribbon); border: 1px solid var(--line); font-size: 18px; font-weight: 700; }
+.ckeys button:hover { border-color: var(--teal); }
+.ckeys .op { color: var(--teal-ink); background: var(--teal-soft); }
+.ckeys .fn { color: var(--bad); }
+.ckeys .eq { grid-column: span 2; background: var(--brand-orange); border-color: var(--brand-orange); color: #fff; }
+.cclose { position: absolute; top: -12px; inset-inline-start: -12px; width: 26px; height: 26px; border-radius: 50%; background: var(--panel); border: 2px solid var(--line-strong); display: grid; place-items: center; font-size: 13px; }
+
+#app.maxed .fbody { padding: 14px 18px; }
+
+.lock { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 40%, #1B5A6B 0%, #0F3B48 50%, #0A2832 100%); padding: 16px; }
+.lockcard { width: min(360px, 100%); display: grid; gap: 12px; justify-items: center; color: #E9F4F7; text-align: center; }
+.lockcard b { font-size: 20px; color: #fff; }
+.lockcard label { width: 100%; display: grid; gap: 6px; text-align: start; font-weight: 600; }
+.lockcard .btn { width: 100%; min-height: 44px; }
+.lockcard .linkbtn { color: #9FDDEE; }
+.lockcard .err { color: #FFB4A8; }
+
+/* the login screen (all the gates before the program) */
+.gate.orbit { position: relative; min-height: 100dvh; display: flex; flex-direction: column; padding: 0; overflow: hidden; color: #E9F4F7; background: radial-gradient(ellipse at 50% 42%, #1B5A6B 0%, #0F3B48 48%, #0A2832 100%); }
+.gate.orbit .orbits { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.gate.orbit header, .gate.orbit footer { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-block: 16px; padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+.gate.orbit header { color: #BFDCE4; font-weight: 600; }
+.gate.orbit footer { border-top: 1px solid #1E5868; background: rgba(6,26,33,.5); }
+.gate.orbit .support { font-weight: 600; }
+.gate.orbit .support b { color: #F8A27A; font-size: 20px; direction: ltr; unicode-bidi: isolate; margin-inline-start: 6px; }
+.gate.orbit .center { position: relative; flex: 1; display: grid; place-items: center; align-content: center; gap: 22px; padding: 24px 16px 40px; }
+.gate.orbit .brandbig { display: flex; align-items: center; gap: 14px; }
+.gate.orbit .brandbig b { font-family: "Segoe UI", var(--font); font-size: clamp(44px, 7vw, 68px); font-weight: 700; color: #fff; letter-spacing: -1px; line-height: 1; }
+.gate.orbit .brandbig small { display: block; font-size: 13px; letter-spacing: 6px; color: #F8A27A; font-weight: 700; margin-top: 4px; }
+.gate.orbit .card { width: min(400px, 100%); background: rgba(8,32,40,.62); border: 1px solid #2C6E80; border-radius: 14px; color: #E9F4F7; padding: 22px 24px; display: grid; gap: 12px; }
+.gate.orbit .card h1 { color: #fff; font-size: 1.25rem; }
+.gate.orbit .card p, .gate.orbit .muted { color: #BFDCE4; }
+.gate.orbit .card input { background: #F4FAFB; color: #13232B; border-color: #3B8296; }
+.gate.orbit .card .btn.primary { background: var(--brand-orange); border-color: var(--brand-orange); min-height: 44px; font-size: 16px; }
+.gate.orbit .card .err { color: #FFB4A8; }
+.gate.orbit .devline { font-size: 12px; color: #8FB7C3; text-align: center; }
+
+@media (max-width: 760px) {
+  .tools, .ftab .fctl .fbtn:not(.x) { display: none; }
+  .mainbar .tabs, .mainbar .collapse, .mbtn[aria-label="اختصارات لوحة المفاتيح"] { display: none; }
+  .mlogo { padding: 0 8px; }
+  .framesbtn .fl { display: none; }
+  .fbody { padding: 12px max(12px, env(safe-area-inset-left, 0px)) 12px max(12px, env(safe-area-inset-right, 0px)); }
+}
+.ftab { flex: 0 0 auto; }
+.fname span { max-width: 170px; }
+.gate.orbit { place-items: initial; align-items: stretch; }
+.gate.orbit .card label { color: #CFE6EC; font-weight: 600; }

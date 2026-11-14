@@ -18,7 +18,7 @@ const prep = (o: { testMode?: boolean; webDir?: string } = {}) => {
 
 describe('first run, devices and login', () => {
   it('sets up the owner once from a device that becomes approved; later devices wait for approval before anyone logs in on them', async () => {
-    const s = prep(); expect((await s.call('GET', '/api/state')).body).toMatchObject({ setUp: false, version: '0.7.12' });
+    const s = prep(); expect((await s.call('GET', '/api/state')).body).toMatchObject({ setUp: false, version: '0.7.13' });
     expect((await s.call('POST', '/api/setup', { body: {} })).status).toBe(401);
     const { dev, token } = await s.setup(); expect(token).toBeTruthy(); expect((await s.call('GET', '/api/state')).body).toMatchObject({ setUp: true, pharmacyName: 'صيدلية التجربة' });
     expect((await s.call('POST', '/api/setup', { dev, body: { pharmacyName: 'x', displayName: 'x', username: 'other', secret: SECRET } })).body.error).toBe('state');
