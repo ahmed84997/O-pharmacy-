@@ -600,3 +600,4 @@ button.card.stat:hover { border-color: var(--teal); }
 @media print { .a4-print { padding: 0 !important; } .a4-print .a4 { box-shadow: none; width: auto; min-height: 0; padding: 10mm; } @page { size: A4; margin: 8mm; } }
 .bc-ask label.chk, .askbox label.chk { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .a4 table { border: 1px solid #444; }
+.pick-row { display: flex; gap: 6px; align-items: center; } .pick-row select { flex: 1; min-width: 0; } .pick-row .btn { min-height: 38px; padding: 0 10px; }
