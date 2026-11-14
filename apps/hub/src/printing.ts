@@ -19,21 +19,24 @@ export function mergeReceiptStyle(cur: ReceiptStyle, b: Record<string, unknown>)
   const o: ReceiptStyle = { ...cur };
   if (b.header !== undefined) o.header = clip(b.header, 200); if (b.footer !== undefined) o.footer = clip(b.footer, 300); if (b.returnPolicy !== undefined) o.returnPolicy = clip(b.returnPolicy, 300);
   for (const k of ['showExpiry', 'showBatch', 'showUnitPrice', 'printCustomer', 'printSeller', 'askBeforePrint'] as const) if (b[k] !== undefined) o[k] = b[k] === true;
-  if (b.template !== undefined) o.template = b.template === 'compact' ? 'compact' : 'table';
+  if (b.template !== undefined) o.template = b.template === 'compact' ? 'compact' : 'table'; if (b.paper !== undefined) o.paper = b.paper === 'a4' ? 'a4' : 'receipt';
   if (b.copies !== undefined) o.copies = intIn(b.copies, 1, 5, 1); if (b.minPrintMinor !== undefined) o.minPrintMinor = intIn(b.minPrintMinor, 0, 100_000_00, 0); if (b.sideMarginMm !== undefined) o.sideMarginMm = intIn(b.sideMarginMm, 0, 8, 1);
   if (b.digits !== undefined) o.digits = b.digits === 'arabic' ? 'arabic' : 'western';
   return o;
 }
 /** The sticker settings ("إعدادات طباعة الباركود"): what prints on a price sticker by default (the print screen can change it per print). */
-export interface LabelStyle { showPharmacy: boolean; pharmacyName: string; showPhone: boolean; phone: string; showPrice: boolean; showExpiry: boolean }
+/** A4 sticker sheets as eStock lists them: columns × rows. */
+export const A4_LAYOUTS = ['6x24', '5x20', '6x19', '7x12', '6x17', '5x13', '4x10', '3x8'] as const;
+export interface LabelStyle { showPharmacy: boolean; pharmacyName: string; showPhone: boolean; phone: string; showPrice: boolean; showExpiry: boolean; /** لا يوجد / حراري / A4 */ mode: 'none' | 'thermal' | 'a4'; a4Layout: string }
 export function labelStyle(app: App): LabelStyle {
   let v: Partial<LabelStyle> = {}; try { v = JSON.parse(app.access.setting('label.style') ?? '{}') as Partial<LabelStyle>; } catch { /* defaults */ }
-  return { showPharmacy: v.showPharmacy !== false, pharmacyName: v.pharmacyName ?? '', showPhone: v.showPhone !== false, phone: v.phone ?? '', showPrice: v.showPrice !== false, showExpiry: v.showExpiry !== false };
+  return { showPharmacy: v.showPharmacy !== false, pharmacyName: v.pharmacyName ?? '', showPhone: v.showPhone !== false, phone: v.phone ?? '', showPrice: v.showPrice !== false, showExpiry: v.showExpiry !== false, mode: v.mode === 'none' || v.mode === 'a4' ? v.mode : 'thermal', a4Layout: (A4_LAYOUTS as readonly string[]).includes(v.a4Layout ?? '') ? v.a4Layout! : '5x20' };
 }
 export function saveLabelStyle(app: App, actor: Person, b: Record<string, unknown>): LabelStyle {
   const cur = labelStyle(app); const o: LabelStyle = { ...cur };
   for (const k of ['showPharmacy', 'showPhone', 'showPrice', 'showExpiry'] as const) if (b[k] !== undefined) o[k] = b[k] === true;
   if (b.pharmacyName !== undefined) o.pharmacyName = clip(b.pharmacyName, 60); if (b.phone !== undefined) o.phone = clip(b.phone, 40);
+  if (b.mode !== undefined) o.mode = b.mode === 'none' || b.mode === 'a4' ? b.mode : 'thermal'; if (b.a4Layout !== undefined) { if (!(A4_LAYOUTS as readonly string[]).includes(String(b.a4Layout))) throw new AccessError('invalid', 'unknown A4 sheet'); o.a4Layout = String(b.a4Layout); }
   app.access.setSetting('label.style', JSON.stringify(o), actor.id); app.hub.audit(actor.id, 'settings.label_style', 'settings', 'label.style', o); return o;
 }
 /** The pharmacy as it prints (from "بيانات المؤسسة"): phones may be written with commas or " - ". */
@@ -100,4 +103,4 @@ export function receiptSamplePng(app: App, style: ReceiptStyle, widthMm: 58 | 80
   return png(img);
 }
 /** One sticker as a picture (the settings screen's preview and the print screen's look). */
-export function labelPng(spec: LabelSpec, mm: [number, number]): Buffer { return png(raster.label(spec, Math.round(mm[0] * 8), Math.round(mm[1] * 8))); }
+export function labelPng(spec: LabelSpec, mm: [number, number], dpmm = 8): Buffer { return png(raster.label(spec, Math.round(mm[0] * dpmm), Math.round(mm[1] * dpmm))); }

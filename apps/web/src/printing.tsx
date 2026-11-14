@@ -5,6 +5,7 @@ import { api, arabic, device, token } from './api';
 import { egp, Icon, money, toMinor, useApp } from './ui';
 import { ItemPicker, type TillItem } from './pos';
 import { useFrame } from './frames';
+import { LabelSheets, SaleA4, sheetOf, usePrintWhen, type A4Sale } from './a4';
 
 /* ---------- shared: a picture from the Hub (POST), refreshed a moment after the inputs settle ---------- */
 function usePreview(url: string, payload: unknown, enabled = true): string {
@@ -71,7 +72,19 @@ const mmYyyy = (iso: string) => `${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 export function BarcodePrintScreen() {
   const { toast, go } = useApp(); const frame = useFrame(); const [rows, setRows] = useState<Row[]>([]); const [sel, setSel] = useState<number | null>(null); const [ask, setAsk] = useState<Show | null>(null); const [busy, setBusy] = useState(false);
   const [style, setStyle] = useState<Show>({ pharmacy: true, phone: true, price: true, expiry: true }); const [printers, setPrinters] = useState<{ name: string }[]>([]); const [printer, setPrinter] = useState('');
-  useEffect(() => { api<{ style: { showPharmacy: boolean; showPhone: boolean; showPrice: boolean; showExpiry: boolean }; printers: { name: string }[] }>('/api/settings/label-style').then(r => { setStyle({ pharmacy: r.style.showPharmacy, phone: r.style.showPhone, price: r.style.showPrice, expiry: r.style.showExpiry }); setPrinters(r.printers); setPrinter(r.printers[0]?.name ?? ''); }, () => undefined); }, []);
+  const [mode, setMode] = useState<'none' | 'thermal' | 'a4'>('thermal'); const [layout, setLayout] = useState('5x20'); const [start, setStart] = useState('1'); const [sheet, setSheet] = useState<string[] | null>(null);
+  useEffect(() => { api<{ style: { showPharmacy: boolean; showPhone: boolean; showPrice: boolean; showExpiry: boolean; mode: 'none' | 'thermal' | 'a4'; a4Layout: string }; printers: { name: string }[] }>('/api/settings/label-style').then(r => { setStyle({ pharmacy: r.style.showPharmacy, phone: r.style.showPhone, price: r.style.showPrice, expiry: r.style.showExpiry }); setMode(r.style.mode); setLayout(r.style.a4Layout); setPrinters(r.printers); setPrinter(r.printers[0]?.name ?? ''); }, () => undefined); }, []);
+  /* A4 sheets: each item's sticker drawn once at the sheet's cell size, repeated by its number, laid out cols × rows per page, printed through Windows */
+  usePrintWhen(!!sheet, () => { sheet?.forEach(u => URL.revokeObjectURL(u)); setSheet(null); }, 400);
+  const printSheets = async (show: Show) => {
+    const cell = sheetOf(layout); const h: Record<string, string> = { 'content-type': 'application/json' }; const d = device.get(); const tk = token.get(); if (d) h['x-device'] = d; if (tk) h.authorization = `Bearer ${tk}`;
+    const imgs: string[] = [];
+    for (const r of rows) {
+      const res = await fetch('/api/print/label-preview', { method: 'POST', headers: h, body: JSON.stringify({ itemId: r.it.id, priceMinor: toMinor(r.price) ?? undefined, expiry: r.expiry || undefined, show, mm: cell.mm, dpmm: 12 }) });
+      if (!res.ok) throw new Error('label'); const u = URL.createObjectURL(await res.blob()); const n = Math.min(1000, Math.max(1, Math.round(Number(r.copies) || 1))); for (let k = 0; k < n; k++) imgs.push(u);
+    }
+    setAsk(null); setSheet(imgs); toast(`${imgs.length} باركود على ورق A4 - اختار الطابعة من شاشة الطباعة`);
+  };
   const add = async (t: TillItem) => {
     try { const r = await api<{ item: LabelItem }>(`/api/print/label-item/${t.id}`); const it = r.item;
       setRows(rs => { const i = rs.findIndex(x => x.it.id === it.id); if (i >= 0) { setSel(i); return rs.map((x, k) => (k === i ? { ...x, copies: String((Number(x.copies) || 0) + 1) } : x)); } setSel(rs.length); return [...rs, { it, copies: '1', expiry: it.batches[0]?.expiry ?? '', price: it.priceMinor == null ? '' : egp(it.priceMinor) }]; });
@@ -81,6 +94,8 @@ export function BarcodePrintScreen() {
   const del = (i: number | null) => { if (i === null) return; setRows(rs => rs.filter((_, k) => k !== i)); setSel(null); };
   const total = rows.reduce((a, r) => a + Math.max(0, Math.round(Number(r.copies) || 0)), 0);
   const doPrint = async (show: Show) => {
+    if (mode === 'none') { toast('طباعة الباركود مقفولة: البيانات العامة ← إعدادات طباعة الباركود'); return; }
+    if (mode === 'a4') { setBusy(true); try { await printSheets(show); } catch { toast('مقدرتش أجهّز ورق الباركود'); } finally { setBusy(false); } return; }
     setBusy(true); try {
       const r = await api<{ printer: string; stickers: number; results: { ok: boolean; error?: string }[] }>('/api/print/labels', { body: { printer: printer || undefined, show, lines: rows.map(x => ({ itemId: x.it.id, copies: Math.max(1, Math.round(Number(x.copies) || 1)), priceMinor: toMinor(x.price) ?? undefined, expiry: x.expiry || undefined })) } });
       const bad = r.results.filter(x => !x.ok); toast(bad.length ? `اتطبع ${r.stickers} باركود - ${bad.length} صنف مطبعش: ${bad[0]?.error ?? ''}` : `اتبعت ${r.stickers} باركود لـ ${r.printer}`); setAsk(null);
@@ -93,7 +108,8 @@ export function BarcodePrintScreen() {
     <h2><Icon n="barcode" />طباعة باركود</h2>
     <div className="bc-top"><div style={{ flex: 1, minWidth: 0 }}><ItemPicker onPick={it => void add(it)} autoFocus /></div>
       {printers.length > 1 && <label className="f">الطابعة<select value={printer} onChange={e => setPrinter(e.target.value)}>{printers.map(p => <option key={p.name}>{p.name}</option>)}</select></label>}</div>
-    {printers.length === 0 && <div className="card warnbox">مفيش طابعة باركود متعرّفة. <button className="linkbtn" onClick={() => go('labelset')}>اظبطها من إعدادات طباعة الباركود</button></div>}
+    {sheet && <div className="print-area sheets-print"><LabelSheets images={sheet} layout={layout} start={Math.max(1, Number(start) || 1)} /></div>}
+    {mode === 'thermal' && printers.length === 0 && <div className="card warnbox">مفيش طابعة باركود متعرّفة. <button className="linkbtn" onClick={() => go('labelset')}>اظبطها من إعدادات طباعة الباركود</button></div>}
     <div className="tablewrap"><table className="bc-grid"><thead><tr><th>كود الصنف</th><th>إسم الصنف</th><th>الوحدة</th><th className="n">الكمية</th><th>تاريخ الصلاحية</th><th className="n">الرصيد</th><th className="n">سعر البيع</th><th aria-label="حذف" /></tr></thead>
       <tbody>{rows.length === 0 ? <tr><td colSpan={8} className="muted" style={{ textAlign: 'center', padding: 24 }}>دوّر على صنف أو امسح الباركود وهو هيتضاف هنا. تقدر تضيف أصناف كتير وتكتب عدد الباركود لكل صنف.</td></tr>
         : rows.map((r, i) => (<tr key={r.it.id} className={sel === i ? 'sel' : undefined} onClick={() => setSel(i)}>
@@ -115,7 +131,8 @@ export function BarcodePrintScreen() {
         <div className="bc-ask-body">
           <div style={{ display: 'grid', gap: 8 }}>
             {([['pharmacy', 'طباعة اسم الصيدلية'], ['phone', 'طباعة التليفون'], ['price', 'طباعة سعر البيع'], ['expiry', 'طباعة تاريخ الصلاحية']] as const).map(([k, l]) => <label key={k} className="chk"><input type="checkbox" checked={ask[k]} onChange={e => setAsk({ ...ask, [k]: e.target.checked })} /> {l}</label>)}
-            <span className="hint" style={{ margin: 0 }}>{total} باركود لـ {rows.length} صنف</span>
+            {mode === 'a4' && <label className="f">ابدأ من استيكر رقم<input type="number" min={1} max={sheetOf(layout).cols * sheetOf(layout).rows} value={start} onChange={e => setStart(e.target.value)} style={{ width: 100 }} /></label>}
+            <span className="hint" style={{ margin: 0 }}>{total} باركود لـ {rows.length} صنف{mode === 'a4' ? ` - ورق A4 ${layout.replace('x', ' x ')}` : ''}</span>
           </div>
           {preview && <img src={preview} alt="شكل الباركود" className="bc-preview" />}
         </div>
@@ -125,23 +142,31 @@ export function BarcodePrintScreen() {
 }
 
 /* ================= إعدادات طباعة الباركود ================= */
-const SIZES: [number, number][] = [[38, 25], [40, 25], [40, 30], [50, 25], [50, 30], [58, 40]];
-type LStyle = { showPharmacy: boolean; pharmacyName: string; showPhone: boolean; phone: string; showPrice: boolean; showExpiry: boolean };
+const SIZES: [number, number][] = [[30, 20], [35, 25], [38, 25], [40, 25], [40, 30], [50, 25], [50, 30], [58, 40], [60, 40]];
+type LStyle = { showPharmacy: boolean; pharmacyName: string; showPhone: boolean; phone: string; showPrice: boolean; showExpiry: boolean; mode: 'none' | 'thermal' | 'a4'; a4Layout: string };
 export function LabelSettingsScreen() {
-  const { toast } = useApp(); const pl = usePrinterList(); const [st, setSt] = useState<LStyle | null>(null); const [org, setOrg] = useState({ name: '', phone: '' }); const [idx, setIdx] = useState(0); const [err, setErr] = useState('');
-  useEffect(() => { api<{ style: LStyle; pharmacy: { name: string; phone: string } }>('/api/settings/label-style').then(r => { setSt(r.style); setOrg(r.pharmacy); }, e => setErr(arabic(e))); }, []);
+  const { toast } = useApp(); const pl = usePrinterList(); const [st, setSt] = useState<LStyle | null>(null); const [org, setOrg] = useState({ name: '', phone: '' }); const [idx, setIdx] = useState(0); const [err, setErr] = useState(''); const [layouts, setLayouts] = useState<string[]>([]);
+  useEffect(() => { api<{ style: LStyle; layouts: string[]; pharmacy: { name: string; phone: string } }>('/api/settings/label-style').then(r => { setSt(r.style); setOrg(r.pharmacy); setLayouts(r.layouts); }, e => setErr(arabic(e))); }, []);
   const labels = (pl.list ?? []).map((p, i) => ({ p, i })).filter(x => x.p.kind === 'label'); const cur = labels[idx] ?? labels[0];
   const setP = (p: PrinterCfg) => pl.setList(l => (l ? l.map((x, i) => (i === cur!.i ? p : x)) : l));
   const addPrinter = () => pl.setList(l => [...(l ?? []), { name: 'الباركود', kind: 'label', labelMm: [38, 25], gapMm: 2, density: 8, speed: 4, offsetX: 0, offsetY: 0, language: 'tspl', transport: { type: 'device' } }]);
-  const preview = usePreview('/api/print/label-preview', st ? { mm: cur?.p.labelMm ?? [38, 25], style: st } : null, !!st);
+  const a4 = st?.mode === 'a4'; const cell = sheetOf(st?.a4Layout ?? '5x20');
+  const preview = usePreview('/api/print/label-preview', st ? { mm: a4 ? cell.mm : cur?.p.labelMm ?? [38, 25], dpmm: a4 ? 12 : 8, style: st } : null, !!st && st.mode !== 'none');
   const save = async () => { setErr(''); try { if (st) await api('/api/settings/label-style', { body: st }); if (pl.list) await pl.save(pl.list); toast('اتحفظت إعدادات طباعة الباركود'); } catch (e) { setErr(arabic(e)); } };
   if (!st || !pl.list) return <p className="muted">{err || 'بيحمّل...'}</p>;
   const p = cur?.p; const mm = p?.labelMm ?? [38, 25]; const preset = SIZES.some(s => s[0] === mm[0] && s[1] === mm[1]) ? `${mm[0]}x${mm[1]}` : 'custom';
   return (<div className="set2">
     <div className="set2-form">
       <h2><Icon n="barcode" />إعدادات طباعة الباركود</h2>
-      <div className="card set-band"><label className="chk"><input type="radio" checked={!!p} onChange={() => { if (!p) addPrinter(); }} /> طباعة على طابعة حراري</label><label className="chk muted"><input type="radio" disabled /> طباعة على ورق A4 (بعدين)</label></div>
-      {!p ? <div className="card"><p>مفيش طابعة باركود.</p><button className="btn primary" onClick={addPrinter}>أضف طابعة الباركود</button></div> : (<>
+      <div className="card set-band" role="radiogroup" aria-label="طريقة طباعة الباركود">
+        <label className="chk"><input type="radio" name="lmode" checked={st.mode === 'none'} onChange={() => setSt({ ...st, mode: 'none' })} /> لا يوجد طباعة باركود</label>
+        <label className="chk"><input type="radio" name="lmode" checked={st.mode === 'thermal'} onChange={() => setSt({ ...st, mode: 'thermal' })} /> طباعة على طابعة حراري</label>
+        <label className="chk"><input type="radio" name="lmode" checked={st.mode === 'a4'} onChange={() => setSt({ ...st, mode: 'a4' })} /> طباعة على ورق A4</label></div>
+      {st.mode === 'a4' && <div className="card formgrid">
+        <label>مقاس الورق (أعمدة × صفوف)<select value={st.a4Layout} onChange={e => setSt({ ...st, a4Layout: e.target.value })}>{layouts.map(l => { const g = sheetOf(l); return <option key={l} value={l}>{l.replace('x', ' x ')} ({g.cols * g.rows} استيكر - {g.mm[0]} × {g.mm[1]} مم)</option>; })}</select></label>
+        <span className="hint">الورق بيتطبع على أي طابعة عادية A4 من شاشة الطباعة بتاعة Windows، وتقدر تبدأ من نص الشيت لو جزء منه اتستعمل.</span>
+      </div>}
+      {st.mode !== 'thermal' ? null : !p ? <div className="card"><p>مفيش طابعة باركود.</p><button className="btn primary" onClick={addPrinter}>أضف طابعة الباركود</button></div> : (<>
         <div className="card formgrid">
           {labels.length > 1 && <label>الطابعة<select value={idx} onChange={e => setIdx(Number(e.target.value))}>{labels.map((x, k) => <option key={x.i} value={k}>{x.p.name}</option>)}</select></label>}
           <label>اسمها في البرنامج<input value={p.name} onChange={e => setP({ ...p, name: e.target.value })} /></label>
@@ -156,30 +181,30 @@ export function LabelSettingsScreen() {
           <label>لغة الطابعة<select value={p.language ?? 'tspl'} onChange={e => setP({ ...p, language: e.target.value as 'tspl' })}><option value="tspl">TSPL (Xprinter وTSC)</option><option value="zpl">ZPL (Zebra)</option></select></label>
           <label className="chk"><input type="checkbox" checked={!!p.invert} onChange={e => setP({ ...p, invert: e.target.checked })} /> الطباعة طالعة معكوسة (أبيض في أسود)</label>
         </div>
-        <div className="card formgrid">
+      </>)}
+      {st.mode !== 'none' && <div className="card formgrid">
           <label className="chk"><input type="checkbox" checked={st.showPharmacy} onChange={e => setSt({ ...st, showPharmacy: e.target.checked })} /> طباعة اسم المؤسسة</label>
           <label>اسم المؤسسة<input value={st.pharmacyName} placeholder={org.name} onChange={e => setSt({ ...st, pharmacyName: e.target.value })} /></label>
           <label className="chk"><input type="checkbox" checked={st.showPhone} onChange={e => setSt({ ...st, showPhone: e.target.checked })} /> طباعة رقم التليفون</label>
           <label>رقم التليفون<input dir="ltr" value={st.phone} placeholder={org.phone} onChange={e => setSt({ ...st, phone: e.target.value })} /></label>
           <label className="chk"><input type="checkbox" checked={st.showPrice} onChange={e => setSt({ ...st, showPrice: e.target.checked })} /> طباعة سعر البيع</label>
           <label className="chk"><input type="checkbox" checked={st.showExpiry} onChange={e => setSt({ ...st, showExpiry: e.target.checked })} /> طباعة تاريخ الصلاحية</label>
-        </div>
-      </>)}
+        </div>}
       {err && <p className="err">{err}</p>}
       <div className="actions"><button className="btn primary" onClick={() => void save()}>حفظ</button></div>
     </div>
-    <div className="set2-preview"><b>شكل الاستيكر</b>{preview ? <img src={preview} alt="شكل الاستيكر" className="lab-prev" /> : <span className="muted">بيجهّز...</span>}<span className="hint">{mm[0]} × {mm[1]} مم - الأبيض حوالين الصورة هو حرف الاستيكر</span></div>
+    <div className="set2-preview"><b>شكل الاستيكر</b>{st.mode === 'none' ? <span className="muted">الباركود مش بيتطبع</span> : preview ? <img src={preview} alt="شكل الاستيكر" className="lab-prev" /> : <span className="muted">بيجهّز...</span>}<span className="hint">{a4 ? `${cell.mm[0]} × ${cell.mm[1]}` : `${mm[0]} × ${mm[1]}`} مم - الأبيض حوالين الصورة هو حرف الاستيكر</span></div>
   </div>);
 }
 
 /* ================= إعدادات طباعة فاتورة البيع ================= */
-type RStyle = { template?: 'table' | 'compact'; header?: string; footer?: string; returnPolicy?: string; showExpiry?: boolean; showBatch?: boolean; printCustomer?: boolean; printSeller?: boolean; askBeforePrint?: boolean; minPrintMinor?: number; copies?: number; sideMarginMm?: number };
+type RStyle = { paper?: 'receipt' | 'a4'; template?: 'table' | 'compact'; header?: string; footer?: string; returnPolicy?: string; showExpiry?: boolean; showBatch?: boolean; printCustomer?: boolean; printSeller?: boolean; askBeforePrint?: boolean; minPrintMinor?: number; copies?: number; sideMarginMm?: number };
 export function ReceiptSettingsScreen() {
   const { toast, go } = useApp(); const pl = usePrinterList(); const [st, setSt] = useState<RStyle | null>(null); const [org, setOrg] = useState<{ name: string; phones: string; taxRegNo: string; commercialRegNo: string } | null>(null); const [idx, setIdx] = useState(0); const [err, setErr] = useState(''); const [min, setMin] = useState('');
   useEffect(() => { api<{ style: RStyle }>('/api/settings/receipt-style').then(r => { setSt(r.style); setMin(r.style.minPrintMinor ? egp(r.style.minPrintMinor) : ''); }, e => setErr(arabic(e))); api<{ name: string; phones: string; taxRegNo: string; commercialRegNo: string }>('/api/settings/pharmacy').then(setOrg, () => undefined); }, []);
   const recs = (pl.list ?? []).map((p, i) => ({ p, i })).filter(x => x.p.kind === 'receipt'); const cur = recs[idx] ?? recs[0];
   const setP = (p: PrinterCfg) => pl.setList(l => (l ? l.map((x, i) => (i === cur!.i ? p : x)) : l));
-  const preview = usePreview('/api/print/receipt-sample', st ? { style: st, width: cur?.p.paperWidthMm === 58 ? 58 : 80 } : null, !!st);
+  const preview = usePreview('/api/print/receipt-sample', st ? { style: st, width: cur?.p.paperWidthMm === 58 ? 58 : 80 } : null, !!st && st.paper !== 'a4');
   const set = (p: Partial<RStyle>) => setSt(s => (s ? { ...s, ...p } : s));
   const save = async () => { setErr(''); try { await api('/api/settings/receipt-style', { body: { ...st, minPrintMinor: min.trim() ? toMinor(min) ?? 0 : 0 } }); if (pl.list) await pl.save(pl.list); toast('اتحفظت إعدادات طباعة فاتورة البيع'); } catch (e) { setErr(arabic(e)); } };
   if (!st || !pl.list) return <p className="muted">{err || 'بيحمّل...'}</p>;
@@ -188,7 +213,9 @@ export function ReceiptSettingsScreen() {
     <div className="set2-form">
       <h2><Icon n="print" />إعدادات طباعة فاتورة البيع</h2>
       <div className="card formgrid">
-        <label>شكل الفاتورة<select value={st.template ?? 'table'} onChange={e => set({ template: e.target.value as 'table' })}><option value="table">جدول (زي eStock)</option><option value="compact">مختصر</option></select></label>
+        <label>نوع الطباعة<select value={st.paper === 'a4' ? 'a4' : cur?.p.paperWidthMm === 58 ? 'r58' : 'r80'} onChange={e => { const v = e.target.value; if (v === 'a4') set({ paper: 'a4' }); else { set({ paper: 'receipt' }); if (cur) setP({ ...cur.p, paperWidthMm: v === 'r58' ? 58 : 80 }); } }}>
+          <option value="r80">ريسيت 80 مم</option><option value="r58">ريسيت 58 مم</option><option value="a4">A4 (طابعة عادية)</option></select></label>
+        {st.paper !== 'a4' && <label>شكل الفاتورة<select value={st.template ?? 'table'} onChange={e => set({ template: e.target.value as 'table' })}><option value="table">جدول (زي eStock)</option><option value="compact">مختصر</option></select></label>}
         <label>مقدمة الفاتورة<input value={st.header ?? ''} onChange={e => set({ header: e.target.value })} placeholder="الصحة خير من الرزق" /></label>
         <label>نهاية الفاتورة<input value={st.footer ?? ''} onChange={e => set({ footer: e.target.value })} placeholder="نتمنى لكم الشفاء العاجل" /></label>
         <label>سياسة الاستبدال والاسترجاع<input value={st.returnPolicy ?? ''} onChange={e => set({ returnPolicy: e.target.value })} placeholder="الاستبدال والاسترجاع خلال 14 يوما ..." /></label>
@@ -204,7 +231,7 @@ export function ReceiptSettingsScreen() {
         <label>عدد النسخ المطبوعة<input type="number" min={1} max={5} value={st.copies ?? 1} onChange={e => set({ copies: Math.min(5, Math.max(1, Number(e.target.value) || 1)) })} /></label>
         <label>هامش الجنب (مم)<input type="number" min={0} max={8} value={st.sideMarginMm ?? 1} onChange={e => set({ sideMarginMm: Math.min(8, Math.max(0, Number(e.target.value) || 0)) })} /></label>
       </div>
-      {p ? <div className="card formgrid">
+      {st.paper === 'a4' ? <p className="hint">فاتورة A4 بتتطبع على أي طابعة عادية: لما تدوس اطبع بتظهر شاشة الطباعة بتاعة Windows تختار منها الطابعة.</p> : p ? <div className="card formgrid">
         {recs.length > 1 && <label>الطابعة<select value={idx} onChange={e => setIdx(Number(e.target.value))}>{recs.map((x, k) => <option key={x.i} value={k}>{x.p.name}</option>)}</select></label>}
         <label>اسمها في البرنامج<input value={p.name} onChange={e => setP({ ...p, name: e.target.value })} /></label>
         <Connection p={p} set={setP} win={pl.win} kind="receipt" />
@@ -214,9 +241,12 @@ export function ReceiptSettingsScreen() {
       {err && <p className="err">{err}</p>}
       <div className="actions"><button className="btn primary" onClick={() => void save()}>حفظ</button></div>
     </div>
-    <div className="set2-preview"><b>شكل الفاتورة</b>{preview ? <img src={preview} alt="شكل الفاتورة" className="rc-prev" /> : <span className="muted">بيجهّز...</span>}<span className="hint">فاتورة تجريبية بالإعدادات اللي قدامك، قبل الحفظ.</span></div>
+    <div className="set2-preview"><b>شكل الفاتورة</b>{st.paper === 'a4' ? <div className="a4-mini"><SaleA4 sale={SAMPLE} pharmacy={{ name: org?.name ?? '', phones: (org?.phones ?? '').split(/\s*[,،]\s*|\s+-\s+/).filter(Boolean), taxRegNo: org?.taxRegNo || undefined, commercialRegNo: org?.commercialRegNo || undefined }} style={st} seller="د. منى" customer="أحمد حبيب" /></div> : preview ? <img src={preview} alt="شكل الفاتورة" className="rc-prev" /> : <span className="muted">بيجهّز...</span>}<span className="hint">فاتورة تجريبية بالإعدادات اللي قدامك، قبل الحفظ.</span></div>
   </div>);
 }
+
+const SAMPLE: A4Sale = { saleNo: 'S-034781', createdAt: new Date().toISOString(), status: 'posted', grossMinor: 5100, discountMinor: 0, deliveryFeeMinor: 0, totalMinor: 5100, changeMinor: 4900, onAccountMinor: 0, payments: [{ method: 'cash', amountMinor: 10000 }],
+  lines: [{ lineNo: 1, itemName: 'بيرو 20 مجم 14 اقراص', reqUnit: 'شريط', reqQty: 1, amountMinor: 2100, unitPriceMinor: 2100 }, { lineNo: 2, itemName: 'زيروفلام ريتارد 60 مجم 20 قرص', reqUnit: 'شريط', reqQty: 1, amountMinor: 1300, unitPriceMinor: 1300 }, { lineNo: 3, itemName: 'افيكونيل 5 مجم 60 قرص', reqUnit: 'علبة', reqQty: 0.25, amountMinor: 1700, unitPriceMinor: 6800 }] };
 
 /* ================= نسخ احتياطية دورية ================= */
 type Sched = { hour: number; keep: number; copyDir: string; lastCopy: { at: string; ok: boolean; error?: string } | null };

@@ -39,13 +39,19 @@ export class PrintService {
   async printReceipt(actor: Person, r: { saleNo: string; printer: string; copy?: 'counter' | 'delivery'; reason?: string }): Promise<PrintResult> {
     const p = this.printer(r.printer, 'receipt'); const sale = this.sales.sale(actor, r.saleNo); const copy = r.copy ?? 'counter';
     if (copy === 'delivery' && !sale.delivery) throw new PrintError('invalid', 'this sale has no delivery');
-    const done = Number(this.db.prepare("SELECT COUNT(*) c FROM print_jobs WHERE kind='receipt' AND status='sent' AND ref=? AND copy_kind=?").get(r.saleNo, copy)!.c); const copyNo = done + 1;
+    const done = Number(this.db.prepare(`SELECT COUNT(*) c FROM print_jobs WHERE kind='receipt' AND status='sent' AND ref=? AND copy_kind IN (?${copy === 'counter' ? ",'a4'" : ''})`).get(r.saleNo, copy)!.c); const copyNo = done + 1;
     if (copyNo > 1 && !r.reason?.trim()) throw new PrintError('invalid', 'a reprint needs a reason');
     const env = this.env(); const shown = env.hideName ? { ...sale, lines: sale.lines.map(l => (env.hideName!(l.itemId) ? { ...l, itemName: 'صنف' } : l)) } : sale; const lines = buildReceipt(shown, { pharmacy: env.pharmacy, style: env.style, cashierName: env.nameOf(sale.createdBy), customerName: sale.customerId ? env.customerNameOf?.(sale.customerId) ?? null : null, copy, copyNo, qrText: env.qrTextOf?.(r.saleNo) ?? null });
     const img = this.raster.receipt(lines, (p.paperWidthMm ?? 80) === 58 ? 384 : 576, { pad: this.pad(p, env.style?.sideMarginMm) }); const cash = sale.payments.some(x => x.method === 'cash' && x.amountMinor > 0);
     const drawer = copyNo === 1 && copy === 'counter' && (p.drawerOnCash ?? true) && cash && sale.status === 'posted'; const n = copyNo === 1 ? Math.min(5, Math.max(1, Math.round(env.style?.copies ?? 1))) : 1; const bytes = Buffer.concat([receiptBytes(img, { drawer }), ...Array.from({ length: n - 1 }, () => receiptBytes(img, { drawer: false }))]); const error = await this.deliver(p, bytes);
     const jobId = this.log(actor, { kind: 'receipt', ref: r.saleNo, copyKind: copy, copyNo, printer: r.printer, ok: !error, error: error ?? undefined, drawer, bytes: bytes.length, reason: r.reason?.trim() });
     return error ? { ok: false, jobId, error, bytes: bytes.length } : { ok: true, jobId, copyNo, drawer, bytes: bytes.length };
+  }
+  /** A sale invoice printed on A4 by the screen (the Windows print dialog, Sprint 7.12): counted and logged like a receipt, so a second print is a marked copy with a reason. Nothing is sent to a printer from here. */
+  recordA4(actor: Person, r: { saleNo: string; reason?: string }): PrintResult {
+    const sale = this.sales.sale(actor, r.saleNo); const done = Number(this.db.prepare("SELECT COUNT(*) c FROM print_jobs WHERE kind='receipt' AND status='sent' AND ref=? AND copy_kind IN ('counter','a4')").get(r.saleNo)!.c); const copyNo = done + 1;
+    if (copyNo > 1 && !r.reason?.trim()) throw new PrintError('invalid', 'a reprint needs a reason');
+    const jobId = this.log(actor, { kind: 'receipt', ref: sale.saleNo, copyKind: 'a4', copyNo, printer: 'A4', ok: true, bytes: 0, reason: r.reason?.trim() }); return { ok: true, jobId, copyNo, bytes: 0 };
   }
   /** Print the drawer-closing report of a session (needs the closing service). The first print is the original; later ones are copies and need a reason. */
   async printSessionReport(actor: Person, r: { sessionId: string; printer: string; reason?: string }): Promise<PrintResult> {

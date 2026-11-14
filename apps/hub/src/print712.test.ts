@@ -72,4 +72,19 @@ describe('Sprint 7.12 printing', () => {
     expect(p.claim).toMatchObject({ saleRef: r.sale.saleNo, coveragePercent: 80 }); expect(p.member.memberNo).toBe('M-1001'); expect(p.contract.name).toBeTruthy(); expect(p.lines).toHaveLength(1); expect(p.pharmacy.name).toBe('صيدلية د. ياسمين'); expect(p.pharmacy.phones).toEqual(['01515319449', '39785150']);
     expect((await s.call('GET', '/api/claims/paper?ref=NOPE', s.O)).status).toBe(404);
   });
+  it('sizes: the barcode is off, on a thermal roll, or on A4 sheets (columns × rows); the sale invoice is a receipt or A4, and an A4 print is counted like a receipt', async () => {
+    const s = await prep();
+    expect((await s.call('POST', '/api/settings/label-style', s.O, { mode: 'a4', a4Layout: '6x24' })).body.style).toMatchObject({ mode: 'a4', a4Layout: '6x24' });
+    expect((await s.call('POST', '/api/settings/label-style', s.O, { a4Layout: '9x9' })).body.error).toBe('invalid');
+    const ls = (await s.call('GET', '/api/settings/label-style', s.O)).body; expect(ls.layouts).toEqual(expect.arrayContaining(['6x24', '5x20', '6x19', '7x12', '6x17']));
+    expect((await s.call('POST', '/api/print/label-preview', s.O, { mm: [33.6, 12], dpmm: 12 })).type).toBe('image/png');
+    expect((await s.call('POST', '/api/settings/receipt-style', s.O, { paper: 'a4' })).body.style.paper).toBe('a4');
+    await s.call('POST', '/api/pos/session/open', s.O, { key: key(), openingFloatMinor: 0 }); const sess = (await s.call('GET', '/api/pos/session', s.O)).body.session; const it = s.app.items.search('اموكسيسيلين 500', { limit: 1 })[0]!;
+    const sale = (await s.call('POST', '/api/pos/sales', s.O, { key: key(), sessionId: sess.id, lines: [{ itemId: it.id, qty: 1, unitName: 'علبة' }], cashMinor: 100000 })).body;
+    const a = (await s.call('POST', '/api/print/receipt-a4', s.O, { saleNo: sale.saleNo })).body; expect(a).toMatchObject({ ok: true, copyNo: 1, seller: 'المالك' }); expect(a.sale.saleNo).toBe(sale.saleNo); expect(a.pharmacy.name).toBe('صيدلية د. ياسمين');
+    expect((await s.call('POST', '/api/print/receipt-a4', s.O, { saleNo: sale.saleNo })).body.error).toBe('invalid');
+    expect((await s.call('POST', '/api/print/receipt-a4', s.O, { saleNo: sale.saleNo, reason: 'العميل طلب نسخة' })).body.copyNo).toBe(2);
+    // a receipt after the A4 prints is a copy too
+    expect((await s.call('POST', '/api/print/receipt', s.O, { saleNo: sale.saleNo, printer: 'كاشير' })).body.error).toBe('invalid');
+  });
 });

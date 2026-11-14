@@ -3,7 +3,7 @@ import { can, type Person } from '@o-pharmacy/core';
 import type { PaymentInput, SaleLineInput } from '@o-pharmacy/pos';
 import type { App } from './compose';
 import { AccessError } from './access';
-import { mergeReceiptStyle, printers, printService, receiptPng, receiptStyle, savePrinters } from './printing';
+import { mergeReceiptStyle, pharmacyInfo, printers, printService, receiptPng, receiptStyle, savePrinters } from './printing';
 import { autoShortage } from './auto-shortage';
 
 type B = Record<string, unknown>;
@@ -80,12 +80,18 @@ export function posRoutes(s: FastifyInstance, app: App): void {
   s.post('/api/pos/day/close', async (q) => { const b = body(q); return app.closing.closeDay(me(q), { key: key(b), date: String(b.date ?? ''), note: b.note ? String(b.note) : undefined }); });
 
   // ---------- printing ----------
-  s.get('/api/print/printers', async () => ({ printers: printers(app).map(p => ({ name: p.name, kind: p.kind, paperWidthMm: p.paperWidthMm, type: p.transport.type })), style: receiptStyle(app) }));
+  s.get('/api/print/printers', async () => ({ printers: printers(app).map(p => ({ name: p.name, kind: p.kind, paperWidthMm: p.paperWidthMm, type: p.transport.type })), style: receiptStyle(app), pharmacy: pharmacyInfo(app) }));
   s.get('/api/settings/printers', async (q) => { if (!can(me(q), 'settings.branch', app.hub.branchId)) throw new AccessError('forbidden', 'missing permission settings.branch'); return { printers: printers(app), style: receiptStyle(app), phones: app.access.setting('pharmacy.phones') ?? '' }; });
   s.post('/api/settings/printers', async (q) => { const p = me(q); if (!can(p, 'settings.branch', app.hub.branchId)) throw new AccessError('forbidden', 'missing permission settings.branch'); const b = body(q); const list = savePrinters(app, p, b.printers);
     if (b.style && typeof b.style === 'object') app.access.setSetting('receipt.style', JSON.stringify(mergeReceiptStyle(receiptStyle(app), b.style as B)), p.id); // only the keys sent change
     if (typeof b.phones === 'string') app.access.setSetting('pharmacy.phones', b.phones.slice(0, 100), p.id); return { printers: list }; });
   s.post('/api/print/receipt', async (q) => { const b = body(q); return printService(app, q.deviceId).printReceipt(forOwnSale(me(q), String(b.saleNo ?? '')), { saleNo: String(b.saleNo ?? ''), printer: String(b.printer ?? ''), copy: b.copy === 'delivery' ? 'delivery' : 'counter', reason: b.reason ? String(b.reason) : undefined }); });
+  /* a sale invoice on A4 (نوع الطباعة A4, Sprint 7.12): the screen prints it through Windows; the Hub counts it like a receipt (a second print is a copy with a reason) */
+  s.post('/api/print/receipt-a4', async (q) => {
+    const b = body(q); const no = String(b.saleNo ?? ''); const p = forOwnSale(me(q), no); const r = printService(app, q.deviceId).recordA4(p, { saleNo: no, reason: b.reason ? String(b.reason) : undefined }); const sale = app.sales.sale(p, no);
+    const seller = String(app.hub.db.prepare('SELECT display_name n FROM people WHERE id=?').get(sale.createdBy)?.n ?? ''); const customer = sale.customerId ? String(app.hub.db.prepare('SELECT name n FROM customers WHERE id=?').get(sale.customerId)?.n ?? '') : null;
+    return { ...r, sale, seller, customer, pharmacy: pharmacyInfo(app), style: receiptStyle(app) };
+  });
   s.post('/api/print/session-report', async (q) => { const b = body(q); return printService(app, q.deviceId).printSessionReport(me(q), { sessionId: String(b.sessionId ?? ''), printer: String(b.printer ?? ''), reason: b.reason ? String(b.reason) : undefined }); });
   s.post('/api/print/drawer', async (q) => { const b = body(q); return printService(app, q.deviceId).openDrawer(me(q), { printer: String(b.printer ?? ''), reason: String(b.reason ?? '') }); });
   s.get('/api/print/preview/:no', async (q, rep) => { const w = (q.query as B).w === '58' ? 58 : 80; rep.header('Content-Type', 'image/png'); return rep.send(receiptPng(app, forOwnSale(me(q), param(q, 'no')), param(q, 'no'), w)); });
