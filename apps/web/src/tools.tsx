@@ -8,12 +8,11 @@ type Tool = { id: string; label: string; icon: string; kbd?: string; perms: stri
 
 export function ToolBar({ can, go, toast, onLock, hidden }: { can: (k: string) => boolean; go: (screen: string, cmd?: RibbonCmd) => void; toast: (m: string) => void; onLock: () => void; hidden?: boolean }) {
   const [calc, setCalc] = useState(false);
-  const cmd = (id: string, label: string, icon: string, o: Partial<RibbonCmd> = {}): RibbonCmd => ({ id, label, icon, key: '', screen: id, ...o });
   const backup = async () => { try { await api('/api/system/backup', { body: {} }); toast('اتعملت نسخة احتياطية'); } catch (e) { toast(arabic(e)); } };
   const tools: (Tool | 'sep')[] = [
     { id: 'items', label: 'بحث سريع عن صنف', icon: 'search', kbd: 'F3', perms: ['item.view'], run: () => go('items') },
     { id: 'sale', label: 'فاتورة بيع جديدة', icon: 'cart', perms: ['sale.create'], run: () => go('sale') },
-    { id: 'barcodes', label: 'طباعة باركود', icon: 'barcode', perms: ['item.view'], run: () => go('barcodes', cmd('barcodes', 'طباعة باركود', 'barcode', { sprint: '7.12' })) },
+    { id: 'barcodes', label: 'طباعة باركود', icon: 'barcode', perms: ['item.view'], run: () => go('barcodes') },
     { id: 'drawer', label: 'فتح الدرج', icon: 'wallet', perms: ['sale.void'], run: () => go('drawer') },
     { id: 'calc', label: 'آلة حاسبة', icon: 'calc', perms: [], run: () => setCalc(c => !c) },
     'sep',

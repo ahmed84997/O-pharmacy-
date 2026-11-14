@@ -7,14 +7,13 @@ type LocalPrinters = { printers: string[]; receipt: string; label: string; mode:
 type Desk = { localPrinters?: () => Promise<LocalPrinters | null>; setLocalPrinters?: (v: { receipt: string; label: string }) => Promise<boolean> };
 const desk = (): Desk | undefined => (window as unknown as { oDesktop?: Desk }).oDesktop;
 type P = { name: string; kind: 'receipt' | 'label'; paperWidthMm?: 58 | 80; drawerOnCash?: boolean; transport: T };
-type Style = { header?: string; footer?: string; returnPolicy?: string; showExpiry?: boolean; showBatch?: boolean };
 
 /** Printers and the receipt text. A printer installed in Windows prints raw (ESC/POS) through the spooler; a network printer on port 9100; "preview" only shows the receipt on screen. */
 export default function Printers() {
-  const { toast } = useApp(); const [list, setList] = useState<P[]>([]); const [style, setStyle] = useState<Style>({}); const [phones, setPhones] = useState(''); const [err, setErr] = useState('');
-  useEffect(() => { api<{ printers: P[]; style: Style; phones: string }>('/api/settings/printers').then(r => { setList(r.printers); setStyle(r.style); setPhones(r.phones); }, e => setErr(arabic(e))); }, []);
+  const { toast } = useApp(); const [list, setList] = useState<P[]>([]); const [err, setErr] = useState('');
+  useEffect(() => { api<{ printers: P[] }>('/api/settings/printers').then(r => { setList(r.printers); }, e => setErr(arabic(e))); }, []);
   const upd = (i: number, p: Partial<P>) => setList(list.map((x, k) => (k === i ? { ...x, ...p } : x)));
-  const save = async () => { setErr(''); try { await api('/api/settings/printers', { body: { printers: list, style, phones } }); toast('اتحفظت الطابعات وشكل الوصل'); } catch (e) { setErr(arabic(e)); } };
+  const save = async () => { setErr(''); try { await api('/api/settings/printers', { body: { printers: list } }); toast('اتحفظت الطابعات وشكل الوصل'); } catch (e) { setErr(arabic(e)); } };
   return (<div className="card" style={{ display: 'grid', gap: 10 }}>
     <b>الطابعات وشكل الوصل</b>
     {list.map((p, i) => <div key={i} className="formgrid" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 10 }}>
@@ -29,8 +28,7 @@ export default function Printers() {
       <button className="btn ghost" onClick={() => setList(list.filter((_, k) => k !== i))}>شيل</button>
     </div>)}
     <div><button className="btn" onClick={() => setList([...list, { name: list.length ? `طابعة ${list.length + 1}` : 'الكاشير', kind: 'receipt', paperWidthMm: 80, drawerOnCash: true, transport: { type: 'device' } }])}>طابعة جديدة</button></div>
-    <div className="formgrid"><label>تليفونات الصيدلية على الوصل (بفاصلة)<input dir="ltr" value={phones} onChange={e => setPhones(e.target.value)} /></label><label>سطر فوق<input value={style.header ?? ''} onChange={e => setStyle({ ...style, header: e.target.value })} /></label><label>سطر تحت<input value={style.footer ?? ''} onChange={e => setStyle({ ...style, footer: e.target.value })} /></label><label>سياسة المرتجع<input value={style.returnPolicy ?? ''} onChange={e => setStyle({ ...style, returnPolicy: e.target.value })} /></label>
-      <label className="chk"><input type="checkbox" checked={style.showExpiry !== false} onChange={e => setStyle({ ...style, showExpiry: e.target.checked })} /> اطبع الصلاحية</label><label className="chk"><input type="checkbox" checked={style.showBatch === true} onChange={e => setStyle({ ...style, showBatch: e.target.checked })} /> اطبع رقم التشغيلة</label></div>
+    <p className="hint">شكل الفاتورة (المقدمة والنهاية والنسخ والصلاحية): البيانات العامة ← إعدادات طباعة فاتورة البيع. مقاس الاستيكر وما يتطبع عليه: البيانات العامة ← إعدادات طباعة الباركود. التليفونات: بيانات المؤسسة.</p>
     {err && <p className="err">{err}</p>}<div><button className="btn primary" onClick={() => void save()}>حفظ</button></div>
     <ThisDevice />
   </div>);

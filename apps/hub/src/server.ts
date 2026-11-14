@@ -8,13 +8,14 @@ import { ribbonFor } from './ribbon';
 import { seedTestData } from './seed';
 import { posRoutes } from './pos-api';
 import { invRoutes } from './inv-api';
+import { printRoutes } from './print-api';
 import { opsRoutes } from './ops-api';
 import { accRoutes } from './acc-api';
 import { glanceRoutes } from './glance-api';
 import { SystemService } from './system';
 import { relayOf } from './printing';
 
-export const VERSION = '0.7.13';
+export const VERSION = '0.7.14';
 export interface ServerOptions { webDir?: string; staffSecret?: string; logger?: boolean; system?: SystemService }
 /** The pharmacy's data fields: request field, setting key, longest length. */
 const ORG_FIELDS: [string, string, number][] = [['name', 'pharmacy.name', 80], ['phones', 'pharmacy.phones', 80], ['address', 'pharmacy.address', 160], ['supportPhone', 'pharmacy.support_phone', 40], ['taxRegNo', 'pharmacy.tax_reg_no', 40], ['commercialRegNo', 'pharmacy.commercial_reg_no', 40]];
@@ -58,6 +59,8 @@ export function buildServer(app: App, o: ServerOptions = {}): FastifyInstance {
     s.addHook('preHandler', async (q) => { if (q.method !== 'GET' && sys.readOnly() && !/^\/api\/(system\/licence|logout|me\/secret|reports\/[^/]+\/(run|export))/.test(q.url)) throw new AccessError('state', 'the licence has ended: the program is read-only until it is renewed'); });
     s.get('/api/system/info', async (q) => { const p = me(q); const l = sys.licence(); const admin = can(p, 'settings.security', app.hub.branchId); return { version: VERSION, branchId: app.hub.branchId, testMode: app.testMode, tenantId: admin ? sys.tenantId() : null, licence: { state: l.state, configured: l.configured, required: l.required, reason: l.reason ?? null, edition: l.payload?.edition ?? null, expiresAt: l.payload?.expiresAt ?? null, daysLeft: l.daysLeft ?? null }, addresses: sys.addresses(), backups: admin ? sys.backups().slice(0, 30) : [], lastBackup: app.access.setting('backup.last'), db: admin ? sys.dbSize() : null }; });
     s.post('/api/system/backup', async (q) => { need(me(q), 'settings.security'); const r = sys.backup('manual', me(q).id); return { name: r.file.split(/[\\/]/).pop(), bytes: r.bytes }; });
+    s.get('/api/system/backup-schedule', async (q) => { need(me(q), 'settings.security'); return { schedule: sys.schedule(), backupDir: sys.backupDir }; });
+    s.post('/api/system/backup-schedule', async (q) => ({ schedule: sys.setSchedule(me(q), (q.body ?? {}) as B) }));
     s.post('/api/system/licence', async (q) => sys.activate(me(q), String(((q.body ?? {}) as B).token ?? '')));
     s.post('/api/logout', async (q) => { app.access.logout(String(q.headers.authorization ?? '').replace(/^Bearer /, '')); return { ok: true }; });
     s.get('/api/me', async (q) => { const p = me(q); const v = app.access.view1(p.id); const perms = new Set(app.access.permissions(p.id)); return { person: { id: v.id, username: v.username, displayName: v.displayName, roles: v.roles, roleNames: v.roles.map(r => ROLE_NAMES[r]), mustChangeSecret: v.mustChangeSecret }, permissions: [...perms], ribbon: ribbonFor(perms), pharmacyName: app.access.setting('pharmacy.name'), branchId: app.hub.branchId, version: VERSION, testMode: app.testMode }; });
@@ -103,6 +106,7 @@ export function buildServer(app: App, o: ServerOptions = {}): FastifyInstance {
     });
     posRoutes(s, app);
     invRoutes(s, app);
+    printRoutes(s, app);
     opsRoutes(s, app);
     accRoutes(s, app);
     glanceRoutes(s, app);

@@ -3,8 +3,10 @@ import type { ClosingService, SaleService } from '@o-pharmacy/pos';
 export type SaleView = ReturnType<SaleService['sale']>;
 export type Digits = 'western' | 'arabic';
 /** Everything a pharmacy can change about its receipt (becomes settings later; nothing is hardcoded here). */
-export interface ReceiptStyle { header?: string; footer?: string; returnPolicy?: string; digits?: Digits; showExpiry?: boolean; showBatch?: boolean; showUnitPrice?: boolean; reserveQr?: boolean; timeZone?: string }
-export interface PharmacyInfo { name: string; branch?: string; phones?: string[] }
+export interface ReceiptStyle { header?: string; footer?: string; returnPolicy?: string; digits?: Digits; showExpiry?: boolean; showBatch?: boolean; showUnitPrice?: boolean; reserveQr?: boolean; timeZone?: string;
+  /** Sprint 7.12 ("إعدادات طباعة فاتورة البيع"): "table" = bordered table like eStock (default), "compact" = the earlier lines */
+  template?: 'table' | 'compact'; printCustomer?: boolean; printSeller?: boolean; copies?: number; askBeforePrint?: boolean; minPrintMinor?: number; sideMarginMm?: number }
+export interface PharmacyInfo { name: string; branch?: string; phones?: string[]; address?: string; taxRegNo?: string; commercialRegNo?: string }
 export interface ReceiptContext { pharmacy: PharmacyInfo; style?: ReceiptStyle; cashierName: string; customerName?: string | null; /** 'delivery' is the copy that goes with the order: only it carries the customer's phone and address. */ copy?: 'counter' | 'delivery'; /** 1 = the original; more = a reprint, marked as a copy. */ copyNo?: number; /** The ETA e-receipt link to print as a QR (the Hub's ETA queue provides it). */ qrText?: string | null }
 
 export type ReceiptLine =
@@ -12,7 +14,11 @@ export type ReceiptLine =
   | { cols: string[]; widths?: number[]; size?: number; bold?: boolean }
   | { rule: true }
   | { barcode: string }
-  | { qr: true; text?: string };
+  | { qr: true; text?: string }
+  /** a bordered table (Sprint 7.12, like the eStock receipt): the first column is right-aligned and wraps, the others are centred */
+  | { table: { widths: number[]; head?: string[]; rows: string[][]; size?: number } }
+  /** bordered label/value boxes (the totals) */
+  | { boxes: { label: string; value: string; bold?: boolean; size?: number }[] };
 
 const AR = '٠١٢٣٤٥٦٧٨٩';
 export const money = (minor: number, digits: Digits = 'western'): string => num((minor / 100).toFixed(2), digits);
@@ -25,6 +31,7 @@ export function dateText(iso: string, tz = 'Africa/Cairo'): string {
 
 /** The lines of a receipt. Same structure as the receipt the pharmacy prints today (boxed table with item, unit, quantity, line total; totals; invoice barcode; policy) with the fixes found in the analysis: the discount is its own row, the unpaid amount has a clear label, delivery details print by themselves, counter copies never carry a phone or address. */
 export function buildReceipt(sale: SaleView, ctx: ReceiptContext): ReceiptLine[] {
+  if ((ctx.style?.template ?? 'table') === 'table') return buildTableReceipt(sale, ctx);
   const st = ctx.style ?? {}; const dg = st.digits ?? 'western'; const n = (v: string | number) => num(v, dg); const m = (v: number) => money(v, dg); const L: ReceiptLine[] = [];
   const copyNo = ctx.copyNo ?? 1; const delivery = (ctx.copy ?? 'counter') === 'delivery' && sale.delivery;
   if (copyNo > 1) L.push({ t: `نسخة مكررة رقم ${n(copyNo)} - ليست أصلًا`, size: 24, bold: true, align: 'center' });
@@ -51,8 +58,8 @@ export function buildReceipt(sale: SaleView, ctx: ReceiptContext): ReceiptLine[]
     if (first.itemName.length > 20) { L.push({ t: first.itemName, size: 24, align: 'right' }); L.push({ cols: ['', first.reqUnit, n(first.reqQty), m(total)], size: 24, widths }); }
     else L.push({ cols: [first.itemName, first.reqUnit, n(first.reqQty), m(total)], size: 24, widths });
     const extra: string[] = []; if (st.showUnitPrice) extra.push('سعر الوحدة ' + [...new Set(picks.map(p => m(p.unitPriceMinor)))].join(' / '));
-    if (st.showExpiry) { const e = picks.filter(p => p.expiry).map(p => n(p.expiry!)); if (e.length) extra.push('صلاحية ' + e.join(' / ')); }
-    if (st.showBatch) { const b = picks.filter(p => p.lot).map(p => n(p.lot!)); if (b.length) extra.push('تشغيلة ' + b.join(' / ')); }
+    if (st.showExpiry) { const e = [...new Set(picks.map(p => expiryText(p.expiry)).filter(Boolean))]; if (e.length) extra.push('صلاحية ' + e.map(x => n(x)).join(' / ')); }
+    if (st.showBatch) { const b = [...new Set(picks.map(p => realLot(p.lot)).filter(Boolean) as string[])]; if (b.length) extra.push('تشغيلة ' + b.map(x => n(x)).join(' / ')); }
     if (extra.length) L.push({ t: extra.join(' - '), size: 18, align: 'right' });
   }
   L.push({ rule: true });
@@ -70,6 +77,61 @@ export function buildReceipt(sale: SaleView, ctx: ReceiptContext): ReceiptLine[]
   L.push({ rule: true }); L.push({ barcode: sale.saleNo });
   if (ctx.qrText) L.push({ qr: true, text: ctx.qrText }); else if (st.reserveQr) L.push({ qr: true });
   if (st.footer) L.push({ t: st.footer, size: 24, align: 'center' });
+  if (st.returnPolicy) L.push({ t: st.returnPolicy, size: 18, align: 'center' });
+  return L;
+}
+
+/** MM/YYYY from an ISO date (the pack's style); empty for "no expiry". */
+export const expiryText = (iso: string | null | undefined): string => (!iso || iso.startsWith('9999') ? '' : `${iso.slice(5, 7)}/${iso.slice(0, 4)}`);
+/** A lot the program made by itself for a line with no lot (PI-xxxxxx-n, D38) is not printed. */
+const realLot = (lot: string | null | undefined) => (lot && !/^PI-\d+-\d+$/.test(lot) ? lot : null);
+
+/** The receipt as a bordered table, like the eStock receipt the pharmacy knows (owner's photos, 14 Nov 2026): the line above, the name, the phones; customer, number, seller; the items table; the totals in boxes; the date; the invoice barcode; the closing text. */
+function buildTableReceipt(sale: SaleView, ctx: ReceiptContext): ReceiptLine[] {
+  const st = ctx.style ?? {}; const dg = st.digits ?? 'western'; const n = (v: string | number) => num(v, dg); const m = (v: number) => money(v, dg); const L: ReceiptLine[] = [];
+  const copyNo = ctx.copyNo ?? 1; const delivery = (ctx.copy ?? 'counter') === 'delivery' && sale.delivery; const ph = ctx.pharmacy;
+  if (copyNo > 1) L.push({ t: `نسخة مكررة رقم ${n(copyNo)} - ليست أصلًا`, size: 24, bold: true, align: 'center' });
+  if (sale.status === 'void') L.push({ t: 'فاتورة ملغاة', size: 30, bold: true, align: 'center' });
+  if (st.header) L.push({ t: st.header, size: 22, bold: true, align: 'center' });
+  L.push({ t: ph.name, size: 34, bold: true, align: 'center' });
+  if (ph.phones?.length) L.push({ t: 'ت/ ' + ph.phones.map(p => n(p)).join(' - '), size: 24, align: 'center' });
+  if (ph.address) L.push({ t: ph.address, size: 20, align: 'center' });
+  const regs = [ph.taxRegNo ? `س.ض ${n(ph.taxRegNo)}` : '', ph.commercialRegNo ? `س.ت ${n(ph.commercialRegNo)}` : ''].filter(Boolean); if (regs.length) L.push({ t: regs.join(' - '), size: 18, align: 'center' });
+  L.push({ t: ' ', size: 8 });
+  if (st.printCustomer !== false && ctx.customerName) L.push({ t: `اسم العميل / ${ctx.customerName}`, size: 22, align: 'right' });
+  L.push({ t: `رقم الفاتورة : ${n(sale.saleNo)}`, size: 22, align: 'right' });
+  if (st.printSeller !== false) L.push({ t: `البائع / ${ctx.cashierName}`, size: 22, align: 'right' });
+  const type = sale.delivery ? 'توصيل' : sale.onAccountMinor > 0 ? 'بيع آجل' : null; if (type) L.push({ t: type, size: 22, bold: true, align: 'right' });
+  if (delivery && sale.delivery) {
+    L.push({ t: `الاسم: ${sale.delivery.name}`, size: 22, align: 'right' }); L.push({ t: `الهاتف: ${n(sale.delivery.phone)}`, size: 22, align: 'right' }); L.push({ t: `العنوان: ${sale.delivery.address}`, size: 22, align: 'right' });
+    if (sale.delivery.agent) L.push({ t: `مندوب التوصيل: ${sale.delivery.agent}`, size: 22, align: 'right' });
+  }
+  const byLine = new Map<number, SaleView['lines']>(); for (const l of sale.lines) byLine.set(l.lineNo, [...(byLine.get(l.lineNo) ?? []), l]);
+  const rows: string[][] = []; let pieces = 0;
+  for (const picks of byLine.values()) {
+    const first = picks[0]!; const total = picks.reduce((s, p) => s + p.amountMinor, 0); pieces += first.reqQty;
+    const extra: string[] = []; if (st.showUnitPrice) extra.push('سعر ' + [...new Set(picks.map(p => m(p.unitPriceMinor)))].join(' / '));
+    if (st.showExpiry) { const e = [...new Set(picks.map(p => expiryText(p.expiry)).filter(Boolean))]; if (e.length) extra.push('صلاحية ' + e.map(x => n(x)).join(' / ')); }
+    if (st.showBatch) { const b = [...new Set(picks.map(p => realLot(p.lot)).filter(Boolean) as string[])]; if (b.length) extra.push('تشغيلة ' + b.map(x => n(x)).join(' / ')); }
+    rows.push([first.itemName + (extra.length ? `\n${extra.join(' - ')}` : ''), first.reqUnit, n(first.reqQty), m(total)]);
+  }
+  L.push({ table: { widths: [0.44, 0.16, 0.14, 0.26], head: ['اسم الصنف', 'الوحدة', 'الكمية', 'اجمالي السعر'], rows, size: 21 } });
+  const cash = sale.payments.filter(p => p.method === 'cash').reduce((s, p) => s + p.amountMinor, 0), card = sale.payments.filter(p => p.method === 'card').reduce((s, p) => s + p.amountMinor, 0), cod = sale.payments.filter(p => p.method === 'cod').reduce((s, p) => s + p.amountMinor, 0);
+  const bx: { label: string; value: string; bold?: boolean; size?: number }[] = [{ label: 'عدد القطع', value: n(String(Math.round(pieces * 100) / 100)) }, { label: 'الاجمالي', value: m(sale.grossMinor) }];
+  if (sale.discountMinor > 0) bx.push({ label: 'الخصم', value: '-' + m(sale.discountMinor) });
+  if (sale.deliveryFeeMinor > 0) bx.push({ label: 'خدمة التوصيل', value: m(sale.deliveryFeeMinor) });
+  if (sale.swapCreditMinor > 0) bx.push({ label: 'رصيد استبدال', value: '-' + m(sale.swapCreditMinor) });
+  bx.push({ label: 'المطلوب', value: m(sale.totalMinor), bold: true, size: 30 });
+  if (card > 0) bx.push({ label: 'مدفوع بالبطاقة', value: m(card) }); if (cash > 0 && (card > 0 || sale.changeMinor > 0)) bx.push({ label: 'مدفوع نقدًا', value: m(cash) });
+  if (sale.changeMinor > 0) bx.push({ label: 'الباقي للعميل', value: m(sale.changeMinor) });
+  if (cod > 0) bx.push({ label: 'باقي على العميل عند التسليم', value: m(cod), bold: true });
+  if (sale.onAccountMinor > 0) bx.push({ label: 'آجل على حساب العميل', value: m(sale.onAccountMinor), bold: true });
+  if (sale.returnedMinor > 0) bx.push({ label: 'مرتجع على هذه الفاتورة', value: m(sale.returnedMinor) });
+  L.push({ boxes: bx });
+  L.push({ cols: ['تاريخ الفاتورة', n(dateText(sale.createdAt, st.timeZone))], size: 20 });
+  L.push({ rule: true }); L.push({ barcode: sale.saleNo });
+  if (ctx.qrText) L.push({ qr: true, text: ctx.qrText }); else if (st.reserveQr) L.push({ qr: true });
+  if (st.footer) L.push({ t: st.footer, size: 22, bold: true, align: 'center' });
   if (st.returnPolicy) L.push({ t: st.returnPolicy, size: 18, align: 'center' });
   return L;
 }
