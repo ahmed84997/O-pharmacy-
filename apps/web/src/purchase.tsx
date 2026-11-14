@@ -6,6 +6,7 @@ import { api, arabic } from './api';
 import { int, invErr, NewItem, type InvItem, type Supplier } from './inv';
 import { qtyText } from './pos';
 import { dmyHm, egp, Icon, money, newKey, toMinor, useApp } from './ui';
+import { useFrame } from './frames';
 
 type Unit = { name: string; factor: number };
 type Hint = { id: string; code: string; nameAr: string; kind: string; status: string; units: Unit[]; listPriceMinor: number | null; stockBase: number; barcode: string | null; card?: { defaultPriceMinor: number | null; defaultCostMinor: number | null; defaultDiscountBp: number; taxBp: number; hasExpiry: boolean }; last: { priceUnit: string; publicPriceMinor: number | null; costMinor: number | null; discountBp: number } | null };
@@ -39,7 +40,7 @@ function calc(l: Line) {
 }
 
 export function PurchaseInvoiceScreen() {
-  const { can, toast, ask, go } = useApp();
+  const frame = useFrame(); const { can, toast, ask, go } = useApp();
   const [sups, setSups] = useState<Supplier[]>([]); const [supId, setSupId] = useState(''); const [supCode, setSupCode] = useState(''); const [ref, setRef] = useState('');
   const [lines, setLines] = useState<Line[]>([]); const [sel, setSel] = useState<number | null>(null); const [draft, setDraft] = useState<{ id: string; no: string } | null>(null); const [po, setPo] = useState<{ id: string; no: string } | null>(null);
   const [err, setErr] = useState(''); const [warn, setWarn] = useState<string[]>([]); const [busy, setBusy] = useState(false);
@@ -113,6 +114,7 @@ export function PurchaseInvoiceScreen() {
   ];
   const visible = actions.filter(a => a.show !== false);
   useEffect(() => {
+    if (!frame.active) return;
     const k = (e: KeyboardEvent) => {
       if (restore || adding || view) return; const inField = (e.target as HTMLElement)?.closest?.('input, select, textarea');
       if (e.key === 'F9') { e.preventDefault(); void save(); } else if (e.key === 'F4') { e.preventDefault(); void hold(); } else if (e.key === 'F6') { e.preventDefault(); setRestore(true); }
@@ -120,7 +122,7 @@ export function PurchaseInvoiceScreen() {
       else if (e.key === 'Escape') setMenu(null);
     };
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
-  }, [save, hold, sel, restore, adding, view]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [save, hold, sel, restore, adding, view, frame.active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (adding) return <div className="pi-new"><NewItem done={id => { setAdding(false); if (id) void add(id); }} /></div>;
   return (

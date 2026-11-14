@@ -31,10 +31,11 @@ const PLACES: Place[] = [
   { id: 'side-session', screen: 'session', label: 'الدرج', icon: 'wallet', perms: ['cashier_session.open'] },
 ];
 
-export function SideBar({ can, current, glance, narrow, setNarrow, go }: { can: (k: string) => boolean; current: string; glance: Glance | null; narrow: boolean; setNarrow: (v: boolean) => void; go: (screen: string, cmd?: RibbonCmd) => void }) {
+export function SideBar({ can, current, glance, narrow, setNarrow, go, head }: { can: (k: string) => boolean; current: string; glance: Glance | null; narrow: boolean; setNarrow: (v: boolean) => void; go: (screen: string, cmd?: RibbonCmd) => void; head?: { pharmacy: string; person: string; testMode?: boolean } }) {
   const list = PLACES.filter(p => p.perms.length === 0 || p.perms.some(can));
   return (
     <nav className={`side${narrow ? ' narrow' : ''}`} aria-label="الوصول السريع">
+      {head && <div className="shead" title={`${head.pharmacy} - ${head.person}`}><b>{head.pharmacy}</b><span className="sl">{head.person}</span>{head.testMode && <span className="tests">تجربة</span>}</div>}
       {list.map(p => {
         const n = glance && p.count ? p.count(glance) : undefined; const on = current === p.id || (current === p.screen && p.id !== 'shortages');
         return (<button key={p.id} className={`sitem${on ? ' on' : ''}`} title={p.label} aria-current={on ? 'page' : undefined}

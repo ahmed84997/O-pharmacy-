@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, arabic, device, token } from './api';
 import type { Me } from './ui';
 import Shell from './Shell';
-import { Logo } from './icons';
+import { Mark } from './icons';
 
-type State = { setUp: boolean; pharmacyName: string | null; version: string; testMode: boolean; readOnly?: boolean };
+type State = { setUp: boolean; pharmacyName: string | null; supportPhone?: string | null; version: string; testMode: boolean; readOnly?: boolean };
 type Gate = 'loading' | 'offline' | 'setup' | 'pending' | 'revoked' | 'login' | 'change' | 'in';
 const isDesktop = () => /Electron/.test(navigator.userAgent);
 const defaultName = () => (isDesktop() ? 'كمبيوتر الصيدلية' : /Mobi|Android|iPhone/.test(navigator.userAgent) ? 'موبايل' : 'متصفح');
@@ -23,13 +23,16 @@ export default function App() {
     } catch (e) { setErr(arabic(e)); setGate('offline'); }
   }, [loadMe]);
   useEffect(() => { void boot(); }, [boot]);
-  const logout = useCallback(async () => { try { await api('/api/logout', { body: {} }); } catch { /* already gone */ } token.set(null); setMe(null); setGate('login'); }, []);
+  const logout = useCallback(async () => { try { await api('/api/logout', { body: {} }); } catch { /* already gone */ } token.set(null); setMe(null); setGate('login'); api<State>('/api/state').then(setSt, () => undefined); }, []);
 
   if (gate === 'in' && me) return <Shell me={me} reloadMe={loadMe} logout={logout} />;
   return (
-    <div className="gate"><div className="card">
-      <Logo size={40} />
-      {st?.pharmacyName && <div className="muted">{st.pharmacyName}{st.testMode && <> <span className="tests">نسخة تجربة</span></>}</div>}
+    <div className="gate orbit">
+      <svg className="orbits" aria-hidden="true" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice"><g fill="none" stroke="#2C7489" strokeWidth="1.2" opacity=".55" transform="rotate(-18 720 380)"><ellipse cx="720" cy="380" rx="420" ry="170" /><ellipse cx="720" cy="380" rx="600" ry="250" strokeDasharray="4 10" /><ellipse cx="720" cy="380" rx="800" ry="340" /></g><circle cx="352" cy="300" r="5" fill="#F85A0A" opacity=".8" /><circle cx="1205" cy="352" r="4" fill="#9FDDEE" opacity=".7" /></svg>
+      <header><span>{st?.pharmacyName ?? ''}{st?.testMode && <> <span className="tests">نسخة تجربة</span></>}</span><span dir="ltr">v {st?.version ?? '-'}</span></header>
+      <div className="center">
+      <div className="brandbig" dir="ltr" role="img" aria-label="O Pharmacy"><Mark size={124} orbit /><div><b>Pharmacy</b><small>O = ORBIT</small></div></div>
+      <div className="card">
       {gate === 'loading' && <p>بيحمّل...</p>}
       {gate === 'offline' && <><p className="err">{err}</p><button className="btn primary" onClick={() => void boot()}>جرّب تاني</button></>}
       {gate === 'setup' && <Setup done={async t => { token.set(t); await loadMe(); }} />}
@@ -37,8 +40,10 @@ export default function App() {
       {gate === 'revoked' && <><h1>الجهاز ده اتلغى</h1><p>لو ده غلط، سجّل الجهاز من جديد وهيستنى موافقة.</p><button className="btn" onClick={() => { device.set(null); void boot(); }}>سجّل الجهاز من جديد</button></>}
       {gate === 'login' && <Login done={async (t, must) => { token.set(t); await loadMe(); if (must) setGate('change'); }} pending={() => setGate('pending')} />}
       {gate === 'change' && <ChangeSecret forced done={async () => { await loadMe(); }} />}
-      <div className="muted" style={{ fontSize: 12 }}>الإصدار {st?.version ?? '-'}</div>
-    </div></div>
+      {devName && gate !== 'pending' && <div className="devline">الجهاز ده: {devName}</div>}
+      </div></div>
+      <footer><span className="support">{st?.supportPhone ? <>لخدمات الدعم الفني:<b>{st.supportPhone}</b></> : 'O Pharmacy'}</span><span dir="ltr" className="muted">© O Pharmacy</span></footer>
+    </div>
   );
 }
 

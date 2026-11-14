@@ -24,6 +24,8 @@ export class SystemService {
   /** Daily copies beyond the newest N are removed (they are copies, the live database is never touched); manual and before-update copies are kept. */
   private rotate(): void { const dir = this.backupDir!; const keep = this.o.keepBackups ?? 14; const daily = readdirSync(dir).filter(f => /-daily\.db$/.test(f)).sort().reverse(); for (const f of daily.slice(keep)) { try { unlinkSync(join(dir, f)); } catch { /* in use: next time */ } } }
   backups(): { name: string; bytes: number; at: string }[] { const dir = this.backupDir; if (!dir || !existsSync(dir)) return []; return readdirSync(dir).filter(f => f.endsWith('.db')).map(f => { const s = statSync(join(dir, f)); return { name: f, bytes: s.size, at: s.mtime.toISOString() }; }).sort((a, b) => b.name.localeCompare(a.name)); }
+  /** The live database's size in bytes (pages in use plus free pages), and the free part a compaction would give back. */
+  dbSize(): { bytes: number; freeBytes: number } { const g = (sql: string) => Number(Object.values(this.app.hub.db.prepare(sql).get() ?? {})[0] ?? 0); const ps = g('PRAGMA page_size'); return { bytes: g('PRAGMA page_count') * ps, freeBytes: g('PRAGMA freelist_count') * ps }; }
   /** Checks every hour; makes the daily copy when the last one is older than 20 hours. */
   startSchedule(): void { const tick = () => { try { const last = this.app.access.setting('backup.last'); if (!last || Date.parse(this.app.hub.now()) - Date.parse(last) > 20 * 3600_000) this.backup('daily'); } catch (e) { console.error('backup failed', e); } }; setTimeout(tick, 60_000); this.timer = setInterval(tick, 3600_000); this.timer.unref(); }
   stop(): void { if (this.timer) clearInterval(this.timer); }

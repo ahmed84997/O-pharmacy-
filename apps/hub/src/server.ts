@@ -14,8 +14,10 @@ import { glanceRoutes } from './glance-api';
 import { SystemService } from './system';
 import { relayOf } from './printing';
 
-export const VERSION = '0.7.12';
+export const VERSION = '0.7.13';
 export interface ServerOptions { webDir?: string; staffSecret?: string; logger?: boolean; system?: SystemService }
+/** The pharmacy's data fields: request field, setting key, longest length. */
+const ORG_FIELDS: [string, string, number][] = [['name', 'pharmacy.name', 80], ['phones', 'pharmacy.phones', 80], ['address', 'pharmacy.address', 160], ['supportPhone', 'pharmacy.support_phone', 40], ['taxRegNo', 'pharmacy.tax_reg_no', 40], ['commercialRegNo', 'pharmacy.commercial_reg_no', 40]];
 const STATUS: Record<string, number> = { separation: 403, file: 400, 'duplicate-barcode': 409, 'duplicate-code': 409, 'same-status': 409, insufficient: 409, underpaid: 400, 'no-price': 409, session: 409, 'discount-limit': 403, 'credit-limit': 409, 'day-closed': 409, blocked: 409, 'window-closed': 409, forbidden: 403, 'device-pending': 403, 'device-revoked': 403, 'not-found': 404, 'device-unknown': 401, unauthenticated: 401, 'bad-credentials': 401, locked: 423, inactive: 403, invalid: 400, state: 409, duplicate: 409, 'price-rule': 400, 'reason-required': 400 };
 const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff' };
 declare module 'fastify' { interface FastifyRequest { person?: Person; deviceId?: string } }
@@ -38,7 +40,7 @@ export function buildServer(app: App, o: ServerOptions = {}): FastifyInstance {
   type B = Record<string, unknown>;
 
   // ---------- open ----------
-  f.get('/api/state', async () => ({ setUp: app.access.isSetUp(), pharmacyName: app.access.setting('pharmacy.name'), branchId: app.hub.branchId, version: VERSION, testMode: app.testMode, readOnly: sys.readOnly() }));
+  f.get('/api/state', async () => ({ setUp: app.access.isSetUp(), pharmacyName: app.access.setting('pharmacy.name'), supportPhone: app.access.setting('pharmacy.support_phone'), branchId: app.hub.branchId, version: VERSION, testMode: app.testMode, readOnly: sys.readOnly() }));
   f.post('/api/devices/register', async (q) => { const b = (q.body ?? {}) as B; const pending = Number(app.hub.db.prepare("SELECT COUNT(*) n FROM devices WHERE status='pending'").get()!.n); if (pending >= 50) throw new AccessError('state', 'too many devices waiting for approval'); return app.access.registerDevice({ name: String(b.name ?? ''), kind: String(b.kind ?? 'browser'), userAgent: String(q.headers['user-agent'] ?? '') }); });
   f.get('/api/devices/me', async (q) => { const h = String(q.headers['x-device'] ?? ''); const i = h.indexOf('.'); if (i < 1) throw new AccessError('device-unknown', 'unknown device'); const d = app.access.device(h.slice(0, i), h.slice(i + 1)); return { id: d.id, name: d.name, status: d.status }; });
   f.post('/api/setup', async (q) => { const d = deviceOf(q); const b = (q.body ?? {}) as B; const p = app.access.setup(d, { pharmacyName: String(b.pharmacyName ?? ''), displayName: String(b.displayName ?? ''), username: String(b.username ?? ''), secret: String(b.secret ?? '') }); const s = app.access.login(d, p.username, String(b.secret)); return { token: s.token }; });
@@ -54,7 +56,7 @@ export function buildServer(app: App, o: ServerOptions = {}): FastifyInstance {
     s.addHook('preHandler', auth);
     /** Read-only when a required licence is missing or expired past grace: reading and exporting keep working; activation, logout and changing one's password stay open. */
     s.addHook('preHandler', async (q) => { if (q.method !== 'GET' && sys.readOnly() && !/^\/api\/(system\/licence|logout|me\/secret|reports\/[^/]+\/(run|export))/.test(q.url)) throw new AccessError('state', 'the licence has ended: the program is read-only until it is renewed'); });
-    s.get('/api/system/info', async (q) => { const p = me(q); const l = sys.licence(); const admin = can(p, 'settings.security', app.hub.branchId); return { version: VERSION, branchId: app.hub.branchId, testMode: app.testMode, tenantId: admin ? sys.tenantId() : null, licence: { state: l.state, configured: l.configured, required: l.required, reason: l.reason ?? null, edition: l.payload?.edition ?? null, expiresAt: l.payload?.expiresAt ?? null, daysLeft: l.daysLeft ?? null }, addresses: sys.addresses(), backups: admin ? sys.backups().slice(0, 30) : [], lastBackup: app.access.setting('backup.last') }; });
+    s.get('/api/system/info', async (q) => { const p = me(q); const l = sys.licence(); const admin = can(p, 'settings.security', app.hub.branchId); return { version: VERSION, branchId: app.hub.branchId, testMode: app.testMode, tenantId: admin ? sys.tenantId() : null, licence: { state: l.state, configured: l.configured, required: l.required, reason: l.reason ?? null, edition: l.payload?.edition ?? null, expiresAt: l.payload?.expiresAt ?? null, daysLeft: l.daysLeft ?? null }, addresses: sys.addresses(), backups: admin ? sys.backups().slice(0, 30) : [], lastBackup: app.access.setting('backup.last'), db: admin ? sys.dbSize() : null }; });
     s.post('/api/system/backup', async (q) => { need(me(q), 'settings.security'); const r = sys.backup('manual', me(q).id); return { name: r.file.split(/[\\/]/).pop(), bytes: r.bytes }; });
     s.post('/api/system/licence', async (q) => sys.activate(me(q), String(((q.body ?? {}) as B).token ?? '')));
     s.post('/api/logout', async (q) => { app.access.logout(String(q.headers.authorization ?? '').replace(/^Bearer /, '')); return { ok: true }; });
@@ -72,7 +74,15 @@ export function buildServer(app: App, o: ServerOptions = {}): FastifyInstance {
     s.post('/api/devices/:id/approve', async (q) => { app.access.approveDevice(me(q), (q.params as B).id as string); return { ok: true }; });
     s.post('/api/devices/:id/revoke', async (q) => { if ((q.params as B).id === q.deviceId) throw new AccessError('state', 'you cannot revoke the device you are using'); app.access.revokeDevice(me(q), (q.params as B).id as string, String(((q.body ?? {}) as B).reason ?? '')); return { ok: true }; });
     // settings
-    s.post('/api/settings/pharmacy', async (q) => { need(me(q), 'settings.branch'); const name = String(((q.body ?? {}) as B).name ?? '').trim(); if (!name) throw new AccessError('invalid', 'the pharmacy name is required'); app.access.setSetting('pharmacy.name', name, me(q).id); app.hub.audit(me(q).id, 'settings.pharmacy_name', 'settings', 'pharmacy.name', { name }); return { ok: true }; });
+    /** The pharmacy's own data (Sprint 7.11 "بيانات المؤسسة"): shown on receipts, labels and the login screen. Each field is optional except the name. */
+    s.get('/api/settings/pharmacy', async (q) => { need(me(q), 'settings.branch'); return Object.fromEntries(ORG_FIELDS.map(([f, k]) => [f, app.access.setting(k) ?? ''])); });
+    s.post('/api/settings/pharmacy', async (q) => {
+      need(me(q), 'settings.branch'); const b = (q.body ?? {}) as B; const name = String(b.name ?? '').trim(); if (!name) throw new AccessError('invalid', 'the pharmacy name is required');
+      const changed: Record<string, string> = {};
+      const next = ORG_FIELDS.filter(([f]) => f === 'name' || b[f] !== undefined).map(([f, k, max]) => { const v = f === 'name' ? name : String(b[f] ?? '').trim(); if (v.length > max) throw new AccessError('invalid', `${f} is too long`); return [f, k, v] as const; });
+      for (const [f, k, v] of next) if (v !== (app.access.setting(k) ?? '')) { app.access.setSetting(k, v, me(q).id); changed[f] = v; }
+      if (Object.keys(changed).length) app.hub.audit(me(q).id, 'settings.pharmacy', 'settings', 'pharmacy', changed); return { ok: true };
+    });
     // items (read-only in 7.1)
     s.get('/api/items', async (q) => {
       const p = me(q); need(p, 'item.view'); const qs = q.query as B; const list = app.items.search(String(qs.q ?? ''), { limit: Math.min(Math.max(Number(qs.limit ?? 50) || 50, 1), 200) });
