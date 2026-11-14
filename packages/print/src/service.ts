@@ -2,9 +2,10 @@ import { can, uuidv7, type Person } from '@o-pharmacy/core';
 import type { Hub, Migration } from '@o-pharmacy/hub';
 import type { ClosingService, SaleService } from '@o-pharmacy/pos';
 import { receiptBytes, drawerBytes } from './escpos';
-import { ean13Of, tspl, zpl } from './label';
+import { ean13Of, tspl, tsplImage, zpl, zplImage } from './label';
 import { buildReceipt, buildSessionReport, type PharmacyInfo, type ReceiptStyle } from './receipt';
-import type { Rasterizer } from './render';
+import type { LabelSpec, Rasterizer } from './render';
+import type { ReceiptLine } from './receipt';
 import type { PrintTransport } from './transport';
 
 export const PRINT_MIGRATIONS: Migration[] = [
@@ -19,7 +20,7 @@ CREATE TRIGGER print_jobs_no_delete BEFORE DELETE ON print_jobs BEGIN SELECT RAI
 ];
 
 export class PrintError extends Error { constructor(public code: 'forbidden' | 'invalid' | 'not-found', message: string) { super(message); } }
-export interface PrinterSetup { transport: PrintTransport; kind: 'receipt' | 'label'; paperWidthMm?: 58 | 80; /** Open the drawer with the receipt of a sale that took cash (default on). */ drawerOnCash?: boolean; labelLanguage?: 'tspl' | 'zpl'; labelMm?: [number, number]; labelInvert?: boolean }
+export interface PrinterSetup { transport: PrintTransport; kind: 'receipt' | 'label'; paperWidthMm?: 58 | 80; /** Open the drawer with the receipt of a sale that took cash (default on). */ drawerOnCash?: boolean; labelLanguage?: 'tspl' | 'zpl'; labelMm?: [number, number]; labelInvert?: boolean; /** Sprint 7.12 roll settings */ gapMm?: number; density?: number; speed?: number; offsetX?: number; offsetY?: number; /** receipt side margin in mm (a printer that cuts the right edge) */ sideMarginMm?: number }
 export interface PrintEnv { /** items whose name the pharmacy keeps off the receipt (item card, Sprint 7.9) */ hideName?(itemId: string): boolean; pharmacy: PharmacyInfo; style?: ReceiptStyle; nameOf(userId: string): string; customerNameOf?(customerId: string): string | null; /** The ETA QR text of a sale (from the ETA queue), if the pharmacy issues e-receipts. */ qrTextOf?(saleNo: string): string | null }
 export interface PrintResult { ok: boolean; jobId: string; copyNo?: number; drawer?: boolean; error?: string; bytes: number }
 
@@ -41,8 +42,8 @@ export class PrintService {
     const done = Number(this.db.prepare("SELECT COUNT(*) c FROM print_jobs WHERE kind='receipt' AND status='sent' AND ref=? AND copy_kind=?").get(r.saleNo, copy)!.c); const copyNo = done + 1;
     if (copyNo > 1 && !r.reason?.trim()) throw new PrintError('invalid', 'a reprint needs a reason');
     const env = this.env(); const shown = env.hideName ? { ...sale, lines: sale.lines.map(l => (env.hideName!(l.itemId) ? { ...l, itemName: 'صنف' } : l)) } : sale; const lines = buildReceipt(shown, { pharmacy: env.pharmacy, style: env.style, cashierName: env.nameOf(sale.createdBy), customerName: sale.customerId ? env.customerNameOf?.(sale.customerId) ?? null : null, copy, copyNo, qrText: env.qrTextOf?.(r.saleNo) ?? null });
-    const img = this.raster.receipt(lines, (p.paperWidthMm ?? 80) === 58 ? 384 : 576); const cash = sale.payments.some(x => x.method === 'cash' && x.amountMinor > 0);
-    const drawer = copyNo === 1 && copy === 'counter' && (p.drawerOnCash ?? true) && cash && sale.status === 'posted'; const bytes = receiptBytes(img, { drawer }); const error = await this.deliver(p, bytes);
+    const img = this.raster.receipt(lines, (p.paperWidthMm ?? 80) === 58 ? 384 : 576, { pad: this.pad(p, env.style?.sideMarginMm) }); const cash = sale.payments.some(x => x.method === 'cash' && x.amountMinor > 0);
+    const drawer = copyNo === 1 && copy === 'counter' && (p.drawerOnCash ?? true) && cash && sale.status === 'posted'; const n = copyNo === 1 ? Math.min(5, Math.max(1, Math.round(env.style?.copies ?? 1))) : 1; const bytes = Buffer.concat([receiptBytes(img, { drawer }), ...Array.from({ length: n - 1 }, () => receiptBytes(img, { drawer: false }))]); const error = await this.deliver(p, bytes);
     const jobId = this.log(actor, { kind: 'receipt', ref: r.saleNo, copyKind: copy, copyNo, printer: r.printer, ok: !error, error: error ?? undefined, drawer, bytes: bytes.length, reason: r.reason?.trim() });
     return error ? { ok: false, jobId, error, bytes: bytes.length } : { ok: true, jobId, copyNo, drawer, bytes: bytes.length };
   }
@@ -50,7 +51,7 @@ export class PrintService {
   async printSessionReport(actor: Person, r: { sessionId: string; printer: string; reason?: string }): Promise<PrintResult> {
     if (!this.closing) throw new PrintError('invalid', 'closing reports are not set up'); const p = this.printer(r.printer, 'receipt'); const rep = this.closing.report(actor, r.sessionId);
     const done = Number(this.db.prepare("SELECT COUNT(*) c FROM print_jobs WHERE kind='receipt' AND status='sent' AND ref=? AND copy_kind='report'").get(rep.sessionNo)!.c); const copyNo = done + 1; if (copyNo > 1 && !r.reason?.trim()) throw new PrintError('invalid', 'a reprint needs a reason');
-    const env = this.env(); const img = this.raster.receipt(buildSessionReport(rep, { pharmacy: env.pharmacy, style: env.style, cashierName: env.nameOf(rep.userId), copyNo }), (p.paperWidthMm ?? 80) === 58 ? 384 : 576); const bytes = receiptBytes(img, { drawer: false }); const error = await this.deliver(p, bytes);
+    const env = this.env(); const img = this.raster.receipt(buildSessionReport(rep, { pharmacy: env.pharmacy, style: env.style, cashierName: env.nameOf(rep.userId), copyNo }), (p.paperWidthMm ?? 80) === 58 ? 384 : 576, { pad: this.pad(p, env.style?.sideMarginMm) }); const bytes = receiptBytes(img, { drawer: false }); const error = await this.deliver(p, bytes);
     const jobId = this.log(actor, { kind: 'receipt', ref: rep.sessionNo, copyKind: 'report', copyNo, printer: r.printer, ok: !error, error: error ?? undefined, bytes: bytes.length, reason: r.reason?.trim() });
     return error ? { ok: false, jobId, error, bytes: bytes.length } : { ok: true, jobId, copyNo, drawer: false, bytes: bytes.length };
   }
@@ -65,6 +66,27 @@ export class PrintService {
     const [w, h] = p.labelMm ?? [40, 30]; const img = this.raster.text(`${r.name.trim()}${r.priceMinor === undefined ? '' : `\n${(r.priceMinor / 100).toFixed(2)}`}`, { width: Math.floor(w * 8 / 8) * 8, height: 90 }); const ean = ean13Of(r.barcode);
     const one = (p.labelLanguage ?? 'tspl') === 'zpl' ? zpl(img, ean) : tspl(img, ean, { wmm: w, hmm: h, invert: p.labelInvert }); const bytes = Buffer.concat(Array.from({ length: copies }, () => one)); const error = await this.deliver(p, bytes);
     const jobId = this.log(actor, { kind: 'label', ref: r.barcode ?? r.name.trim(), copyNo: copies, printer: r.printer, ok: !error, error: error ?? undefined, bytes: bytes.length }); return error ? { ok: false, jobId, error, bytes: bytes.length } : { ok: true, jobId, copyNo: copies, bytes: bytes.length };
+  }
+  private pad(p: PrinterSetup, mm?: number): number { const v = mm ?? p.sideMarginMm; return v === undefined ? ((p.paperWidthMm ?? 80) === 58 ? 7 : 10) : Math.round(Math.min(8, Math.max(0, v)) * 8); }
+  /** Stickers drawn whole (text and bars in one picture) at the roll's size (Sprint 7.12): price stickers and dose stickers. One job per sticker, printed `copies` times. */
+  async printLabels(actor: Person, r: { printer: string; items: { spec: LabelSpec; copies?: number; ref?: string }[] }): Promise<PrintResult[]> {
+    this.need(actor, 'item.view'); const p = this.printer(r.printer, 'label'); if (!r.items.length || r.items.length > 100) throw new PrintError('invalid', '1 to 100 stickers');
+    const [wmm, hmm] = p.labelMm ?? [40, 30]; const W = Math.round(wmm * 8); const H = Math.round(hmm * 8); const out: PrintResult[] = [];
+    for (const it of r.items) {
+      const copies = it.copies ?? 1; if (!Number.isInteger(copies) || copies < 1 || copies > 500) throw new PrintError('invalid', 'copies must be 1 to 500'); if (!it.spec.name?.trim()) throw new PrintError('invalid', 'a sticker needs a name');
+      const img = this.raster.label(it.spec, W, H, { dx: p.offsetX, dy: p.offsetY }); const roll = { wmm, hmm, gapMm: p.gapMm, density: p.density, speed: p.speed, invert: p.labelInvert };
+      const bytes = (p.labelLanguage ?? 'tspl') === 'zpl' ? zplImage(img, roll, copies) : tsplImage(img, roll, copies); const error = await this.deliver(p, bytes);
+      const jobId = this.log(actor, { kind: 'label', ref: it.ref ?? it.spec.barcode ?? it.spec.name.trim().slice(0, 60), copyKind: it.spec.kind, copyNo: copies, printer: r.printer, ok: !error, error: error ?? undefined, bytes: bytes.length });
+      out.push(error ? { ok: false, jobId, error, bytes: bytes.length } : { ok: true, jobId, copyNo: copies, bytes: bytes.length });
+    }
+    return out;
+  }
+  /** A free slip on the receipt printer (the dose slip when there is no label printer). */
+  async printSlip(actor: Person, r: { printer: string; lines: ReceiptLine[]; ref: string; kind: string }): Promise<PrintResult> {
+    this.need(actor, 'item.view'); const p = this.printer(r.printer, 'receipt'); const env = this.env();
+    const img = this.raster.receipt(r.lines, (p.paperWidthMm ?? 80) === 58 ? 384 : 576, { pad: this.pad(p, env.style?.sideMarginMm) }); const bytes = receiptBytes(img, { drawer: false }); const error = await this.deliver(p, bytes);
+    const jobId = this.log(actor, { kind: 'receipt', ref: r.ref, copyKind: r.kind, copyNo: 1, printer: r.printer, ok: !error, error: error ?? undefined, bytes: bytes.length });
+    return error ? { ok: false, jobId, error, bytes: bytes.length } : { ok: true, jobId, copyNo: 1, bytes: bytes.length };
   }
   /** The print log, newest first (reviewers). */
   jobs(actor: Person, o: { ref?: string; failedOnly?: boolean; limit?: number } = {}) {

@@ -3,7 +3,6 @@ import { can, type Person } from '@o-pharmacy/core';
 import type { CardInput, ImportKind, ItemInput, ReasonCode, StoreKind } from '@o-pharmacy/inventory';
 import type { App } from './compose';
 import { AccessError } from './access';
-import { printers, printService } from './printing';
 
 type B = Record<string, unknown>;
 const body = (q: FastifyRequest) => (q.body ?? {}) as B;
@@ -113,15 +112,6 @@ export function invRoutes(s: FastifyInstance, app: App): void {
     const last = lastBuy.get(it.id);
     return { card: it.card, id: it.id, code: it.code, nameAr: it.nameAr, kind: it.kind, status: it.status, units: it.units.map(u => ({ name: u.name, factor: u.factor })), listPriceMinor: it.listPriceMinor ?? null, stockBase: Number(onHand.get(it.id)!.q), barcode: (firstBarcode.get(it.id)?.barcode as string) ?? null,
       last: last ? { priceUnit: String(last.price_unit), publicPriceMinor: last.public_price_minor == null ? null : Number(last.public_price_minor), costMinor: Number(last.cost_minor), discountBp: Number(last.discount_bp) } : null };
-  });
-  // shelf labels for the items of an invoice (the first label printer)
-  s.post('/api/print/labels', async (q) => {
-    const p = me(q); const b = body(q); const lines = Array.isArray(b.lines) ? (b.lines as B[]) : []; if (!lines.length || lines.length > 100) throw new AccessError('invalid', '1 to 100 lines');
-    const printer = str(b.printer) ?? printers(app).find(x => x.kind === 'label')?.name; if (!printer) throw new AccessError('state', 'no label printer is set up');
-    const svc = printService(app, q.deviceId); const out: { itemId: string; ok: boolean; error?: string }[] = [];
-    for (const l of lines) { const it = app.items.get(String(l.itemId ?? '')); if (!it) { out.push({ itemId: String(l.itemId ?? ''), ok: false, error: 'not-found' }); continue; } if (!it.card.printLabel) { out.push({ itemId: it.id, ok: false, error: 'no-label' }); continue; }
-      const r = await svc.printLabel(p, { printer, name: it.nameAr, priceMinor: num(l.priceMinor), barcode: (firstBarcode.get(it.id)?.barcode as string) ?? null, copies: Math.min(200, Math.max(1, Number(l.copies) || 1)) }); out.push({ itemId: it.id, ok: r.ok, error: r.error }); }
-    return { printer, results: out };
   });
   s.post('/api/buy/invoices/:no/void', async (q) => { app.purchasing.voidInvoice(me(q), param(q, 'no'), String(body(q).reason ?? '')); return { ok: true }; });
   s.post('/api/buy/returns', async (q) => { const b = body(q); return app.purchasing.returnToSupplier(me(q), { key: key(b), supplierId: String(b.supplierId ?? ''), invoiceId: str(b.invoiceId), storeId: str(b.storeId), reason: String(b.reason ?? ''), lines: Array.isArray(b.lines) ? (b.lines as B[]).map(l => ({ batchId: String(l.batchId ?? ''), qty: Number(l.qty), unitName: str(l.unitName) })) : [] }); });

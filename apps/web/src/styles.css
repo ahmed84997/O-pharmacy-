@@ -560,3 +560,43 @@ button.card.stat:hover { border-color: var(--teal); }
 .fname span { max-width: 170px; }
 .gate.orbit { place-items: initial; align-items: stretch; }
 .gate.orbit .card label { color: #CFE6EC; font-weight: 600; }
+
+/* ================= Sprint 7.12: printing screens ================= */
+.bc-top { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.bc-top .f { display: grid; gap: 4px; font-weight: 600; }
+.bc-grid td { vertical-align: middle; }
+.bc-grid tbody tr { cursor: pointer; }
+.bc-grid select { min-width: 120px; }
+.bc-foot { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.bc-count { margin-inline-start: auto; font-weight: 600; color: var(--muted); }
+.bc-count b { color: var(--bad); font-size: 20px; margin-inline-start: 8px; }
+.bc-ask { width: min(560px, calc(100% - 32px)); }
+.bc-ask > b { font-size: 18px; color: var(--teal-ink); }
+.bc-ask-body { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.bc-ask-body > div { flex: 1 1 200px; }
+.bc-preview, .lab-prev { background: #fff; border: 1px dashed var(--line-strong); border-radius: 6px; max-width: 100%; image-rendering: pixelated; }
+.bc-preview { width: 220px; }
+.set2 { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.set2-form { flex: 999 1 520px; min-width: 0; display: grid; gap: 12px; }
+.set2-preview { flex: 1 1 280px; position: sticky; top: 0; display: grid; gap: 8px; justify-items: center; background: var(--panel); border: 2px solid var(--line); border-radius: 14px; padding: 14px; }
+.lab-prev { width: min(100%, 320px); }
+.rc-prev { width: min(100%, 300px); background: #fff; border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(10,40,50,.12); }
+.set-band { display: flex; gap: 20px; flex-wrap: wrap; background: var(--teal-soft); border-color: var(--teal); }
+.org-mini { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; font-size: 14px; }
+.row-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row-form input { flex: 1 1 260px; max-width: 420px; }
+.a4-wrap { overflow-x: auto; background: var(--ribbon); border: 2px solid var(--line); border-radius: 14px; padding: 16px; }
+.a4 { width: 210mm; min-height: 270mm; margin-inline: auto; background: #fff; color: #000; padding: 14mm; box-shadow: 0 6px 20px rgba(0,0,0,.12); font-size: 11pt; display: flex; flex-direction: column; gap: 6mm; }
+.a4 h1 { font-size: 18pt; margin: 0 0 2mm; }
+.a4-head { display: flex; justify-content: space-between; gap: 10mm; border-bottom: 2px solid #000; padding-bottom: 4mm; }
+.a4-title { text-align: left; } .a4-title b { font-size: 16pt; display: block; }
+.a4 table { width: 100%; border-collapse: collapse; min-width: 0; }
+.a4 th, .a4 td { border: 1px solid #444; padding: 2mm 3mm; background: #fff !important; color: #000 !important; font-size: 10.5pt; text-align: start; }
+.a4-info th, .a4-tot th { background: #eef3f5 !important; width: 22%; }
+.a4-lines th { background: #eef3f5 !important; }
+.a4-tot { width: 60% !important; margin-inline-start: auto; }
+.a4-sign { display: flex; justify-content: space-between; gap: 8mm; margin-top: auto; padding-top: 14mm; }
+.a4-sign div { flex: 1; text-align: center; } .a4-sign span { display: block; border-top: 1px solid #000; margin-top: 16mm; }
+@media print { .a4-print { padding: 0 !important; } .a4-print .a4 { box-shadow: none; width: auto; min-height: 0; padding: 10mm; } @page { size: A4; margin: 8mm; } }
+.bc-ask label.chk, .askbox label.chk { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.a4 table { border: 1px solid #444; }

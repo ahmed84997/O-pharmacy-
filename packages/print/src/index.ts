@@ -6,4 +6,5 @@ export * from './receipt';
 export * from './render';
 export * from './service';
 export * from './transport';
+export * from './barcodes';
 export { RAW_PRINTER_CS } from './winspool';

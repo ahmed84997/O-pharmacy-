@@ -17,3 +17,17 @@ export function zpl(textImg: GrayImage, ean: string | null): Buffer {
   const { bpr, data } = toBits(textImg); const hex = Buffer.from(data).toString('hex').toUpperCase();
   return Buffer.from(`^XA^PW320^LL240^FO0,10^GFA,${data.length},${data.length},${bpr},${hex}^FS${ean ? `^FO40,130^BEN,60,Y,N^FD${ean.slice(0, 12)}^FS` : ''}^XZ\r\n`, 'ascii');
 }
+
+/** The printer settings of a label roll (Sprint 7.12, "إعدادات طباعة الباركود"): size, gap, darkness, speed, a nudge for printers that print off-centre. */
+export interface LabelRoll { wmm: number; hmm: number; gapMm?: number; density?: number; speed?: number; invert?: boolean }
+/** TSPL job for one whole-label picture (text and bars together), printed `copies` times. */
+export function tsplImage(img: GrayImage, roll: LabelRoll, copies = 1): Buffer {
+  const { bpr, data } = toBits(img); const b = Buffer.from(data); for (let i = 0; i < b.length; i++) b[i] = roll.invert ? b[i]! : (~b[i]! & 0xff);
+  const head = crlf(`SIZE ${roll.wmm} mm,${roll.hmm} mm`) + crlf(`GAP ${roll.gapMm ?? 2} mm,0 mm`) + crlf('DIRECTION 1') + crlf('REFERENCE 0,0') + crlf(`DENSITY ${Math.min(15, Math.max(0, Math.round(roll.density ?? 8)))}`) + crlf(`SPEED ${Math.min(6, Math.max(1, Math.round(roll.speed ?? 4)))}`) + crlf('CLS') + `BITMAP 0,0,${bpr},${img.height},0,`;
+  return Buffer.concat([Buffer.from(head, 'ascii'), b, Buffer.from('\r\n' + crlf(`PRINT ${Math.max(1, Math.round(copies))},1`), 'ascii')]);
+}
+/** ZPL job for one whole-label picture, printed `copies` times. */
+export function zplImage(img: GrayImage, roll: LabelRoll, copies = 1): Buffer {
+  const { bpr, data } = toBits(img); const hex = Buffer.from(data).toString('hex').toUpperCase();
+  return Buffer.from(`^XA^PW${img.width}^LL${img.height}^MD${Math.round(((roll.density ?? 8) - 8) * 30 / 8)}^FO0,0^GFA,${data.length},${data.length},${bpr},${hex}^FS^PQ${Math.max(1, Math.round(copies))}^XZ\r\n`, 'ascii');
+}

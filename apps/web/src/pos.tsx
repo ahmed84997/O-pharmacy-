@@ -49,17 +49,21 @@ export const addLine = (lines: Line[], it: TillItem, unitName?: string): Line[] 
 type Session = { id: string; sessionNo: string; terminal: string } | null;
 export function useSession() { const [s, setS] = useState<{ session: Session; terminal: string; today: string } | null>(null); const load = useCallback(() => api<{ session: Session; terminal: string; today: string }>('/api/pos/session').then(setS), []); useEffect(() => { void load(); }, [load]); return { info: s, reload: load }; }
 type Printer = { name: string; kind: string; paperWidthMm?: number; type: string };
-export function usePrinters() { const [p, setP] = useState<Printer[]>([]); useEffect(() => { api<{ printers: Printer[] }>('/api/print/printers').then(r => setP(r.printers.filter(x => x.kind === 'receipt')), () => setP([])); }, []); return p; }
+export type PrintStyle = { askBeforePrint?: boolean; minPrintMinor?: number; copies?: number };
+export function usePrintSetup() { const [v, setV] = useState<{ printers: Printer[]; style: PrintStyle }>({ printers: [], style: {} }); useEffect(() => { api<{ printers: Printer[]; style: PrintStyle }>('/api/print/printers').then(r => setV({ printers: r.printers.filter(x => x.kind === 'receipt'), style: r.style ?? {} }), () => undefined); }, []); return v; }
+export function usePrinters() { return usePrintSetup().printers; }
 
 /** The receipt as it prints, plus print and reprint (a reprint needs a reason). */
-export function ReceiptBox({ saleNo, autoPrint }: { saleNo: string; autoPrint?: boolean }) {
-  const { toast, ask } = useApp(); const printers = usePrinters(); const [src, setSrc] = useState(''); const [printed, setPrinted] = useState(0); const done = useRef('');
+/* Sprint 7.12: the receipt settings decide the automatic print: below the minimum value nothing prints by itself, and "ask before each print" asks here first. */
+export function ReceiptBox({ saleNo, autoPrint, totalMinor }: { saleNo: string; autoPrint?: boolean; totalMinor?: number }) {
+  const { toast, ask } = useApp(); const { printers, style } = usePrintSetup(); const [askNow, setAskNow] = useState(false); const [src, setSrc] = useState(''); const [printed, setPrinted] = useState(0); const done = useRef('');
   useEffect(() => { let url = ''; const h: Record<string, string> = {}; try { const d = localStorage.getItem('o.device'); const t = sessionStorage.getItem('o.token'); if (d) h['x-device'] = d; if (t) h.authorization = `Bearer ${t}`; } catch { /* storage blocked */ }
     fetch(`/api/print/preview/${encodeURIComponent(saleNo)}`, { headers: h }).then(r => (r.ok ? r.blob() : null)).then(b => { if (b) { url = URL.createObjectURL(b); setSrc(url); } }).catch(() => undefined); return () => { if (url) URL.revokeObjectURL(url); }; }, [saleNo]);
   const print = useCallback(async (printer: string, reason?: string) => { try { const r = await api<{ ok: boolean; error?: string; copyNo?: number; drawer?: boolean }>('/api/print/receipt', { body: { saleNo, printer, reason } }); if (r.ok) { setPrinted(n => n + 1); toast(r.copyNo && r.copyNo > 1 ? `اتطبعت نسخة رقم ${r.copyNo}` : `اتطبع الوصل${r.drawer ? ' واتفتح الدرج' : ''}`); } else toast(`الطباعة فشلت: ${r.error ?? ''}`); } catch (e) { toast(arabic(e)); } }, [saleNo, toast]);
-  useEffect(() => { if (autoPrint && printers[0] && done.current !== saleNo) { done.current = saleNo; void print(printers[0].name); } }, [autoPrint, printers, saleNo, print]);
+  useEffect(() => { if (autoPrint && printers[0] && done.current !== saleNo) { done.current = saleNo; if (totalMinor !== undefined && style.minPrintMinor && totalMinor < style.minPrintMinor) return; if (style.askBeforePrint) setAskNow(true); else void print(printers[0].name); } }, [autoPrint, printers, saleNo, print, style, totalMinor]);
   return (<div className="card" style={{ display: 'grid', gap: 8, justifyItems: 'center' }}>
     {src ? <img src={src} alt={`وصل ${saleNo}`} style={{ width: 'min(300px, 100%)', background: '#fff', border: '1px solid var(--line)' }} /> : <span className="muted">بيجهّز الوصل...</span>}
+    {askNow && printers[0] && printed === 0 && <div className="actions"><b>تطبع الفاتورة؟</b><button className="btn primary" autoFocus onClick={() => { setAskNow(false); void print(printers[0]!.name); }}><Icon n="print" />اطبع</button><button className="btn ghost" onClick={() => setAskNow(false)}>لا</button></div>}
     <div className="actions">{printers.length === 0 && <span className="hint">مفيش طابعة متعرّفة: الإعدادات ← الطابعات.</span>}
       {printers.map(p => <button key={p.name} className="btn" onClick={() => { if (printed === 0) void print(p.name); else void ask('سبب طباعة نسخة تانية').then(r => { if (r) void print(p.name, r); }); }}><Icon n="print" />{printed === 0 ? `اطبع (${p.name})` : `نسخة تانية (${p.name})`}</button>)}</div>
   </div>);
@@ -171,7 +175,7 @@ export function SaleScreen() {
   return (<div className="pi" onContextMenu={e => { if ((e.target as HTMLElement).closest('input, select, textarea')) return; e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); }} onClick={() => menu && setMenu(null)}>
     <div className="pi-main">
     <h2 style={{ margin: 0 }}><Icon n="cart" />فاتورة بيع <small className="muted">- {info.session.sessionNo}</small>{fromHold && <span className="pill">من فاتورة معلّقة</span>}</h2>
-    {done && <div className="card warnbox" style={{ display: 'grid', gap: 8 }}><b>اتسجلت الفاتورة {done.saleNo} - الإجمالي {money(done.totalMinor)}{done.changeMinor > 0 && <> - الباقي للعميل <span style={{ fontSize: '1.3em' }}>{money(done.changeMinor)}</span></>}{done.codMinor > 0 && <> - يتحصّل عند التوصيل {money(done.codMinor)}</>}</b>{done.note && <span>{done.note}</span>}<ReceiptBox saleNo={done.saleNo} autoPrint /><button className="btn ghost" onClick={() => setDone(null)}>فاتورة جديدة</button></div>}
+    {done && <div className="card warnbox" style={{ display: 'grid', gap: 8 }}><b>اتسجلت الفاتورة {done.saleNo} - الإجمالي {money(done.totalMinor)}{done.changeMinor > 0 && <> - الباقي للعميل <span style={{ fontSize: '1.3em' }}>{money(done.changeMinor)}</span></>}{done.codMinor > 0 && <> - يتحصّل عند التوصيل {money(done.codMinor)}</>}</b>{done.note && <span>{done.note}</span>}<ReceiptBox saleNo={done.saleNo} autoPrint totalMinor={done.totalMinor} /><button className="btn ghost" onClick={() => setDone(null)}>فاتورة جديدة</button></div>}
     {!done && <>
       <CustomerPick value={customer} onPick={pickCustomer} />
       <ItemPicker autoFocus onPick={(it, u) => setLines(addLine(lines, it, u))} />
@@ -239,13 +243,14 @@ function Drafts({ current, close, open }: { current: string; close: () => void; 
 const DOSE_CHIPS = ['قرص', 'كبسولة', 'معلقة صغيرة', 'مرة يوميًا', 'مرتين يوميًا', '3 مرات يوميًا', 'كل 8 ساعات', 'كل 12 ساعة', 'قبل الأكل', 'بعد الأكل', 'قبل النوم', 'لمدة 5 أيام', 'لمدة أسبوع', 'عند اللزوم'];
 /** طباعة الاستخدام: a sticker per item with how to take it (label printer), or a slip when there is none. */
 function DosePrint({ lines, patient, close }: { lines: Line[]; patient: string; close: () => void }) {
-  const { toast } = useApp(); const [doses, setDoses] = useState<string[]>(() => lines.map(() => '')); const [who, setWho] = useState(patient); const [slip, setSlip] = useState(false); const [focus, setFocus] = useState(0);
+  const { toast } = useApp(); const [doses, setDoses] = useState<string[]>(() => lines.map(() => '')); const [who, setWho] = useState(patient); const [focus, setFocus] = useState(0);
   const chip = (c: string) => setDoses(ds => ds.map((d, i) => (i === focus ? (d ? `${d} ${c}` : c) : d)));
-  useEffect(() => { if (!slip) return; const t = window.setTimeout(() => { window.print(); setSlip(false); }, 60); return () => window.clearTimeout(t); }, [slip]);
   const print = async () => {
     const ls = lines.map((l, i) => ({ itemId: l.item.id, dose: doses[i]!.trim() })).filter(l => l.dose); if (!ls.length) return toast('اكتب الجرعة لصنف واحد على الأقل');
-    try { const r = await api<{ printer: string; results: { ok: boolean }[] }>('/api/print/dose', { body: { patient: who || undefined, lines: ls } }); const bad = r.results.filter(x => !x.ok).length; toast(bad ? `${bad} استيكر مطبعش` : `اتبعتت ${ls.length} استيكر لـ ${r.printer}`); close(); }
-    catch (e) { if ((e as { code?: string }).code === 'state') { toast('مفيش طابعة استيكر: هتطلع ورقة'); setSlip(true); } else toast(arabic(e)); }
+    /* a sticker per item on the label printer; with no label printer the Hub prints one slip on the receipt printer (Sprint 7.12) */
+    try { const r = await api<{ printer: string; mode: 'label' | 'slip'; results: { ok: boolean; error?: string }[] }>('/api/print/dose', { body: { patient: who || undefined, lines: ls } }); const bad = r.results.filter(x => !x.ok);
+      toast(bad.length ? `${bad.length} ${r.mode === 'slip' ? 'صنف' : 'استيكر'} مطبعش${bad[0]?.error ? `: ${bad[0].error}` : ''}` : r.mode === 'slip' ? `اتطبعت ورقة الاستخدام على ${r.printer}` : `اتبعتت ${ls.length} استيكر لـ ${r.printer}`); if (!bad.length) close(); }
+    catch (e) { toast((e as { code?: string }).code === 'state' ? 'مفيش طابعة استيكر ولا طابعة إيصال: البيانات العامة ← إعدادات التشغيل ← الطابعات' : arabic(e)); }
   };
   return (<><div className="drawer-bg" onClick={close} /><div className="card pi-modal" role="dialog" aria-label="طباعة الاستخدام">
     <div className="pi-modal-head"><b>طباعة الاستخدام</b><button className="qbtn" onClick={close} aria-label="إغلاق"><Icon n="x" /></button></div>
@@ -253,7 +258,6 @@ function DosePrint({ lines, patient, close }: { lines: Line[]; patient: string; 
     <div style={{ display: 'grid', gap: 8 }}>{lines.map((l, i) => <label key={i} className="dose-row"><b>{l.item.nameAr}</b><input value={doses[i]} onFocus={() => setFocus(i)} onChange={e => setDoses(doses.map((d, k) => (k === i ? e.target.value : d)))} placeholder="مثلًا: قرص كل 8 ساعات بعد الأكل" /></label>)}</div>
     <div className="dose-chips">{DOSE_CHIPS.map(c => <button key={c} className="btn ghost" onClick={() => chip(c)}>{c}</button>)}</div>
     <div className="actions"><button className="btn primary" onClick={() => void print()}><Icon n="print" />اطبع</button><button className="btn ghost" onClick={close}>إلغاء</button></div>
-    {slip && <div className="print-area" dir="rtl"><h1>طريقة الاستخدام</h1>{who && <p>المريض: {who}</p>}<table><tbody>{lines.map((l, i) => doses[i]!.trim() ? <tr key={i}><td><b>{l.item.nameAr}</b></td><td>{doses[i]}</td></tr> : null)}</tbody></table></div>}
   </div></>);
 }
 

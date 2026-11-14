@@ -84,7 +84,7 @@ export function PurchaseInvoiceScreen() {
 
   const labels = async () => {
     const rows = sel !== null && lines[sel] ? [lines[sel]!] : lines; if (!rows.length) return toast('مفيش أصناف');
-    try { const r = await api<{ printer: string; results: { ok: boolean }[] }>('/api/print/labels', { body: { lines: rows.map(l => { const c = calc(l); return { itemId: l.item.id, copies: Math.max(1, (c.q || 1) + (c.b || 0)), priceMinor: c.P ?? undefined }; }) } }); const bad = r.results.filter(x => !x.ok).length; toast(bad ? `اتبعت للطابعة ${r.printer} - ${bad} صنف مطبعش` : `اتبعت الاستيكرات لـ ${r.printer}`); }
+    try { const r = await api<{ printer: string; results: { ok: boolean }[] }>('/api/print/labels', { body: { lines: rows.map(l => { const c = calc(l); return { itemId: l.item.id, copies: Math.max(1, (c.q || 1) + (c.b || 0)), priceMinor: c.P ?? undefined, expiry: /^\d{4}-\d{2}-\d{2}$/.test(l.expiry) ? l.expiry : undefined }; }), onlyLabelItems: true } }); const bad = r.results.filter(x => !x.ok).length; toast(bad ? `اتبعت للطابعة ${r.printer} - ${bad} صنف مطبعش` : `اتبعت الاستيكرات لـ ${r.printer}`); }
     catch (e) { toast((e as { code?: string }).code === 'state' ? 'مفيش طابعة استيكر متظبطة: الإعدادات ← الطابعات' : arabic(e)); }
   };
   const printInvoice = () => {
