@@ -47,13 +47,16 @@ export function Soon({ cmd }: { cmd?: RibbonCmd }) {
 }
 
 export function Settings() {
-  const { me, can, toast, reloadMe } = useApp(); const [name, setName] = useState(me.pharmacyName ?? ''); const [err, setErr] = useState(''); const [mode, setMode] = useState<Theme>(theme.get());
+  const { me, can, toast, reloadMe } = useApp(); const [name, setName] = useState(me.pharmacyName ?? ''); const [err, setErr] = useState(''); const [mode, setMode] = useState<Theme>(theme.get()); const [tabsOn, setTabsOn] = useState(me.ui?.tabs !== false);
   const save = async (e: React.FormEvent) => { e.preventDefault(); setErr(''); try { await api('/api/settings/pharmacy', { body: { name } }); toast('اتحفظ اسم الصيدلية'); await reloadMe(); } catch (x) { setErr(arabic(x)); } };
   return (<div style={{ display: 'grid', gap: 16 }}>
     <h2><Icon n="gear" />الإعدادات</h2>
     {can('settings.branch') && <form className="card formgrid" onSubmit={save}><label>اسم الصيدلية<input value={name} onChange={e => setName(e.target.value)} /></label><button className="btn primary">حفظ</button>{err && <p className="err">{err}</p>}</form>}
     {can('settings.branch') && <Printers />}
     {can('settings.branch') && <TickerBox />}
+    {can('settings.branch') && <div className="card" style={{ display: 'grid', gap: 10 }}><b>شكل الشاشات (لكل الصيدلية)</b>
+      <label className="chk"><input type="checkbox" checked={tabsOn} onChange={e => { const on = e.target.checked; setTabsOn(on); void api('/api/settings/ui', { body: { tabs: on } }).then(() => { toast(on ? 'شريط التبويبات اتفتح' : 'شريط التبويبات اتقفل: كل شاشة ليها شريطها بالعلامات الأربعة'); return reloadMe(); }, x => { setTabsOn(!on); toast(arabic(x)); }); }} /> شريط التبويبات</label>
+      <p className="hint" style={{ margin: 0 }}>مقفول: الشاشات بتفضل مفتوحة ورا بعض من غير حد، وكل شاشة فوقها شريط فيه تصغير وتكبير وتقسيم وإغلاق، وترجع لأي شاشة من «الإطارات». مفتوح: نفس الكلام ومعاه شريط التبويبات.</p></div>}
     <div className="card" style={{ display: 'grid', gap: 10 }}><b>الشكل على الجهاز ده</b>
       <div className="tabs-inline" role="group" aria-label="الشكل">{(['light', 'dark'] as Theme[]).map(t => <button key={t} className={`btn${mode === t ? ' primary' : ' ghost'}`} onClick={() => { theme.set(t); setMode(t); }}>{t === 'light' ? 'فاتح' : 'غامق'}</button>)}</div>
       <p className="hint" style={{ margin: 0 }}>الفاتح هو الأساسي. الاختيار ده للجهاز ده بس.</p></div>

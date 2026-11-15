@@ -4,7 +4,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Icon, type RibbonCmd } from './ui';
 
-export const MAX_FRAMES = 8;
 export interface Frame { key: string; id: string; cmd?: RibbonCmd; min?: boolean; /** bumped to start the screen afresh (a held sale resumed into an open sale frame) */ epoch?: number }
 export type SplitDir = 'h' | 'v';
 export interface Layout { split: SplitDir | null; a: string; b: string | null; ratio: number; focus: 'a' | 'b'; max: boolean }
@@ -39,19 +38,14 @@ export function useFrames(toast: (m: string) => void) {
   const ref = useRef(frames); ref.current = frames;
   const set = (next: Frame[]) => { ref.current = next; setFrames(next); };
 
-  /* Owner, 15 Nov 2026: screens do not pile up behind each other. Opening a screen replaces the one in front (it closes), unless it was
-     minimized (kept in the strip) or the two are split side by side. */
-  const layRef = useRef(lay); layRef.current = lay;
+  /* Owner, 15 Nov 2026: no limit on open screens; each screen stays open behind the one in front until it is closed, and keeps its own
+     four controls (minimize, maximize, split, close). The strip of tabs is a setting. */
   const open = useCallback((id: string, cmd?: RibbonCmd, fresh = false) => {
-    const real = cmd?.sprint ? 'soon' : id; const k = frameKey(real, cmd); const l = layRef.current;
-    const front = l.split ? (l.focus === 'a' ? l.a : l.b) : l.a; const other = l.split ? (l.focus === 'a' ? l.b : l.a) : null;
-    if (k === other) { setLay(x => showIn(x, k)); touch(k); return; }
-    let list = ref.current; if (front && front !== k && list.some(f => f.key === front && !f.min)) { list = list.filter(f => f.key !== front); mru.current = mru.current.filter(x => x !== front); }
+    const real = cmd?.sprint ? 'soon' : id; const k = frameKey(real, cmd); let list = ref.current;
     if (list.some(f => f.key === k)) list = list.map(f => (f.key === k ? { ...f, min: false, cmd: cmd ?? f.cmd, epoch: fresh ? (f.epoch ?? 0) + 1 : f.epoch } : f));
-    else if (list.length >= MAX_FRAMES) { toast(`مفتوح ${MAX_FRAMES} شاشات، ده الحد. اقفل شاشة الأول من الإطارات.`); return; }
     else list = [...list, { key: k, id: real, cmd }];
-    set(list); setLay(x => (x.split ? (x.focus === 'a' ? { ...x, a: k } : { ...x, b: k }) : { ...x, a: k })); touch(k);
-  }, [toast]); // eslint-disable-line react-hooks/exhaustive-deps
+    set(list); setLay(x => showIn(x, k)); touch(k);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const focusFrame = useCallback((k: string) => { set(ref.current.map(f => (f.key === k ? { ...f, min: false } : f))); setLay(l => showIn(l, k)); touch(k); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const close = useCallback((k: string) => {
@@ -65,7 +59,7 @@ export function useFrames(toast: (m: string) => void) {
   /** split with a screen that is not open yet: it opens in the other half */
   const splitNew = useCallback((k: string, id: string, dir: SplitDir) => {
     const nk = frameKey(id); if (nk === k) return; let list = ref.current;
-    if (!list.some(f => f.key === nk)) { if (list.length >= MAX_FRAMES) { toast(`مفتوح ${MAX_FRAMES} شاشات، ده الحد.`); return; } list = [...list, { key: nk, id }]; }
+    if (!list.some(f => f.key === nk)) list = [...list, { key: nk, id }];
     set(list.map(f => (f.key === nk || f.key === k ? { ...f, min: false } : f))); setLay(l => ({ ...l, split: dir, a: k, b: nk, focus: 'b', max: false, ratio: 0.5 })); touch(nk);
   }, [toast]); // eslint-disable-line react-hooks/exhaustive-deps
   const unsplit = useCallback(() => setLay(l => ({ ...l, split: null, a: l.focus === 'a' ? l.a : l.b ?? l.a, b: null, focus: 'a' })), []);
@@ -160,7 +154,7 @@ export function FramesMenu({ fr }: { fr: Frames }) {
               <button className="fbtn x" aria-label={`إغلاق ${titleOf(f)}`} onClick={() => fr.close(f.key)}><Icon n="x" /></button>
             </div>
           ))}
-          <div className="ffoot"><span>{fr.frames.length} من {MAX_FRAMES}</span><button className="linkbtn" onClick={() => { fr.closeAll(); setOpen(false); }}>اقفل الكل</button></div>
+          <div className="ffoot"><span>{fr.frames.length} شاشة مفتوحة</span><button className="linkbtn" onClick={() => { fr.closeAll(); setOpen(false); }}>اقفل الكل</button></div>
         </div>
       )}
     </div>
@@ -168,7 +162,7 @@ export function FramesMenu({ fr }: { fr: Frames }) {
 }
 
 /** the work area: every open frame stays mounted (so a half-typed invoice is kept); one or two are on screen */
-export function WorkArea({ fr, render }: { fr: Frames; render: (f: Frame) => ReactNode }) {
+export function WorkArea({ fr, render, headers = false }: { fr: Frames; render: (f: Frame) => ReactNode; /** each screen shows its own title bar with the four controls (when the tab strip is off) */ headers?: boolean }) {
   const ref = useRef<HTMLDivElement>(null); const [narrow, setNarrow] = useState(false);
   useEffect(() => { const el = ref.current; if (!el) return; const ro = new ResizeObserver(() => setNarrow(el.clientWidth < 820)); ro.observe(el); return () => ro.disconnect(); }, []);
   const { lay } = fr; const dir: SplitDir | null = lay.split ? (narrow ? 'v' : lay.split) : null; const r = lay.ratio;
@@ -193,7 +187,7 @@ export function WorkArea({ fr, render }: { fr: Frames; render: (f: Frame) => Rea
         const st = style(f.key); const pane: 'a' | 'b' = lay.b === f.key && dir ? 'b' : 'a'; const active = f.key === fr.focused;
         return (
           <section key={f.key} className={`frame${dir ? ' split' : ''}${active && dir ? ' focus' : ''}`} style={st ?? { display: 'none' }} aria-hidden={st ? undefined : true} aria-label={titleOf(f)} onMouseDownCapture={() => { if (dir) fr.setFocus(pane); }}>
-            {dir && st && <div className="phead"><Icon n={iconOf(f)} /><b>{titleOf(f)}</b><Controls f={f} fr={fr} title={titleOf(f)} /></div>}
+            {(dir || headers) && st && <div className="phead"><Icon n={iconOf(f)} /><b>{titleOf(f)}</b><Controls f={f} fr={fr} title={titleOf(f)} /></div>}
             <div className="fbody" key={f.epoch ?? 0}><FrameCtx.Provider value={{ active: active && !!st, visible: !!st }}>{render(f)}</FrameCtx.Provider></div>
           </section>
         );

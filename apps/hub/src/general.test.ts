@@ -33,4 +33,11 @@ describe('General data (Sprint 7.11)', () => {
     const info = (await s.call('GET', '/api/system/info', s.owner)).body; expect(info.db.bytes).toBeGreaterThan(0); expect(info.db.freeBytes).toBeGreaterThanOrEqual(0);
     expect((await s.call('GET', '/api/system/info', s.cs)).body.db).toBeNull();
   });
+  it('the strip of tabs is a pharmacy setting: on by default, the owner can turn it off, the cashier cannot', async () => {
+    const s = await prep();
+    expect((await s.call('GET', '/api/me', s.owner)).body.ui).toEqual({ tabs: true });
+    expect((await s.call('POST', '/api/settings/ui', s.owner, { tabs: false })).body.ui).toEqual({ tabs: false });
+    expect((await s.call('GET', '/api/me', s.cs)).body.ui).toEqual({ tabs: false });
+    expect((await s.call('POST', '/api/settings/ui', s.cs, { tabs: true })).status).toBe(403); expect((await s.call('POST', '/api/settings/ui', s.owner, { tabs: 'x' })).body.error).toBe('invalid');
+  });
 });
