@@ -8,7 +8,7 @@ import type { ReceiptLine } from './receipt';
 import { barcodeFor } from './barcodes';
 
 /** What goes on one sticker (Sprint 7.12). A price sticker: pharmacy and phone on top, the bars, the item name, then code, expiry and price. A dose sticker: the item, how to take it, the patient, the pharmacy. */
-export interface LabelSpec { kind: 'price' | 'dose'; name: string; barcode?: string | null; code?: string | null; pharmacy?: string | null; phone?: string | null; price?: string | null; expiry?: string | null; dose?: string | null; patient?: string | null }
+export interface LabelSpec { kind: 'price' | 'dose' | 'test'; name: string; barcode?: string | null; code?: string | null; pharmacy?: string | null; phone?: string | null; price?: string | null; expiry?: string | null; dose?: string | null; patient?: string | null }
 
 export interface Rasterizer {
   /** Draw a receipt at the printer's dot width (576 = 80 mm paper, 384 = 58 mm). */
@@ -109,7 +109,7 @@ export class SkiaRasterizer implements Rasterizer {
   }
   label(spec: LabelSpec, W: number, H: number, o: { dx?: number; dy?: number } = {}): GrayImage {
     fonts(); const cv = createCanvas(W, H); const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#000';
-    ctx.translate(Math.round(o.dx ?? 0), Math.round(o.dy ?? 0)); const pad = Math.max(6, Math.round(W * 0.03)); const iw = W - 2 * pad; let y = Math.max(4, Math.round(H * 0.03));
+    ctx.translate(Math.round(o.dx ?? 0), Math.round(o.dy ?? 0)); const pad = Math.max(16, Math.round(W * 0.05)); const iw = W - 2 * pad; let y = Math.max(10, Math.round(H * 0.05));
     const line = (text: string, maxSize: number, minSize: number, weight: number, align: 'right' | 'center' | 'left', x: number, maxW: number, lines = 1) => {
       const f = fit(ctx, text, maxW, maxSize, minSize, weight, lines); ctx.font = `${weight} ${f.size}px ${FAMILY}`;
       for (const t of f.lines) { y += Math.round(f.size * 1.1); drawRtl(ctx, t, x, y, align); y += Math.round(f.size * 0.18); }
@@ -128,10 +128,14 @@ export class SkiaRasterizer implements Rasterizer {
         y += bh + 4;
       }
       line(spec.name, Math.round(H * 0.11), 12, 700, 'center', W / 2, iw, 2);
-      const yb = H - Math.round(H * 0.04); const sz = Math.max(12, Math.round(H * 0.105)); ctx.font = `700 ${sz}px ${FAMILY}`;
+      const yb = H - Math.max(10, Math.round(H * 0.06)); const sz = Math.max(12, Math.round(H * 0.105)); ctx.font = `700 ${sz}px ${FAMILY}`;
       if (spec.price) drawRtl(ctx, spec.price, W - pad, yb, 'right');
       if (spec.expiry) drawRtl(ctx, spec.expiry, W / 2, yb, 'center');
       ctx.font = `400 ${Math.max(12, sz - 2)}px ${FAMILY}`; if (spec.code) drawRtl(ctx, spec.code, pad, yb, 'left');
+    } else if (spec.kind === 'test') {
+      /* the test sticker: a frame 1 mm inside the edges and a cross at the centre; if the frame is whole and centred, the size is right */
+      ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeRect(8, 8, W - 16, H - 16); ctx.fillRect(W / 2 - 1, H / 2 - 24, 3, 48); ctx.fillRect(W / 2 - 24, H / 2 - 1, 48, 3);
+      const sz = Math.max(14, Math.round(H * 0.12)); ctx.font = `700 ${sz}px ${FAMILY}`; drawRtl(ctx, spec.name, W / 2, H / 2 - 30, 'center'); if (spec.code) { ctx.font = `400 ${Math.max(12, sz - 4)}px ${FAMILY}`; drawRtl(ctx, spec.code, W / 2, H / 2 + 30 + sz, 'center'); }
     } else {
       line(spec.name, Math.round(H * 0.12), 12, 700, 'center', W / 2, iw, 2);
       ctx.fillRect(pad, y, iw, 2); y += 4;

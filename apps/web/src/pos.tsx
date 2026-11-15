@@ -5,7 +5,7 @@ import { useFrame } from './frames';
 import { SaleA4, usePrintWhen, type A4Pharmacy, type A4Sale, type A4Style } from './a4';
 
 /* ================= shared ================= */
-export type TillItem = { id: string; code: string; nameAr: string; kind: string; units: { name: string; factor: number }[]; sellableBase: number; priceMinor: number | null; priceUnit: string | null; nearestExpiry: string | null };
+export type TillItem = { id: string; code: string; nameAr: string; kind: string; units: { name: string; factor: number }[]; sellableBase: number; priceMinor: number | null; priceUnit: string | null; nearestExpiry: string | null; location?: string | null; reorderLevel?: number };
 export type Line = { item: TillItem; unitName: string; qty: number };
 type Quote = { itemId: string; amountMinor?: number; missingBase?: number; noPrice?: boolean; error?: string; picks?: { lot: string; expiry: string; qtyBase: number; amountMinor: number }[] };
 const POS_ERR: Record<string, string> = { insufficient: 'الكمية أكتر من المتاح للبيع (المنتهي والمحجوز مبيتباعش).', underpaid: 'المدفوع أقل من الإجمالي.', 'no-price': 'فيه صنف من غير سعر.', session: 'افتح جلسة الكاشير الأول.', 'discount-limit': 'الخصم أكبر من المسموح لك.', 'credit-limit': 'العميل عدّى حد الآجل.', 'day-closed': 'اليوم اتقفل: البيع بيبدأ يوم جديد.', blocked: 'الصنف ده موقوف أو التشغيلة محجوزة.' };
@@ -37,6 +37,28 @@ export function LinesTable({ lines, setLines, quotes, sel, onSel }: { lines: Lin
         <td className="n" data-l="القيمة">{q?.amountMinor != null ? money(q.amountMinor) : '-'}</td>
         <td className="bt"><button className="btn ghost" onClick={() => setLines(lines.filter((_, k) => k !== i))} aria-label="حذف السطر"><Icon n="x" /></button></td></tr>); })}
     {!lines.length && <tr><td colSpan={5} className="muted">الفاتورة فاضية: امسح أو دوّر على صنف.</td></tr>}
+  </tbody></table></div>);
+}
+/** The sale lines as eStock's grid: code, name, expiry, unit, quantity, sale price, stock, reorder level, value before and after the discount, place. */
+function SaleGrid({ lines, setLines, quotes, sel, onSel, discBp }: { lines: Line[]; setLines: (l: Line[]) => void; quotes: Quote[]; sel: number | null; onSel: (i: number) => void; discBp: number }) {
+  const upd = (i: number, p: Partial<Line>) => setLines(lines.map((l, k) => (k === i ? { ...l, ...p } : l)));
+  const exp = (iso?: string) => (iso && !iso.startsWith('9999') ? `${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '-');
+  return (<div className="tablewrap sx-grid"><table className="lines"><thead><tr><th>كود الصنف</th><th>إسم الصنف</th><th>تاريخ الصلاحية</th><th>الوحدة</th><th className="n">الكمية</th><th className="n">سعر البيع</th><th className="n">الرصيد</th><th className="n">حد الطلب</th><th className="n">قيمة ق الخصم</th><th className="n">قيمة بعد الخصم</th><th>موقع الصنف</th><th aria-label="حذف" /></tr></thead><tbody>
+    {lines.map((l, i) => { const q = quotes[i]; const short = q?.missingBase ? `ناقص ${qtyText(q.missingBase, l.item.units)}` : q?.error ? 'مش متاح' : q?.noPrice ? 'بدون سعر' : ''; const amt = q?.amountMinor ?? null; const low = (l.item.reorderLevel ?? 0) > 0 && l.item.sellableBase <= (l.item.reorderLevel ?? 0);
+      return (<tr key={i} className={sel === i ? 'sel' : ''} onClick={() => onSel(i)} onContextMenu={() => onSel(i)}>
+        <td className="code">{l.item.code}</td>
+        <td className="nm">{l.item.nameAr}{q?.picks && q.picks.length > 1 && <small className="muted"><br />من {q.picks.length} تشغيلات</small>}{short && <><br /><span className="err">{short}</span></>}</td>
+        <td>{exp(q?.picks?.[0]?.expiry ?? l.item.nearestExpiry ?? undefined)}</td>
+        <td>{l.item.units.length > 1 ? <select value={l.unitName} onChange={e => upd(i, { unitName: e.target.value })} aria-label="الوحدة">{l.item.units.map(u => <option key={u.name} value={u.name}>{u.name}</option>)}</select> : l.unitName}</td>
+        <td className="n"><input className="num" inputMode="numeric" value={l.qty} onChange={e => { const n = Number(e.target.value.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))); if (Number.isInteger(n) && n >= 0 && n < 100000) upd(i, { qty: n }); }} aria-label="الكمية" /></td>
+        <td className="n">{amt != null && l.qty > 0 ? money(Math.round(amt / l.qty)) : '-'}</td>
+        <td className={`n${low ? ' warn-t' : ''}`}>{qtyText(l.item.sellableBase, l.item.units)}</td>
+        <td className="n">{l.item.reorderLevel ? l.item.reorderLevel : '-'}</td>
+        <td className="n">{amt != null ? money(amt) : '-'}</td>
+        <td className="n"><b>{amt != null ? money(amt - Math.round(amt * discBp / 10000)) : '-'}</b></td>
+        <td>{l.item.location ?? '-'}</td>
+        <td className="bt"><button className="btn ghost" onClick={e => { e.stopPropagation(); setLines(lines.filter((_, k) => k !== i)); }} aria-label="حذف السطر"><Icon n="x" /></button></td></tr>); })}
+    {!lines.length && <tr><td colSpan={12} className="muted" style={{ textAlign: 'center', padding: 24 }}>الفاتورة فاضية: امسح الباركود أو دوّر على صنف.</td></tr>}
   </tbody></table></div>);
 }
 export function useQuotes(lines: Line[]) {
@@ -122,7 +144,7 @@ function CustomerPick({ value, onPick }: { value: Cust | null; onPick: (c: Cust 
 }
 
 export function SaleScreen() {
-  const frame = useFrame(); const { can, toast, go } = useApp(); const { info } = useSession(); const [lines, setLines] = useState<Line[]>(() => { try { const h = sessionStorage.getItem('o.resume'); if (h) { sessionStorage.removeItem('o.resume'); return JSON.parse(h).lines as Line[]; } } catch { /* none */ } return []; });
+  const frame = useFrame(); const { can, toast, go, me } = useApp(); const { info } = useSession(); const [lines, setLines] = useState<Line[]>(() => { try { const h = sessionStorage.getItem('o.resume'); if (h) { sessionStorage.removeItem('o.resume'); return JSON.parse(h).lines as Line[]; } } catch { /* none */ } return []; });
   const [fromHold] = useState<string | undefined>(() => { try { const h = sessionStorage.getItem('o.resumeId'); if (h) { sessionStorage.removeItem('o.resumeId'); return h; } } catch { /* none */ } return undefined; });
   const [cash, setCash] = useState(''); const [card, setCard] = useState(''); const [cardRef, setCardRef] = useState(''); const [disc, setDisc] = useState(''); const [deliv, setDeliv] = useState<Deliv | null>(null);
   const [customer, setCustomer] = useState<Cust | null>(null); const [sel, setSel] = useState<number | null>(null); const [draftId, setDraftId] = useState(() => newKey());
@@ -181,25 +203,29 @@ export function SaleScreen() {
     <h2 style={{ margin: 0 }}><Icon n="cart" />فاتورة بيع <small className="muted">- {info.session.sessionNo}</small>{fromHold && <span className="pill">من فاتورة معلّقة</span>}</h2>
     {done && <div className="card warnbox" style={{ display: 'grid', gap: 8 }}><b>اتسجلت الفاتورة {done.saleNo} - الإجمالي {money(done.totalMinor)}{done.changeMinor > 0 && <> - الباقي للعميل <span style={{ fontSize: '1.3em' }}>{money(done.changeMinor)}</span></>}{done.codMinor > 0 && <> - يتحصّل عند التوصيل {money(done.codMinor)}</>}</b>{done.note && <span>{done.note}</span>}<ReceiptBox saleNo={done.saleNo} autoPrint totalMinor={done.totalMinor} /><button className="btn ghost" onClick={() => setDone(null)}>فاتورة جديدة</button></div>}
     {!done && <>
-      <CustomerPick value={customer} onPick={pickCustomer} />
-      <ItemPicker autoFocus onPick={(it, u) => setLines(addLine(lines, it, u))} />
-      <LinesTable lines={lines} setLines={setLines} quotes={quotes} sel={sel} onSel={setSel} />
-      <div className="card" style={{ display: 'grid', gap: 10 }}>
-        <div className="totals"><div className="net"><small>الصافي المطلوب</small><strong>{money(approxNet)}</strong></div><div className="mini"><span>الإجمالي قبل الخصم: <b>{money(total)}</b></span><span>عدد الأصناف: <b>{lines.length}</b></span></div></div>
-        <div className="formgrid">
-          {can('sale.discount') && <label>خصم %<input className="num" inputMode="decimal" value={disc} onChange={e => setDisc(e.target.value)} placeholder="0" /></label>}
-          <label>كاش (جنيه)<input className="num" inputMode="decimal" value={cash} onChange={e => setCash(e.target.value)} placeholder={egp(approxNet)} onKeyDown={e => { if (e.key === 'Enter') void sell(); }} /></label>
-          <label>فيزا (جنيه)<input className="num" inputMode="decimal" value={card} onChange={e => setCard(e.target.value)} /></label>
-          {card && <label>رقم عملية الفيزا<input value={cardRef} onChange={e => setCardRef(e.target.value)} dir="ltr" /></label>}
+      {/* Owner, 15 Nov 2026: laid out like the eStock sale screen: invoice type and customer on top, the invoice totals, the net due, then the items grid */}
+      <div className="sx-head">
+        <div className="sx-box sx-type"><b>نوع الفاتورة</b>
+          <label className="chk"><input type="radio" name={`pt-${draftId}`} checked={!card} onChange={() => { setCard(''); setCardRef(''); }} /> كاش</label>
+          <label className="chk"><input type="radio" name={`pt-${draftId}`} checked={!!card} onChange={() => { setCard(egp(approxNet) || '0'); setCash(''); }} /> فيزا</label>
+          {can('home_delivery.create') && !ins && <label className="chk"><input type="checkbox" checked={!!deliv} onChange={e => toggleDeliv(e.target.checked)} /> توصيل منزلي</label>}
+          {can('insurance_claim.submit') && can('sale.credit.create') && <label className="chk"><input type="checkbox" checked={!!ins} onChange={e => setIns(e.target.checked ? { contractId: '', memberNo: '' } : null)} /> تأمين / تعاقد</label>}
         </div>
-        {cash && toMinor(cash) !== null && (toMinor(cash)! + (toMinor(card || '0') ?? 0)) > approxNet && <div>الباقي تقريبًا: <b>{money(toMinor(cash)! + (toMinor(card || '0') ?? 0) - approxNet)}</b></div>}
-        {can('insurance_claim.submit') && can('sale.credit.create') && <label className="chk"><input type="checkbox" checked={!!ins} onChange={e => setIns(e.target.checked ? { contractId: '', memberNo: '' } : null)} /> تأمين / تعاقد (العضو يدفع نسبته والباقي على الجهة)</label>}
-        {ins && <div className="formgrid"><label>الجهة<select value={ins.contractId} onChange={e => setIns({ ...ins, contractId: e.target.value })}><option value="">اختار</option>{contracts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>رقم العضو<input dir="ltr" value={ins.memberNo} onChange={e => setIns({ ...ins, memberNo: e.target.value })} /></label>{insQ && <div>على الجهة <b>{money(insQ.coveredMinor)}</b> - العضو يدفع <b>{money(insQ.copayMinor)}</b>{insQ.needsApproval && <span className="pill warn">محتاجة موافقة</span>}</div>}</div>}
-        {can('home_delivery.create') && !ins && <label className="chk"><input type="checkbox" checked={!!deliv} onChange={e => toggleDeliv(e.target.checked)} /> توصيل للبيت (اللي مش مدفوع يتحصّل عند التوصيل)</label>}
-        {deliv && <div className="formgrid"><label>اسم العميل<input value={deliv.name} onChange={e => setDeliv({ ...deliv, name: e.target.value })} /></label><label>الموبايل<input dir="ltr" value={deliv.phone} onChange={e => setDeliv({ ...deliv, phone: e.target.value })} /></label><label>العنوان<input value={deliv.address} onChange={e => setDeliv({ ...deliv, address: e.target.value })} /></label><label>مصاريف التوصيل<input className="num" value={deliv.fee} onChange={e => setDeliv({ ...deliv, fee: e.target.value })} /></label></div>}
-        {err && <p className="err">{err}</p>}
-        <p className="hint" style={{ margin: 0 }}>الكاش فاضي = العميل دفع المبلغ بالظبط. الأسعار من التشغيلة الأقرب انتهاءً. كليك يمين في أي حتة يطلع نفس أوامر الشريط.</p>
+        <div className="sx-box sx-cust"><b>بيانات العميل</b><CustomerPick value={customer} onPick={pickCustomer} /></div>
+        <div className="sx-net"><small>الصافي المطلوب</small><strong>{money(approxNet)}</strong><span>البائع: {me.person.displayName}</span></div>
       </div>
+      <div className="tablewrap sx-tot"><table><thead><tr><th>عدد الأصناف</th><th>الإجمالي ق الخصم</th>{can('sale.discount') && <th>خصم %</th>}<th>خصم قيمة</th>{deliv && <th>م إضافية (توصيل)</th>}<th>كاش (جنيه)</th><th>فيزا (جنيه)</th>{card && <th>رقم عملية الفيزا</th>}</tr></thead>
+        <tbody><tr><td>{lines.length}</td><td>{money(total)}</td>{can('sale.discount') && <td><input className="num" inputMode="decimal" value={disc} onChange={e => setDisc(e.target.value)} placeholder="0" aria-label="خصم %" /></td>}<td>{money(Math.round(total * discBp / 10000))}</td>
+          {deliv && <td><input className="num" inputMode="decimal" value={deliv.fee} onChange={e => setDeliv({ ...deliv, fee: e.target.value })} placeholder="0" aria-label="خدمة التوصيل" /></td>}
+          <td><input className="num" inputMode="decimal" value={cash} onChange={e => setCash(e.target.value)} placeholder={egp(approxNet)} onKeyDown={e => { if (e.key === 'Enter') void sell(); }} aria-label="كاش" /></td>
+          <td><input className="num" inputMode="decimal" value={card} onChange={e => setCard(e.target.value)} aria-label="فيزا" /></td>{card && <td><input value={cardRef} onChange={e => setCardRef(e.target.value)} dir="ltr" aria-label="رقم عملية الفيزا" /></td>}</tr></tbody></table></div>
+      {cash && toMinor(cash) !== null && (toMinor(cash)! + (toMinor(card || '0') ?? 0)) > approxNet && <div className="sx-change">الباقي للعميل: <b>{money(toMinor(cash)! + (toMinor(card || '0') ?? 0) - approxNet)}</b></div>}
+        {ins && <div className="formgrid"><label>الجهة<select value={ins.contractId} onChange={e => setIns({ ...ins, contractId: e.target.value })}><option value="">اختار</option>{contracts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>رقم العضو<input dir="ltr" value={ins.memberNo} onChange={e => setIns({ ...ins, memberNo: e.target.value })} /></label>{insQ && <div>على الجهة <b>{money(insQ.coveredMinor)}</b> - العضو يدفع <b>{money(insQ.copayMinor)}</b>{insQ.needsApproval && <span className="pill warn">محتاجة موافقة</span>}</div>}</div>}
+        {deliv && <div className="formgrid"><label>اسم العميل<input value={deliv.name} onChange={e => setDeliv({ ...deliv, name: e.target.value })} /></label><label>الموبايل<input dir="ltr" value={deliv.phone} onChange={e => setDeliv({ ...deliv, phone: e.target.value })} /></label><label>العنوان<input value={deliv.address} onChange={e => setDeliv({ ...deliv, address: e.target.value })} /></label><label>مصاريف التوصيل<input className="num" value={deliv.fee} onChange={e => setDeliv({ ...deliv, fee: e.target.value })} /></label></div>}
+      <ItemPicker autoFocus onPick={(it, u) => setLines(addLine(lines, it, u))} />
+      <SaleGrid lines={lines} setLines={setLines} quotes={quotes} sel={sel} onSel={setSel} discBp={discBp} />
+      {err && <p className="err">{err}</p>}
+      <p className="hint" style={{ margin: 0 }}>الكاش فاضي = العميل دفع المبلغ بالظبط. الأسعار من التشغيلة الأقرب انتهاءً. كليك يمين في أي حتة يطلع نفس أوامر الشريط.</p>
     </>}
     </div>
     <nav className="pi-side" aria-label="أوامر الفاتورة">

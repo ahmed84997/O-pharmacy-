@@ -15,7 +15,7 @@ import { glanceRoutes } from './glance-api';
 import { SystemService } from './system';
 import { relayOf } from './printing';
 
-export const VERSION = '0.7.15';
+export const VERSION = '0.7.16';
 export interface ServerOptions { webDir?: string; staffSecret?: string; logger?: boolean; system?: SystemService }
 /** The pharmacy's data fields: request field, setting key, longest length. */
 const ORG_FIELDS: [string, string, number][] = [['name', 'pharmacy.name', 80], ['phones', 'pharmacy.phones', 80], ['address', 'pharmacy.address', 160], ['supportPhone', 'pharmacy.support_phone', 40], ['taxRegNo', 'pharmacy.tax_reg_no', 40], ['commercialRegNo', 'pharmacy.commercial_reg_no', 40]];

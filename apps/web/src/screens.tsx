@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api, arabic } from './api';
 import { ChangeSecret } from './App';
+import { Mark } from './icons';
 import { Icon, useApp, type RibbonCmd } from './ui';
 import Printers from './Printers';
 import { theme, type Theme, type TickerSettings } from './chrome';
 
 type Dash = { pharmacyName: string | null; items?: number; nearExpiry?: number; people?: number; pendingDevices?: number; suppliers?: number; customers?: number; empty: boolean; testMode: boolean };
-const SPRINTS: [string, string][] = [['8', 'الـ Pilot: شهر شغل حقيقي في الصيدلية جنب eStock'], ['10', 'تطبيق الموبايل للموظفين (بعد ما الديسكتوب ينضج)']];
 
 const greet = () => { const h = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hourCycle: 'h23', timeZone: 'Africa/Cairo' }).format(new Date())); return h < 12 ? 'صباح الخير' : 'مساء الخير'; };
 const longDate = () => new Intl.DateTimeFormat('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Cairo' }).format(new Date());
@@ -26,21 +26,19 @@ export function Home() {
   const seed = async () => { setBusy(true); try { const r = await api<{ items: number; customers: number; staff: number }>('/api/test/seed', { body: {} }); toast(`اتحمّلت البيانات التجريبية: ${r.items} صنف و${r.customers} عميل${r.staff ? ` و${r.staff} موظفين` : ''}`); await load(); } catch (e) { toast(arabic(e)); } finally { setBusy(false); } };
   const card = (label: string, v: number | undefined, screen?: string, tone?: string) => v === undefined ? null : <button className="card stat" key={label} onClick={() => screen && go(screen)} style={{ textAlign: 'start' }}><span className="muted">{label}</span><b style={tone ? { color: `var(--${tone})` } : undefined}>{v}</b></button>;
   const c = glance?.counts ?? {}; const months = glance?.settings.expiryMonths ?? 3;
-  return (<div>
-    <div className="hello"><div><h1>{greet()} يا {me.person.displayName}</h1><div className="muted">{longDate()}{me.pharmacyName ? ` - ${me.pharmacyName}` : ''}</div></div></div>
-    {err && <p className="err">{err}</p>}
-    <div className="stats">
-      {card('طلبات جاهزة للإبلاغ', c.ready, 'requests', c.ready ? 'info' : undefined)}
-      {card('نواقص مفتوحة', c.shortages, 'requests', c.shortages ? 'warn' : undefined)}
-      {card(`تشغيلات تنتهي خلال ${months} شهور`, c.nearExpiry, 'expiry', c.nearExpiry ? 'bad' : undefined)}
-      {card('مهامي المفتوحة', c.tasks, 'tasks')}
-      {d && card('أصناف نشطة', d.items, 'items')}{d && card('عملاء', d.customers, 'customers')}{d && card('موردين', d.suppliers, 'suppliers')}
-      {d && card('أجهزة مستنية موافقة', d.pendingDevices || undefined, 'devices', 'warn')}
+  /* Owner, 15 Nov 2026: after login the home page is the logo, like eStock's; the person picks what to do from the bars or the buttons below */
+  const counts = [c.ready ? { l: 'طلبات جاهزة للإبلاغ', v: c.ready, s: 'requests' } : null, c.shortages ? { l: 'نواقص مفتوحة', v: c.shortages, s: 'requests' } : null, c.nearExpiry ? { l: `تنتهي خلال ${months} شهور`, v: c.nearExpiry, s: 'expiry' } : null, c.tasks ? { l: 'مهامي', v: c.tasks, s: 'tasks' } : null, d?.pendingDevices ? { l: 'أجهزة مستنية موافقة', v: d.pendingDevices, s: 'devices' } : null].filter(Boolean) as { l: string; v: number; s: string }[];
+  void card;
+  return (<div className="splash">
+    <svg className="splash-orbits" aria-hidden="true" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice"><g fill="none" strokeWidth="1.2" transform="rotate(-18 600 330)"><ellipse cx="600" cy="330" rx="360" ry="140" /><ellipse cx="600" cy="330" rx="520" ry="210" strokeDasharray="4 10" /><ellipse cx="600" cy="330" rx="700" ry="290" /></g></svg>
+    <div className="splash-in">
+      <div className="splash-logo" dir="ltr" role="img" aria-label="O Pharmacy"><Mark size={150} orbit /><div><b>Pharmacy</b><small>O = ORBIT</small></div></div>
+      <div className="splash-hello"><b>{greet()} يا {me.person.displayName}</b><span>{longDate()}{me.pharmacyName ? ` - ${me.pharmacyName}` : ''}</span></div>
+      {err && <p className="err">{err}</p>}
+      {QUICK.some(q => q.perms.some(can)) && <div className="splash-quick">{QUICK.filter(q => q.perms.some(can)).map(q => <button key={q.screen} className={`qa${q.main ? ' main' : ''}`} onClick={() => go(q.screen)}><Icon n={q.icon} />{q.label}</button>)}</div>}
+      {counts.length > 0 && <div className="splash-counts">{counts.map(x => <button key={x.l} onClick={() => go(x.s)}><b>{x.v}</b>{x.l}</button>)}</div>}
+      {d?.testMode && d.empty && me.person.roles.includes('O') && <div className="card warnbox" style={{ marginTop: 8 }}><p>دي نسخة تجربة وقاعدة البيانات فاضية. تحب تحمّل بيانات تجريبية (أصناف وتشغيلات وموردين وعملاء)؟ بتتعمل من خلال قواعد البرنامج الحقيقية.</p><button className="btn primary" disabled={busy} onClick={() => void seed()}>{busy ? 'بيحمّل...' : 'حمّل البيانات التجريبية'}</button></div>}
     </div>
-    {QUICK.some(q => q.perms.some(can)) && <div className="card" style={{ marginTop: 16, display: 'grid', gap: 12 }}><b>اختصارات</b>
-      <div className="quick">{QUICK.filter(q => q.perms.some(can)).map(q => <button key={q.screen} className={`qa${q.main ? ' main' : ''}`} onClick={() => go(q.screen)}><Icon n={q.icon} />{q.label}</button>)}</div></div>}
-    {d?.testMode && d.empty && me.person.roles.includes('O') && <div className="card warnbox" style={{ marginTop: 16 }}><p>دي نسخة تجربة وقاعدة البيانات فاضية. تحب تحمّل بيانات تجريبية (أصناف وتشغيلات وموردين وعملاء)؟ بتتعمل من خلال قواعد البرنامج الحقيقية.</p><button className="btn primary" disabled={busy} onClick={() => void seed()}>{busy ? 'بيحمّل...' : 'حمّل البيانات التجريبية'}</button></div>}
-    <div className="card soonbox" style={{ marginTop: 16 }}><b>اللي جاي</b>{SPRINTS.map(([s, t]) => <div key={s}><span className="pill">{s}</span> {t}</div>)}</div>
   </div>);
 }
 

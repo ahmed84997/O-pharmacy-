@@ -27,6 +27,7 @@ describe('Sprint 7.12 printing', () => {
     const r = (await s.call('POST', '/api/print/labels', s.O, { lines: [{ itemId: a.id, copies: 3 }, { itemId: b.id, copies: 2, priceMinor: 1250, expiry: '2027-10-31' }], show: { phone: false } })).body;
     expect(r.printer).toBe('ستيكر'); expect(r.results.map((x: { ok: boolean }) => x.ok)).toEqual([true, true]); expect(r.stickers).toBe(5);
     expect((await s.call('POST', '/api/print/labels', s.O, { lines: [] })).body.error).toBe('invalid');
+    expect((await s.call('POST', '/api/print/label-test', s.O, {})).body).toMatchObject({ ok: true, printer: 'ستيكر' }); expect((await s.call('POST', '/api/print/label-test', s.cs, {})).status).toBe(403);
     // the printer settings of the roll are kept and checked
     const pr = (await s.call('GET', '/api/settings/printers', s.O)).body.printers.find((p: { name: string }) => p.name === 'ستيكر'); expect(pr).toMatchObject({ labelMm: [38, 25], gapMm: 3, density: 12, offsetX: 8, speed: 4, language: 'tspl' });
   });

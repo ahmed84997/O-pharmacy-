@@ -616,3 +616,49 @@ button.card.stat:hover { border-color: var(--teal); }
   .sheets-print .cell { display: grid; place-items: center; overflow: hidden; }
   .sheets-print .cell img { width: 100%; height: 100%; object-fit: contain; }
 }
+
+/* ================= 15 Nov 2026: the sale screen like eStock, the home page as the logo ================= */
+.sx-head { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
+.sx-box { background: var(--panel); border: 2px solid var(--line); border-radius: 12px; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+.sx-box > b { font-size: 13px; color: var(--teal-ink); }
+.sx-type { flex: 0 0 auto; min-width: 150px; }
+.sx-type .chk { font-weight: 700; font-size: 15px; }
+.sx-cust { flex: 1 1 360px; min-width: 0; }
+.sx-cust .cust-search, .sx-cust .searchbox { margin: 0; }
+.sx-net { flex: 0 0 240px; display: grid; align-content: center; justify-items: center; gap: 4px; background: var(--deep); color: #fff; border-radius: 12px; padding: 10px 14px; }
+.sx-net small { color: #9FDDEE; font-weight: 600; }
+.sx-net strong { font-size: 40px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.sx-net span { font-size: 12px; color: #CFE3E9; }
+.sx-tot table { min-width: 0; }
+.sx-tot th, .sx-tot td { text-align: center; padding: 6px 8px; }
+.sx-tot td { font-weight: 700; font-size: 16px; }
+.sx-tot input { width: 100%; max-width: 130px; text-align: center; }
+.sx-change { font-weight: 700; color: var(--ok); font-size: 18px; }
+.sx-grid { overflow-x: auto; }
+.sx-grid table { min-width: 1080px; }
+.sx-grid th { white-space: nowrap; }
+.sx-grid td.code { white-space: nowrap; }
+.sx-grid input.num { width: 80px; }
+.warn-t { color: var(--warn); font-weight: 700; }
+@media (max-width: 760px) { .sx-net { flex: 1 1 100%; } }
+
+.splash { position: relative; min-height: 100%; display: grid; place-items: center; overflow: hidden; margin: -18px -20px; padding: 24px 16px;
+  background: radial-gradient(ellipse at 50% 38%, #1B5A6B 0%, #0F3B48 52%, #0A2832 100%); color: #E9F4F7; }
+.splash-orbits { position: absolute; inset: 0; width: 100%; height: 100%; stroke: #2C7489; opacity: .5; pointer-events: none; }
+.splash-in { position: relative; display: grid; justify-items: center; gap: 18px; text-align: center; max-width: 900px; }
+.splash-logo { display: flex; align-items: center; gap: 16px; }
+.splash-logo b { font-family: "Segoe UI", var(--font); font-size: clamp(48px, 7vw, 78px); font-weight: 700; color: #fff; letter-spacing: -1px; line-height: 1; display: block; }
+.splash-logo small { display: block; font-size: 13px; letter-spacing: 6px; color: #F8A27A; font-weight: 700; margin-top: 4px; text-align: left; }
+.splash-hello { display: grid; gap: 2px; } .splash-hello b { font-size: 20px; color: #fff; } .splash-hello span { color: #BFDCE4; font-size: 14px; }
+.splash-quick { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.splash-quick .qa { background: rgba(255,255,255,.08); border: 1px solid #2C6E80; color: #fff; border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
+.splash-quick .qa:hover { background: rgba(255,255,255,.16); }
+.splash-quick .qa.main { background: var(--brand-orange); border-color: var(--brand-orange); }
+.splash-quick .qa svg.i { font-size: 20px; }
+.splash-counts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.splash-counts button { background: rgba(8,32,40,.6); border: 1px solid #2C6E80; color: #CFE6EC; border-radius: 999px; padding: 4px 12px; font-size: 13px; display: flex; gap: 6px; align-items: center; }
+.splash-counts b { color: #F8A27A; font-size: 15px; }
+.splash .warnbox { color: var(--fg); }
+.sx-type { display: grid; grid-template-columns: repeat(2, auto); gap: 4px 16px; align-content: start; }
+.sx-type > b { grid-column: 1 / -1; }
+.splash { min-height: calc(100% + 36px); }

@@ -39,12 +39,18 @@ export function useFrames(toast: (m: string) => void) {
   const ref = useRef(frames); ref.current = frames;
   const set = (next: Frame[]) => { ref.current = next; setFrames(next); };
 
+  /* Owner, 15 Nov 2026: screens do not pile up behind each other. Opening a screen replaces the one in front (it closes), unless it was
+     minimized (kept in the strip) or the two are split side by side. */
+  const layRef = useRef(lay); layRef.current = lay;
   const open = useCallback((id: string, cmd?: RibbonCmd, fresh = false) => {
-    const real = cmd?.sprint ? 'soon' : id; const k = frameKey(real, cmd); const list = ref.current;
-    if (list.some(f => f.key === k)) set(list.map(f => (f.key === k ? { ...f, min: false, cmd: cmd ?? f.cmd, epoch: fresh ? (f.epoch ?? 0) + 1 : f.epoch } : f)));
+    const real = cmd?.sprint ? 'soon' : id; const k = frameKey(real, cmd); const l = layRef.current;
+    const front = l.split ? (l.focus === 'a' ? l.a : l.b) : l.a; const other = l.split ? (l.focus === 'a' ? l.b : l.a) : null;
+    if (k === other) { setLay(x => showIn(x, k)); touch(k); return; }
+    let list = ref.current; if (front && front !== k && list.some(f => f.key === front && !f.min)) { list = list.filter(f => f.key !== front); mru.current = mru.current.filter(x => x !== front); }
+    if (list.some(f => f.key === k)) list = list.map(f => (f.key === k ? { ...f, min: false, cmd: cmd ?? f.cmd, epoch: fresh ? (f.epoch ?? 0) + 1 : f.epoch } : f));
     else if (list.length >= MAX_FRAMES) { toast(`مفتوح ${MAX_FRAMES} شاشات، ده الحد. اقفل شاشة الأول من الإطارات.`); return; }
-    else set([...list, { key: k, id: real, cmd }]);
-    setLay(l => showIn(l, k)); touch(k);
+    else list = [...list, { key: k, id: real, cmd }];
+    set(list); setLay(x => (x.split ? (x.focus === 'a' ? { ...x, a: k } : { ...x, b: k }) : { ...x, a: k })); touch(k);
   }, [toast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const focusFrame = useCallback((k: string) => { set(ref.current.map(f => (f.key === k ? { ...f, min: false } : f))); setLay(l => showIn(l, k)); touch(k); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -56,6 +62,12 @@ export function useFrames(toast: (m: string) => void) {
   const minimize = useCallback((k: string) => { const next = ref.current.map(f => (f.key === k ? { ...f, min: true } : f)); set(next); setLay(l => vacate(l, next, k)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const maximize = useCallback((k: string) => { set(ref.current.map(f => (f.key === k ? { ...f, min: false } : f))); setLay(l => (l.max && (l.split ? false : l.a === k) ? { ...l, max: false } : { ...l, split: null, a: k, b: null, focus: 'a', max: true })); touch(k); }, []);
   const split = useCallback((k: string, other: string, dir: SplitDir) => { if (k === other) return; set(ref.current.map(f => (f.key === k || f.key === other ? { ...f, min: false } : f))); setLay(l => ({ ...l, split: dir, a: k, b: other, focus: 'a', max: false, ratio: l.split ? l.ratio : 0.5 })); touch(other); touch(k); }, []);
+  /** split with a screen that is not open yet: it opens in the other half */
+  const splitNew = useCallback((k: string, id: string, dir: SplitDir) => {
+    const nk = frameKey(id); if (nk === k) return; let list = ref.current;
+    if (!list.some(f => f.key === nk)) { if (list.length >= MAX_FRAMES) { toast(`مفتوح ${MAX_FRAMES} شاشات، ده الحد.`); return; } list = [...list, { key: nk, id }]; }
+    set(list.map(f => (f.key === nk || f.key === k ? { ...f, min: false } : f))); setLay(l => ({ ...l, split: dir, a: k, b: nk, focus: 'b', max: false, ratio: 0.5 })); touch(nk);
+  }, [toast]); // eslint-disable-line react-hooks/exhaustive-deps
   const unsplit = useCallback(() => setLay(l => ({ ...l, split: null, a: l.focus === 'a' ? l.a : l.b ?? l.a, b: null, focus: 'a' })), []);
   const swap = useCallback(() => setLay(l => (l.split && l.b ? { ...l, a: l.b, b: l.a, focus: l.focus === 'a' ? 'b' : 'a', ratio: 1 - l.ratio } : l)), []);
   const flip = useCallback(() => setLay(l => (l.split ? { ...l, split: l.split === 'h' ? 'v' : 'h' } : l)), []);
@@ -63,7 +75,7 @@ export function useFrames(toast: (m: string) => void) {
   const setFocus = useCallback((pane: 'a' | 'b') => setLay(l => { if (l.focus === pane) return l; const k = pane === 'a' ? l.a : l.b; if (k) touch(k); return { ...l, focus: pane }; }), []);
   const unmax = useCallback(() => setLay(l => ({ ...l, max: false })), []);
 
-  return { frames, lay, focused, open, focusFrame, close, closeAll, minimize, maximize, split, unsplit, swap, flip, setRatio, setFocus, unmax };
+  return { frames, lay, focused, open, focusFrame, close, closeAll, minimize, maximize, split, splitNew, unsplit, swap, flip, setRatio, setFocus, unmax };
 }
 export type Frames = ReturnType<typeof useFrames>;
 
@@ -85,12 +97,19 @@ function Controls({ f, fr, title }: { f: Frame; fr: Frames; title: string }) {
             <button role="menuitem" onClick={() => { fr.swap(); setPop(false); }}><Icon n="swap" />بدّل المكانين</button>
             <button role="menuitem" onClick={() => { fr.flip(); setPop(false); }}><Icon n={fr.lay.split === 'h' ? 'splitv' : 'splith'} />{fr.lay.split === 'h' ? 'خليهم فوق بعض' : 'خليهم جنب بعض'}</button>
             <button role="menuitem" onClick={() => { fr.unsplit(); setPop(false); }}><Icon n="max" />إلغاء التقسيم</button>
-          </>) : others.length === 0 ? <p className="hint">افتح شاشة تانية الأول، وبعدين قسّم الشاشة بينهم.</p> : (<>
-            <div className="sphead">مع أنهي شاشة؟</div>
+          </>) : (<>
+            {others.length > 0 && <><div className="sphead">مع شاشة مفتوحة</div>
             {others.map(o => (
               <div key={o.key} className="sprow"><span>{titleOf(o)}</span>
                 <button title="جنب بعض" aria-label={`${titleOf(o)} جنب بعض`} onClick={() => { fr.split(f.key, o.key, 'h'); setPop(false); }}><Icon n="splith" /></button>
                 <button title="فوق بعض" aria-label={`${titleOf(o)} فوق بعض`} onClick={() => { fr.split(f.key, o.key, 'v'); setPop(false); }}><Icon n="splitv" /></button>
+              </div>
+            ))}</>}
+            <div className="sphead">مع شاشة جديدة</div>
+            {splitChoices.filter(c => frameKey(c.id) !== f.key && !others.some(o => o.key === frameKey(c.id))).map(c => (
+              <div key={c.id} className="sprow"><span>{c.label}</span>
+                <button title="جنب بعض" aria-label={`${c.label} جنب بعض`} onClick={() => { fr.splitNew(f.key, c.id, 'h'); setPop(false); }}><Icon n="splith" /></button>
+                <button title="فوق بعض" aria-label={`${c.label} فوق بعض`} onClick={() => { fr.splitNew(f.key, c.id, 'v'); setPop(false); }}><Icon n="splitv" /></button>
               </div>
             ))}
           </>)}
@@ -103,7 +122,8 @@ function Controls({ f, fr, title }: { f: Frame; fr: Frames; title: string }) {
 /* titles come from the Shell (it knows the Ribbon); set once per render */
 let titleOf: (f: Frame) => string = f => f.cmd?.label || f.id;
 let iconOf: (f: Frame) => string = f => f.cmd?.icon || 'file';
-export function setFrameNames(t: (f: Frame) => string, i: (f: Frame) => string) { titleOf = t; iconOf = i; }
+let splitChoices: { id: string; label: string }[] = [];
+export function setFrameNames(t: (f: Frame) => string, i: (f: Frame) => string, choices: { id: string; label: string }[] = []) { titleOf = t; iconOf = i; splitChoices = choices; }
 export const frameTitle = (f: Frame) => titleOf(f);
 
 /** the strip of open frames under the Ribbon */
