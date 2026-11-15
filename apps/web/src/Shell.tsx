@@ -104,9 +104,9 @@ export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () =
             )}
           </div>
           {readOnly && <div className="card warnbox" role="alert" style={{ margin: 8 }}>الترخيص انتهى: البرنامج للقراءة والتقارير بس لحد ما يتجدد. البيانات كلها موجودة. (عن البرنامج ← تفعيل الترخيص)</div>}
-          <FrameTabs fr={fr} />
+          {me.ui?.tabs !== false && <FrameTabs fr={fr} />}
           <div className="bodyrow">
-            <WorkArea fr={fr} render={render} />
+            <WorkArea fr={fr} render={render} headers={me.ui?.tabs === false} />
             <ToolBar can={can} go={go} toast={toast} onLock={() => setLocked(true)} hidden={max} />
           </div>
           <Ticker glance={glance} go={go} />

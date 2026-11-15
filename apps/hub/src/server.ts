@@ -15,7 +15,7 @@ import { glanceRoutes } from './glance-api';
 import { SystemService } from './system';
 import { relayOf } from './printing';
 
-export const VERSION = '0.7.17';
+export const VERSION = '0.7.18';
 export interface ServerOptions { webDir?: string; staffSecret?: string; logger?: boolean; system?: SystemService }
 /** The pharmacy's data fields: request field, setting key, longest length. */
 const ORG_FIELDS: [string, string, number][] = [['name', 'pharmacy.name', 80], ['phones', 'pharmacy.phones', 80], ['address', 'pharmacy.address', 160], ['supportPhone', 'pharmacy.support_phone', 40], ['taxRegNo', 'pharmacy.tax_reg_no', 40], ['commercialRegNo', 'pharmacy.commercial_reg_no', 40]];
@@ -63,7 +63,7 @@ export function buildServer(app: App, o: ServerOptions = {}): FastifyInstance {
     s.post('/api/system/backup-schedule', async (q) => ({ schedule: sys.setSchedule(me(q), (q.body ?? {}) as B) }));
     s.post('/api/system/licence', async (q) => sys.activate(me(q), String(((q.body ?? {}) as B).token ?? '')));
     s.post('/api/logout', async (q) => { app.access.logout(String(q.headers.authorization ?? '').replace(/^Bearer /, '')); return { ok: true }; });
-    s.get('/api/me', async (q) => { const p = me(q); const v = app.access.view1(p.id); const perms = new Set(app.access.permissions(p.id)); return { person: { id: v.id, username: v.username, displayName: v.displayName, roles: v.roles, roleNames: v.roles.map(r => ROLE_NAMES[r]), mustChangeSecret: v.mustChangeSecret }, permissions: [...perms], ribbon: ribbonFor(perms), pharmacyName: app.access.setting('pharmacy.name'), branchId: app.hub.branchId, version: VERSION, testMode: app.testMode }; });
+    s.get('/api/me', async (q) => { const p = me(q); const v = app.access.view1(p.id); const perms = new Set(app.access.permissions(p.id)); return { person: { id: v.id, username: v.username, displayName: v.displayName, roles: v.roles, roleNames: v.roles.map(r => ROLE_NAMES[r]), mustChangeSecret: v.mustChangeSecret }, permissions: [...perms], ribbon: ribbonFor(perms), pharmacyName: app.access.setting('pharmacy.name'), branchId: app.hub.branchId, version: VERSION, testMode: app.testMode, ui: { tabs: app.access.setting('ui.tabs') !== '0' } }; });
     s.post('/api/me/secret', async (q) => { const b = (q.body ?? {}) as B; app.access.changeOwnSecret(me(q).id, String(b.current ?? ''), String(b.next ?? '')); return { ok: true }; });
     // people
     s.get('/api/people', async (q) => ({ people: app.access.list(me(q)), roles: Object.entries(ROLE_NAMES).map(([code, name]) => ({ code, name, optional: roleTemplate(code as RoleCode).optional })) }));
@@ -86,6 +86,8 @@ export function buildServer(app: App, o: ServerOptions = {}): FastifyInstance {
       for (const [f, k, v] of next) if (v !== (app.access.setting(k) ?? '')) { app.access.setSetting(k, v, me(q).id); changed[f] = v; }
       if (Object.keys(changed).length) app.hub.audit(me(q).id, 'settings.pharmacy', 'settings', 'pharmacy', changed); return { ok: true };
     });
+    /* how the screens look for everyone in the pharmacy (owner, 15 Nov 2026): the strip of tabs on or off */
+    s.post('/api/settings/ui', async (q) => { need(me(q), 'settings.branch'); const b = (q.body ?? {}) as B; if (typeof b.tabs !== 'boolean') throw new AccessError('invalid', 'tabs must be true or false'); app.access.setSetting('ui.tabs', b.tabs ? '1' : '0', me(q).id); app.hub.audit(me(q).id, 'settings.ui', 'settings', 'ui.tabs', { tabs: b.tabs }); return { ui: { tabs: b.tabs } }; });
     // items (read-only in 7.1)
     s.get('/api/items', async (q) => {
       const p = me(q); need(p, 'item.view'); const qs = q.query as B; const list = app.items.search(String(qs.q ?? ''), { limit: Math.min(Math.max(Number(qs.limit ?? 50) || 50, 1), 200) });

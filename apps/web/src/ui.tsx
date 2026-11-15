@@ -11,7 +11,7 @@ export const dmyHm = (iso: string | null) => { if (!iso) return '-'; const d = n
 
 export interface RibbonCmd { id: string; label: string; icon: string; key: string; screen: string; primary?: boolean; sprint?: string }
 export interface RibbonTab { id: string; label: string; key: string; groups: { label: string; items: RibbonCmd[] }[] }
-export interface Me { person: { id: string; username: string; displayName: string; roles: string[]; roleNames: string[]; mustChangeSecret: boolean }; permissions: string[]; ribbon: RibbonTab[]; pharmacyName: string | null; branchId: string; version: string; testMode: boolean }
+export interface Me { person: { id: string; username: string; displayName: string; roles: string[]; roleNames: string[]; mustChangeSecret: boolean }; permissions: string[]; ribbon: RibbonTab[]; pharmacyName: string | null; branchId: string; version: string; testMode: boolean; ui?: { tabs: boolean } }
 export interface Ctx { me: Me; can: (k: string) => boolean; toast: (m: string) => void; go: (screen: string, cmd?: RibbonCmd) => void; reloadMe: () => Promise<void>; ask: (label: string, o?: { secret?: boolean }) => Promise<string | null>; glance: Glance | null; refreshGlance: () => void }
 export const AppCtx = createContext<Ctx>(null as unknown as Ctx);
 export const useApp = () => useContext(AppCtx);
