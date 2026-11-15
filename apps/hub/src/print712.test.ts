@@ -1,7 +1,10 @@
 import { existsSync, mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+/* backups and stickers are slower on the Windows runner: 5 s was not enough there */
+vi.setConfig({ testTimeout: 30_000 });
 import { openApp } from './compose';
 import { buildServer } from './server';
 import { SystemService } from './system';
