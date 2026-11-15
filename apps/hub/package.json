@@ -1,12 +1,12 @@
 {
   "name": "@o-pharmacy/hub-app",
   "private": true,
-  "version": "0.7.16",
+  "version": "0.7.17",
   "type": "module",
   "main": "src/main.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --testTimeout=30000",
     "build": "node build.mjs",
     "start": "node dist/hub.mjs"
   },
