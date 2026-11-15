@@ -24,6 +24,9 @@ type Tips = null | 'tabs' | 'items';
 /* names for frames opened from the side bar or the tool bar (the Ribbon names the rest) */
 const EXTRA_NAMES: Record<string, { label: string; icon: string }> = { home: { label: 'الرئيسية', icon: 'home' }, sale: { label: 'فاتورة بيع', icon: 'cart' }, held: { label: 'الفواتير المعلّقة', icon: 'pause' }, items: { label: 'الأصناف', icon: 'box' }, expiry: { label: 'الصلاحية', icon: 'clock' }, requests: { label: 'الطلبات', icon: 'bell' }, pinv: { label: 'فاتورة مشتريات', icon: 'truck' }, customers: { label: 'العملاء', icon: 'users' }, tasks: { label: 'مهامي', icon: 'check' }, session: { label: 'الدرج', icon: 'wallet' }, drawer: { label: 'فتح الدرج', icon: 'wallet' }, attendance: { label: 'الحضور', icon: 'clock' }, alerts: { label: 'التنبيهات', icon: 'bell' }, soon: { label: 'قريبًا', icon: 'clock' }, barcodes: { label: 'طباعة باركود', icon: 'barcode' }, labelset: { label: 'إعدادات الباركود', icon: 'barcode' }, rcptset: { label: 'إعدادات الفاتورة', icon: 'print' } };
 
+/* what can open in the other half of a split (the side bar's places) */
+const SPLIT_CHOICES: { id: string; label: string; perms: string[] }[] = [{ id: 'home', label: 'الرئيسية', perms: [] }, { id: 'sale', label: 'فاتورة بيع', perms: ['sale.create'] }, { id: 'items', label: 'الأصناف', perms: ['item.view'] }, { id: 'pinv', label: 'فاتورة مشتريات', perms: ['purchase_invoice.create'] }, { id: 'requests', label: 'الطلبات والنواقص', perms: ['customer_request.create', 'shortage.view'] }, { id: 'customers', label: 'العملاء', perms: ['customer.view'] }, { id: 'invoices', label: 'سجل الفواتير', perms: ['sale.view_own', 'sale.view_all'] }, { id: 'expiry', label: 'الصلاحية', perms: ['expiry.alerts.view', 'stock.view'] }];
+
 export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () => Promise<void>; logout: () => void }) {
   const tabs = me.ribbon; const [tab, setTab] = useState(tabs.find(t => t.id === 'home')?.id ?? tabs[0]?.id ?? 'home');
   const [collapsed, setCollapsed] = useState(false); const [popup, setPopup] = useState(false); const [tips, setTips] = useState<Tips>(null); const [drawer, setDrawer] = useState(false);
@@ -33,7 +36,7 @@ export default function Shell({ me, reloadMe, logout }: { me: Me; reloadMe: () =
   const refreshGlance = useCallback(() => { api<Glance>('/api/glance').then(setGlance, () => undefined); }, []);
   const cur = tabs.find(t => t.id === tab) ?? tabs[0]; const perms = useMemo(() => new Set(me.permissions), [me]);
   const toast = useCallback((m: string) => { setMsg(m); window.clearTimeout(timer.current); timer.current = window.setTimeout(() => setMsg(''), 4200); }, []);
-  const fr = useFrames(toast); const names = useFrameNames(tabs, EXTRA_NAMES); setFrameNames(names.title, names.icon);
+  const fr = useFrames(toast); const names = useFrameNames(tabs, EXTRA_NAMES); setFrameNames(names.title, names.icon, SPLIT_CHOICES.filter(c => c.perms.length === 0 || c.perms.some(k => perms.has(k))));
   /* a screen handed data through sessionStorage (resume a held sale, return from a sale) starts afresh even when its frame is open */
   const go = useCallback((id: string, cmd?: RibbonCmd) => { const has = (k: string) => { try { return sessionStorage.getItem(k) !== null; } catch { return false; } }; fr.open(id, cmd, (id === 'sale' && has('o.resume')) || (id === 'returns' && has('o.returnSale'))); setPopup(false); setDrawer(false); setTips(null); }, [fr.open]); // eslint-disable-line react-hooks/exhaustive-deps
   const run = useCallback((c: RibbonCmd) => go(c.screen, c), [go]);

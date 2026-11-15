@@ -69,6 +69,12 @@ export function printRoutes(s: FastifyInstance, app: App): void {
   });
   s.get('/api/print/windows-printers', async (q) => { need(me(q), 'settings.branch'); return { printers: await windowsPrinters((q.query as B).fresh === '1'), platform: process.platform }; });
 
+  /* the test sticker (إعدادات الباركود): a frame and a centre cross at the roll's size, to see at once whether the size is right */
+  s.post('/api/print/label-test', async (q) => {
+    const p = me(q); need(p, 'settings.branch'); const b = body(q); const printer = labelPrinter(b); const cfg = printers(app).find(x => x.name === printer); const mm = cfg?.labelMm ?? [40, 30];
+    const [r] = await printService(app, q.deviceId).printLabels(p, { printer, items: [{ spec: { kind: 'test', name: `${mm[0]} × ${mm[1]} مم`, code: 'لازم الإطار يبان كامل وفي النص' }, copies: 1, ref: 'test' }] });
+    return { printer, ...r };
+  });
   /* price stickers for many items, each with its quantity (طباعة باركود); the purchase invoice uses it too (only items whose card prints a label) */
   s.post('/api/print/labels', async (q) => {
     const p = me(q); const b = body(q); const lines = Array.isArray(b.lines) ? (b.lines as B[]) : []; if (!lines.length || lines.length > 100) throw new AccessError('invalid', '1 to 100 lines');

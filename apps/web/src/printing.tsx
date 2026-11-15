@@ -142,19 +142,23 @@ export function BarcodePrintScreen() {
 }
 
 /* ================= إعدادات طباعة الباركود ================= */
-const SIZES: [number, number][] = [[30, 20], [35, 25], [38, 25], [40, 25], [40, 30], [50, 25], [50, 30], [58, 40], [60, 40]];
+/* eStock's sticker sizes (columns × rows of an A4 sheet; the same names for a roll): one sticker = 210 / columns × 297 / rows mm */
+const ESTOCK: { name: string; mm: [number, number] }[] = [{ name: '6 x 24', mm: [35, 12] }, { name: '5 x 20', mm: [42, 15] }, { name: '6 x 19', mm: [35, 16] }, { name: '7 x 12', mm: [30, 25] }, { name: '6 x 17', mm: [35, 17] }];
+const SIZES: [number, number][] = [...ESTOCK.map(e => e.mm), [25, 15], [30, 20], [35, 25], [38, 25], [40, 20], [40, 25], [40, 30], [50, 20], [50, 25], [50, 30], [58, 40], [60, 40]];
 type LStyle = { showPharmacy: boolean; pharmacyName: string; showPhone: boolean; phone: string; showPrice: boolean; showExpiry: boolean; mode: 'none' | 'thermal' | 'a4'; a4Layout: string };
 export function LabelSettingsScreen() {
-  const { toast } = useApp(); const pl = usePrinterList(); const [st, setSt] = useState<LStyle | null>(null); const [org, setOrg] = useState({ name: '', phone: '' }); const [idx, setIdx] = useState(0); const [err, setErr] = useState(''); const [layouts, setLayouts] = useState<string[]>([]);
+  const { toast } = useApp(); const pl = usePrinterList(); const [st, setSt] = useState<LStyle | null>(null); const [org, setOrg] = useState({ name: '', phone: '' }); const [idx, setIdx] = useState(0); const [err, setErr] = useState(''); const [layouts, setLayouts] = useState<string[]>([]); const [custom, setCustom] = useState(false); const [testing, setTesting] = useState(false);
   useEffect(() => { api<{ style: LStyle; layouts: string[]; pharmacy: { name: string; phone: string } }>('/api/settings/label-style').then(r => { setSt(r.style); setOrg(r.pharmacy); setLayouts(r.layouts); }, e => setErr(arabic(e))); }, []);
   const labels = (pl.list ?? []).map((p, i) => ({ p, i })).filter(x => x.p.kind === 'label'); const cur = labels[idx] ?? labels[0];
   const setP = (p: PrinterCfg) => pl.setList(l => (l ? l.map((x, i) => (i === cur!.i ? p : x)) : l));
-  const addPrinter = () => pl.setList(l => [...(l ?? []), { name: 'الباركود', kind: 'label', labelMm: [38, 25], gapMm: 2, density: 8, speed: 4, offsetX: 0, offsetY: 0, language: 'tspl', transport: { type: 'device' } }]);
+  const addPrinter = () => pl.setList(l => [...(l ?? []), { name: 'الباركود', kind: 'label', labelMm: [42, 15], gapMm: 2, density: 8, speed: 4, offsetX: 0, offsetY: 0, language: 'tspl', transport: { type: 'device' } }]);
   const a4 = st?.mode === 'a4'; const cell = sheetOf(st?.a4Layout ?? '5x20');
   const preview = usePreview('/api/print/label-preview', st ? { mm: a4 ? cell.mm : cur?.p.labelMm ?? [38, 25], dpmm: a4 ? 12 : 8, style: st } : null, !!st && st.mode !== 'none');
   const save = async () => { setErr(''); try { if (st) await api('/api/settings/label-style', { body: st }); if (pl.list) await pl.save(pl.list); toast('اتحفظت إعدادات طباعة الباركود'); } catch (e) { setErr(arabic(e)); } };
   if (!st || !pl.list) return <p className="muted">{err || 'بيحمّل...'}</p>;
-  const p = cur?.p; const mm = p?.labelMm ?? [38, 25]; const preset = SIZES.some(s => s[0] === mm[0] && s[1] === mm[1]) ? `${mm[0]}x${mm[1]}` : 'custom';
+  const p = cur?.p; const mm = p?.labelMm ?? [38, 25]; const preset = !custom && SIZES.some(s => s[0] === mm[0] && s[1] === mm[1]) ? `${mm[0]}x${mm[1]}` : 'custom';
+  /* save, then print the test sticker with what was saved */
+  const test = async () => { setTesting(true); setErr(''); try { if (st) await api('/api/settings/label-style', { body: st }); if (pl.list) await pl.save(pl.list); const r = await api<{ ok: boolean; error?: string; printer: string }>('/api/print/label-test', { body: { printer: p?.name } }); toast(r.ok ? `اتطبع استيكر التجربة على ${r.printer}: لو الإطار كامل وفي النص يبقى المقاس مظبوط` : `مطبعش: ${r.error ?? ''}`); } catch (e) { setErr(arabic(e)); } finally { setTesting(false); } };
   return (<div className="set2">
     <div className="set2-form">
       <h2><Icon n="barcode" />إعدادات طباعة الباركود</h2>
@@ -171,8 +175,8 @@ export function LabelSettingsScreen() {
           {labels.length > 1 && <label>الطابعة<select value={idx} onChange={e => setIdx(Number(e.target.value))}>{labels.map((x, k) => <option key={x.i} value={k}>{x.p.name}</option>)}</select></label>}
           <label>اسمها في البرنامج<input value={p.name} onChange={e => setP({ ...p, name: e.target.value })} /></label>
           <Connection p={p} set={setP} win={pl.win} kind="label" />
-          <label>مقاس الاستيكر (مم)<select value={preset} onChange={e => { if (e.target.value !== 'custom') { const [w, h] = e.target.value.split('x').map(Number); setP({ ...p, labelMm: [w!, h!] }); } }}>{SIZES.map(s => <option key={`${s[0]}x${s[1]}`} value={`${s[0]}x${s[1]}`}>{s[0]} × {s[1]}</option>)}<option value="custom">مقاس تاني</option></select></label>
-          {preset === 'custom' && <><label>العرض (مم)<input className="num" inputMode="numeric" value={mm[0]} onChange={e => setP({ ...p, labelMm: [Number(e.target.value) || 0, mm[1]] })} /></label><label>الطول (مم)<input className="num" inputMode="numeric" value={mm[1]} onChange={e => setP({ ...p, labelMm: [mm[0], Number(e.target.value) || 0] })} /></label></>}
+          <label>مقاس الاستيكر (مم)<select value={preset} onChange={e => { if (e.target.value === 'custom') { setCustom(true); return; } setCustom(false); const [w, h] = e.target.value.split('x').map(Number); setP({ ...p, labelMm: [w!, h!] }); }}><optgroup label="مقاسات eStock">{ESTOCK.map(e => <option key={e.name} value={`${e.mm[0]}x${e.mm[1]}`}>{e.name} ({e.mm[0]} × {e.mm[1]} مم)</option>)}</optgroup><optgroup label="بالمللي">{SIZES.slice(ESTOCK.length).map(s => <option key={`${s[0]}x${s[1]}`} value={`${s[0]}x${s[1]}`}>{s[0]} × {s[1]}</option>)}</optgroup><option value="custom">مقاس تاني</option></select></label>
+          {preset === 'custom' && <><label>العرض (مم)<input type="number" min={20} max={110} value={mm[0] || ''} onChange={e => setP({ ...p, labelMm: [Math.round(Number(e.target.value)) || 0, mm[1]] })} /></label><label>الطول (مم)<input type="number" min={10} max={150} value={mm[1] || ''} onChange={e => setP({ ...p, labelMm: [mm[0], Math.round(Number(e.target.value)) || 0] })} /></label></>}
           <label>المسافة بين الاستيكرات (مم)<input className="num" inputMode="numeric" value={p.gapMm ?? 2} onChange={e => setP({ ...p, gapMm: Number(e.target.value) || 0 })} /></label>
           <label>غمق الطباعة (0 - 15)<input type="range" min={0} max={15} value={p.density ?? 8} onChange={e => setP({ ...p, density: Number(e.target.value) })} /></label>
           <label>السرعة (1 - 6)<input type="range" min={1} max={6} value={p.speed ?? 4} onChange={e => setP({ ...p, speed: Number(e.target.value) })} /></label>
@@ -191,7 +195,8 @@ export function LabelSettingsScreen() {
           <label className="chk"><input type="checkbox" checked={st.showExpiry} onChange={e => setSt({ ...st, showExpiry: e.target.checked })} /> طباعة تاريخ الصلاحية</label>
         </div>}
       {err && <p className="err">{err}</p>}
-      <div className="actions"><button className="btn primary" onClick={() => void save()}>حفظ</button></div>
+      <div className="actions"><button className="btn primary" onClick={() => void save()}>حفظ</button>{st.mode === 'thermal' && p && <button className="btn" disabled={testing} onClick={() => void test()}><Icon n="print" />احفظ واطبع استيكر تجربة</button>}</div>
+      {st.mode === 'thermal' && p && <p className="hint">استيكر التجربة فيه إطار وعلامة في النص بمقاس الرول: لو الإطار طالع كامل وفي النص يبقى المقاس صح ومش محتاج إزاحة. لو مقصوص، اتأكد من المقاس بالمسطرة (العرض × الطول بالمللي).</p>}
     </div>
     <div className="set2-preview"><b>شكل الاستيكر</b>{st.mode === 'none' ? <span className="muted">الباركود مش بيتطبع</span> : preview ? <img src={preview} alt="شكل الاستيكر" className="lab-prev" /> : <span className="muted">بيجهّز...</span>}<span className="hint">{a4 ? `${cell.mm[0]} × ${cell.mm[1]}` : `${mm[0]} × ${mm[1]}`} مم - الأبيض حوالين الصورة هو حرف الاستيكر</span></div>
   </div>);
